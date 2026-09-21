@@ -27,7 +27,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "django_filters",
-    # Motion Store Domains
+    # Motion Store Domains (All 24 Registered Foundation Apps)
     "apps.tenants",
     "apps.audit",
     "apps.users",
@@ -54,6 +54,8 @@ INSTALLED_APPS = [
     "apps.returns",
     "apps.transfers",
     "apps.stock_count",
+    "apps.reports",
+    "apps.printing",
 ]
 
 # Configure Custom User Model
