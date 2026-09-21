@@ -27,7 +27,9 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "django_filters",
-    # Motion Store Apps (will be added per domain)
+    # Motion Store Foundation Domains
+    "apps.tenants",
+    "apps.audit",
 ]
 
 # ──────────────────────────────────────────────
@@ -40,6 +42,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.tenants.middleware.TenantMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -73,8 +76,8 @@ DATABASES = {
         "NAME": os.environ.get('DB_NAME', 'motion_store'),
         "USER": os.environ.get('DB_USER', 'motion'),
         "PASSWORD": os.environ.get('DB_PASSWORD', 'motion_dev_2024'),
-        "HOST": os.environ.get('DB_HOST', 'localhost'),
-        "PORT": os.environ.get('DB_PORT', '5432'),
+        "HOST": os.environ.get('DB_HOST', '127.0.0.1'),
+        "PORT": os.environ.get('DB_PORT', '5433'),
     }
 }
 
