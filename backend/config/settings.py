@@ -27,13 +27,14 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "django_filters",
-    # Motion Store Foundation Domains
+    # Motion Store Domains
     "apps.tenants",
     "apps.audit",
     "apps.users",
     "apps.companies",
     "apps.branches",
     "apps.warehouses",
+    "apps.products",
 ]
 
 # Configure Custom User Model
