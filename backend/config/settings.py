@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     "apps.products",
     "apps.suppliers",
     "apps.purchasing",
+    "apps.raw_lots",
 ]
 
 # Configure Custom User Model
