@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from apps.tenants.models import TenantAwareModel
 
@@ -33,14 +34,14 @@ class PurchaseInvoice(TenantAwareModel):
         default=InvoiceStatus.DRAFT,
         db_index=True
     )
-    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=0.00)
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     additional_costs = models.DecimalField(
         max_digits=14,
         decimal_places=2,
-        default=0.00,
+        default=Decimal('0.00'),
         help_text="Freight, customs, transport costs to be absorbed"
     )
-    total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=0.00)
+    total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     notes = models.TextField(blank=True, null=True)
 
     class Meta:
@@ -57,10 +58,11 @@ class PurchaseInvoice(TenantAwareModel):
         return f"INV #{self.invoice_number} - {self.supplier.name} ({self.get_status_display()})"
 
     def recalculate_totals(self):
-        """ Recalculates subtotal and total cost based on line items """
-        item_total = sum(item.total_cost for item in self.items.all())
-        self.subtotal = item_total
-        self.total_cost = self.subtotal + self.additional_costs
+        """ Recalculates subtotal and total cost based on line items with strict Decimal precision """
+        item_total = sum((item.total_cost for item in self.items.all()), Decimal('0.00'))
+        self.subtotal = Decimal(str(item_total))
+        add_costs = Decimal(str(self.additional_costs or '0.00'))
+        self.total_cost = self.subtotal + add_costs
         self.save()
 
 
@@ -87,7 +89,7 @@ class PurchaseLineItem(TenantAwareModel):
     weight_kg = models.DecimalField(
         max_digits=12,
         decimal_places=3,
-        default=0.000,
+        default=Decimal('0.000'),
         help_text="Total Weight in KG (دقة 3 خانات عشرية)"
     )
     quantity_pieces = models.PositiveIntegerField(
@@ -95,8 +97,8 @@ class PurchaseLineItem(TenantAwareModel):
         blank=True,
         help_text="Estimated or counted piece count if applicable"
     )
-    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=0.00)
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
 
     class Meta:
         db_table = "purchase_line_items"
@@ -106,7 +108,6 @@ class PurchaseLineItem(TenantAwareModel):
         return f"{self.description} ({self.weight_kg} KG) - {self.total_cost} EGP"
 
     def save(self, *args, **kwargs):
-        # Auto-compute line total if not provided
         if not self.total_cost and self.unit_cost and self.weight_kg:
-            self.total_cost = self.unit_cost * self.weight_kg
+            self.total_cost = Decimal(str(self.unit_cost)) * Decimal(str(self.weight_kg))
         super().save(*args, **kwargs)
