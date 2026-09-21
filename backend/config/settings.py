@@ -40,6 +40,8 @@ INSTALLED_APPS = [
     "apps.raw_lots",
     "apps.sorting",
     "apps.costing",
+    "apps.inventory",
+    "apps.waste",
 ]
 
 # Configure Custom User Model
