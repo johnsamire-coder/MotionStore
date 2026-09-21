@@ -52,6 +52,8 @@ INSTALLED_APPS = [
     "apps.shifts",
     "apps.sales",
     "apps.returns",
+    "apps.transfers",
+    "apps.stock_count",
 ]
 
 # Configure Custom User Model
