@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.core.serializers.json import DjangoJSONEncoder
 from .managers import TenantAwareManager
 
 class Tenant(models.Model):
@@ -18,11 +19,29 @@ class Tenant(models.Model):
         return f"{self.name} ({self.slug})"
 
 
+def serialize_model(instance):
+    """ Helper to safely serialize any django model instance to a JSON-compatible dict """
+    data = {}
+    for field in instance._meta.fields:
+        val = getattr(instance, field.name)
+        if isinstance(val, uuid.UUID):
+            data[field.name] = str(val)
+        elif hasattr(val, 'strftime'):  # datetime/date
+            data[field.name] = val.isoformat()
+        elif hasattr(val, 'pk'):  # ForeignKey relation
+            data[field.name] = str(val.pk) if val else None
+        else:
+            try:
+                # Test serialization
+                import json
+                json.dumps({field.name: val}, cls=DjangoJSONEncoder)
+                data[field.name] = val
+            except:
+                data[field.name] = str(val) if val is not None else None
+    return data
+
+
 class TenantAwareModel(models.Model):
-    """
-    Abstract Base Model for all tenant-scoped entities.
-    Enforces tenant association, UUID PK, and timestamping.
-    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(
         Tenant,
@@ -33,18 +52,68 @@ class TenantAwareModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Scoped manager
     objects = TenantAwareManager()
-    # Unscoped manager for internal maintenance / admin
     all_objects = models.Manager()
 
     class Meta:
         abstract = True
 
     def save(self, *args, **kwargs):
-        from .context import get_current_tenant
+        from apps.tenants.context import get_current_tenant
+        from apps.audit.services import record_audit
+
+        # Ensure tenant is set
         if not self.tenant_id:
             current_tenant = get_current_tenant()
             if current_tenant:
                 self.tenant = current_tenant
+
+        is_new = self._state.adding
+        old_values = None
+
+        if not is_new:
+            try:
+                # Fetch original values from DB before update
+                original = self.__class__.all_objects.get(pk=self.pk)
+                old_values = serialize_model(original)
+            except self.__class__.DoesNotExist:
+                pass
+
         super().save(*args, **kwargs)
+
+        # Trigger automatic Audit Logging after successful save
+        new_values = serialize_model(self)
+        action = 'CREATE' if is_new else 'UPDATE'
+        
+        # Avoid circular imports on AuditLog
+        record_audit(
+            action=action,
+            domain=self._meta.app_label,
+            entity_type=self.__class__.__name__,
+            entity_id=str(self.pk),
+            old_values=old_values,
+            new_values=new_values,
+            tenant=self.tenant
+        )
+
+    def delete(self, *args, **kwargs):
+        from apps.audit.services import record_audit
+        
+        old_values = serialize_model(self)
+        pk_str = str(self.pk)
+        app_label = self._meta.app_label
+        class_name = self.__class__.__name__
+        tenant_copy = self.tenant
+
+        super().delete(*args, **kwargs)
+
+        # Trigger automatic Audit Logging after successful delete
+        record_audit(
+            action='DELETE',
+            domain=app_label,
+            entity_type=class_name,
+            entity_id=pk_str,
+            old_values=old_values,
+            new_values=None,
+            tenant=tenant_copy
+        )

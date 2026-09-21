@@ -30,7 +30,14 @@ INSTALLED_APPS = [
     # Motion Store Foundation Domains
     "apps.tenants",
     "apps.audit",
+    "apps.users",
+    "apps.companies",
+    "apps.branches",
+    "apps.warehouses",
 ]
+
+# Configure Custom User Model
+AUTH_USER_MODEL = "users.User"
 
 # ──────────────────────────────────────────────
 # MIDDLEWARE
