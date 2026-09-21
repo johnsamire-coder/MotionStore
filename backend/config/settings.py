@@ -44,6 +44,9 @@ INSTALLED_APPS = [
     "apps.waste",
     "apps.pricing",
     "apps.discounts",
+    "apps.treasury",
+    "apps.payments",
+    "apps.customers",
 ]
 
 # Configure Custom User Model
