@@ -48,6 +48,8 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.customers",
     "apps.accounting",
+    "apps.pos",
+    "apps.shifts",
 ]
 
 # Configure Custom User Model
