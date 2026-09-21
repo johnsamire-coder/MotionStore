@@ -1,4 +1,6 @@
 import uuid
+import datetime
+from decimal import Decimal
 from django.db import models
 from django.core.serializers.json import DjangoJSONEncoder
 from .managers import TenantAwareManager
@@ -24,20 +26,20 @@ def serialize_model(instance):
     data = {}
     for field in instance._meta.fields:
         val = getattr(instance, field.name)
-        if isinstance(val, uuid.UUID):
+        if val is None:
+            data[field.name] = None
+        elif isinstance(val, (uuid.UUID, Decimal)):
             data[field.name] = str(val)
-        elif hasattr(val, 'strftime'):  # datetime/date
+        elif isinstance(val, (datetime.date, datetime.datetime, datetime.time)):
             data[field.name] = val.isoformat()
-        elif hasattr(val, 'pk'):  # ForeignKey relation
-            data[field.name] = str(val.pk) if val else None
+        elif isinstance(val, (int, float, bool, str)):
+            data[field.name] = val
+        elif isinstance(val, (dict, list)):
+            data[field.name] = val
+        elif hasattr(val, 'pk'):
+            data[field.name] = str(val.pk) if val.pk else None
         else:
-            try:
-                # Test serialization
-                import json
-                json.dumps({field.name: val}, cls=DjangoJSONEncoder)
-                data[field.name] = val
-            except:
-                data[field.name] = str(val) if val is not None else None
+            data[field.name] = str(val)
     return data
 
 
@@ -62,7 +64,6 @@ class TenantAwareModel(models.Model):
         from apps.tenants.context import get_current_tenant
         from apps.audit.services import record_audit
 
-        # Ensure tenant is set
         if not self.tenant_id:
             current_tenant = get_current_tenant()
             if current_tenant:
@@ -73,7 +74,6 @@ class TenantAwareModel(models.Model):
 
         if not is_new:
             try:
-                # Fetch original values from DB before update
                 original = self.__class__.all_objects.get(pk=self.pk)
                 old_values = serialize_model(original)
             except self.__class__.DoesNotExist:
@@ -81,11 +81,9 @@ class TenantAwareModel(models.Model):
 
         super().save(*args, **kwargs)
 
-        # Trigger automatic Audit Logging after successful save
         new_values = serialize_model(self)
         action = 'CREATE' if is_new else 'UPDATE'
         
-        # Avoid circular imports on AuditLog
         record_audit(
             action=action,
             domain=self._meta.app_label,
@@ -107,7 +105,6 @@ class TenantAwareModel(models.Model):
 
         super().delete(*args, **kwargs)
 
-        # Trigger automatic Audit Logging after successful delete
         record_audit(
             action='DELETE',
             domain=app_label,
