@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage';
 import POSPage from './pages/POSPage';
 import SortingPage from './pages/SortingPage';
 import InventoryPage from './pages/InventoryPage';
+import PurchasingPage from './pages/PurchasingPage';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -25,8 +26,8 @@ export default function App() {
             <Route path="pos" element={<POSPage />} />
             <Route path="sorting" element={<SortingPage />} />
             <Route path="inventory" element={<InventoryPage />} />
+            <Route path="purchasing" element={<PurchasingPage />} />
             {/* Additional Modules */}
-            <Route path="purchasing" element={<DashboardPage />} />
             <Route path="shifts" element={<DashboardPage />} />
             <Route path="treasury" element={<DashboardPage />} />
           </Route>
