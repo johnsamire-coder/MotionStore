@@ -1,5 +1,5 @@
 import React from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { 
   ShoppingCart, 
@@ -10,12 +10,12 @@ import {
   BarChart3, 
   Vault, 
   LogOut, 
-  Store 
+  Store,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export default function AppLayout() {
   const { user, tenant, logout } = useAuth();
-  const navigate = useNavigate();
 
   const navigation = [
     { name: 'Dashboard', to: '/', icon: BarChart3 },
@@ -25,6 +25,7 @@ export default function AppLayout() {
     { name: 'Purchasing & Bales', to: '/purchasing', icon: Truck },
     { name: 'Shifts & Registers', to: '/shifts', icon: Clock },
     { name: 'Treasuries & Vaults', to: '/treasury', icon: Vault },
+    { name: 'Executive Reports & P&L', to: '/reports', icon: FileSpreadsheet },
   ];
 
   return (
@@ -49,14 +50,14 @@ export default function AppLayout() {
                 key={item.name}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors ${
                     isActive
                       ? 'bg-emerald-600 text-white shadow-sm'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
                   }`
                 }
               >
-                <Icon size={18} />
+                <Icon size={16} />
                 <span>{item.name}</span>
               </NavLink>
             );
@@ -75,7 +76,7 @@ export default function AppLayout() {
           </div>
           <button 
             onClick={logout}
-            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition"
+            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
             title="Logout"
           >
             <LogOut size={16} />

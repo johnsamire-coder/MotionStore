@@ -10,6 +10,7 @@ import InventoryPage from './pages/InventoryPage';
 import PurchasingPage from './pages/PurchasingPage';
 import ShiftsPage from './pages/ShiftsPage';
 import TreasuryPage from './pages/TreasuryPage';
+import ReportsPage from './pages/ReportsPage';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -31,6 +32,7 @@ export default function App() {
             <Route path="purchasing" element={<PurchasingPage />} />
             <Route path="shifts" element={<ShiftsPage />} />
             <Route path="treasury" element={<TreasuryPage />} />
+            <Route path="reports" element={<ReportsPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
