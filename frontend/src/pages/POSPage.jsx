@@ -210,9 +210,8 @@ export default function POSPage() {
       const wt = parseFloat(l.weight_kg || 0).toFixed(2);
       const price = parseFloat(l.unit_price || 0).toFixed(0);
       const total = parseFloat(l.total_price || 0).toFixed(2);
-      return `${name} (${grade})  ${wt}    ${price}    ${total}`;
-    }).join('
-');
+      return name + ' (' + grade + ')  ' + wt + '    ' + price + '    ' + total;
+    }).join(String.fromCharCode(10));
   };
 
   return (
