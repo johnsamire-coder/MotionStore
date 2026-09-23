@@ -9,35 +9,23 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem('access_token');
-      const savedUser = localStorage.getItem('user_data');
+    // Read local storage immediately on refresh - Zero delay
+    const token = localStorage.getItem('access_token');
+    const savedUser = localStorage.getItem('user_data');
 
-      if (token && savedUser) {
-        try {
-          const parsedUser = JSON.parse(savedUser);
-          setUser(parsedUser);
-          if (parsedUser.tenant) {
-            setTenant(parsedUser.tenant);
-            localStorage.setItem('tenant_id', parsedUser.tenant.id || parsedUser.tenant);
-          }
-
-          // Silent background sync
-          const res = await axiosClient.get('/auth/me/');
-          setUser(res.data);
-          localStorage.setItem('user_data', JSON.stringify(res.data));
-        } catch (err) {
-          console.warn("Session background sync:", err);
-          // Only logout if 401 Unauthorized
-          if (err.response?.status === 401) {
-            logout();
-          }
+    if (token && savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        setUser(u);
+        if (u.tenant) {
+          setTenant(typeof u.tenant === 'object' ? u.tenant : { id: u.tenant });
+          localStorage.setItem('tenant_id', typeof u.tenant === 'object' ? u.tenant.id : u.tenant);
         }
+      } catch (e) {
+        console.error("Error reading saved user session:", e);
       }
-      setLoading(false);
-    };
-
-    initAuth();
+    }
+    setLoading(false);
   }, []);
 
   const login = async (username, password) => {
@@ -49,7 +37,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user_data', JSON.stringify(userData));
 
     if (userData.tenant) {
-      const tId = userData.tenant.id || userData.tenant;
+      const tId = typeof userData.tenant === 'object' ? userData.tenant.id : userData.tenant;
       localStorage.setItem('tenant_id', tId);
       setTenant(userData.tenant);
     }

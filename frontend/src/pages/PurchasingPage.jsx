@@ -176,7 +176,6 @@ export default function PurchasingPage() {
 
   return (
     <div className="space-y-8" dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('purchasing.title')}</h2>
@@ -199,7 +198,6 @@ export default function PurchasingPage() {
         </div>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('purchasing.totalProcurement')}</span>
@@ -228,7 +226,6 @@ export default function PurchasingPage() {
         </div>
       </div>
 
-      {/* Invoices List Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/50">
           <div className="flex items-center gap-2">
@@ -446,7 +443,7 @@ export default function PurchasingPage() {
         </div>
       )}
 
-      {/* MODAL: New Quick Supplier */}
+      {/* MODAL: New Quick Supplier (ONLY NAME & TAX) */}
       {showNewSupplierModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
