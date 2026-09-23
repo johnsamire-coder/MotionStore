@@ -51,7 +51,6 @@ export default function LoginPage() {
       style={{ backgroundImage: "url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1920&auto=format&fit=crop')" }}
       dir={isAr ? 'rtl' : 'ltr'}
     >
-      {/* Dark Backdrop Overlay */}
       <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-[3px]"></div>
 
       {/* Language Toggle Button */}
@@ -64,10 +63,10 @@ export default function LoginPage() {
         <span>{isAr ? 'English (EN)' : 'العربية (AR)'}</span>
       </button>
 
-      {/* Main Login Card */}
+      {/* Login Card */}
       <div className="relative z-10 w-full max-w-[420px] bg-slate-950/85 border border-slate-800/80 p-8 rounded-[2rem] shadow-2xl backdrop-blur-xl">
         
-        {/* Header / Company Title */}
+        {/* Header */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-slate-950 font-black text-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/30">
             {isAr ? 'ش' : 'C'}

@@ -12,21 +12,31 @@ export const AuthProvider = ({ children }) => {
     const initAuth = async () => {
       const token = localStorage.getItem('access_token');
       const savedUser = localStorage.getItem('user_data');
+
       if (token && savedUser) {
         try {
-          setUser(JSON.parse(savedUser));
+          const parsedUser = JSON.parse(savedUser);
+          setUser(parsedUser);
+          if (parsedUser.tenant) {
+            setTenant(parsedUser.tenant);
+            localStorage.setItem('tenant_id', parsedUser.tenant.id || parsedUser.tenant);
+          }
+
+          // Silent background sync
           const res = await axiosClient.get('/auth/me/');
           setUser(res.data);
-          if (res.data.tenant_slug) {
-            setTenant({ id: res.data.tenant, slug: res.data.tenant_slug, name: res.data.tenant_name });
-          }
+          localStorage.setItem('user_data', JSON.stringify(res.data));
         } catch (err) {
-          console.error("Session verification failed:", err);
-          logout();
+          console.warn("Session background sync:", err);
+          // Only logout if 401 Unauthorized
+          if (err.response?.status === 401) {
+            logout();
+          }
         }
       }
       setLoading(false);
     };
+
     initAuth();
   }, []);
 
@@ -39,7 +49,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user_data', JSON.stringify(userData));
 
     if (userData.tenant) {
-      localStorage.setItem('tenant_id', userData.tenant.id);
+      const tId = userData.tenant.id || userData.tenant;
+      localStorage.setItem('tenant_id', tId);
       setTenant(userData.tenant);
     }
 

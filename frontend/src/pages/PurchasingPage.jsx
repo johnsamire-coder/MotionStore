@@ -452,69 +452,59 @@ export default function PurchasingPage() {
 
       {/* MODAL: New Quick Supplier */}
       {showNewSupplierModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50" dir={isRTL ? 'rtl' : 'ltr'}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <Building2 size={18} className="text-emerald-600" /> {t('purchasing.modalSupTitle')}
+                <Building2 size={18} className="text-emerald-600" /> إضافة مورد جديد
               </h3>
               <button onClick={() => setShowNewSupplierModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
             </div>
 
-            <form onSubmit={handleCreateSupplier} className="space-y-3 text-xs">
+            <form onSubmit={handleCreateSupplier} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-600 mb-1">اسم المورد *</label>
+                <label className="block font-bold text-slate-700 mb-1.5">اسم المورد / الشحنة *</label>
                 <input
                   type="text"
                   required
                   value={newSupplierName}
                   onChange={(e) => setNewSupplierName(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
                   placeholder="مثال: الشركة الأوروبية لتصدير البالات"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">كود المورد</label>
-                  <input
-                    type="text"
-                    value={newSupplierCode}
-                    onChange={(e) => setNewSupplierCode(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                    placeholder="SUP-001"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-600 mb-1">رقم الهاتف</label>
-                  <input
-                    type="text"
-                    value={newSupplierPhone}
-                    onChange={(e) => setNewSupplierPhone(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                    placeholder="+20..."
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block font-semibold text-slate-600 mb-1">الرقم الضريبي</label>
+                <label className="block font-semibold text-slate-600 mb-1">الرقم الضريبي / التجاري (اختياري)</label>
                 <input
                   type="text"
                   value={newSupplierTax}
                   onChange={(e) => setNewSupplierTax(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                  placeholder="TAX-XXXXXX"
+                  placeholder="مثال: TAX-998877"
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition mt-2 shadow-md shadow-emerald-600/20 cursor-pointer"
-              >
-                {t('common.save')}
-              </button>
+              <div className="p-3 bg-emerald-50/60 border border-emerald-100 rounded-xl text-[11px] text-emerald-800 font-semibold">
+                ℹ️ يتولد كود المورد تلقائياً بالترتيب (مثال: SUP-0001) لمنع التكرار.
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition shadow-md shadow-emerald-600/20 cursor-pointer text-xs"
+                >
+                  {submitting ? 'جاري الحفظ...' : 'حفظ المورد'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowNewSupplierModal(false)}
+                  className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition text-xs cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
             </form>
           </div>
         </div>

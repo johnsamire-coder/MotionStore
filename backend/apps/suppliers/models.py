@@ -22,4 +22,11 @@ class Supplier(TenantAwareModel):
         ]
 
     def __str__(self):
-        return self.name
+        return f"{self.name} ({self.code or 'No Code'})"
+
+    def save(self, *args, **kwargs):
+        # Auto-generate unique sequential Supplier Code if not set
+        if not self.code and self.tenant:
+            count = Supplier.objects.filter(tenant=self.tenant).count() + 1
+            self.code = f"SUP-{count:04d}"
+        super().save(*args, **kwargs)
