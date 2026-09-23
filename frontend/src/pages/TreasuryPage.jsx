@@ -1,19 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   Vault, 
   ArrowRightLeft, 
-  ArrowDownRight, 
-  ArrowUpRight, 
-  DollarSign, 
-  Building, 
   RotateCcw,
   X,
-  CreditCard,
   Banknote
 } from 'lucide-react';
 
 export default function TreasuryPage() {
+  const { t, isRTL } = useLanguage();
+
   const [treasuries, setTreasuries] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,7 +31,6 @@ export default function TreasuryPage() {
   const loadTreasuryData = async () => {
     setLoading(true);
     try {
-      // 1. Load Treasuries
       const tRes = await axiosClient.get('/treasuries/?is_active=true');
       const tList = tRes.data.results || tRes.data || [];
       setTreasuries(tList);
@@ -44,7 +41,6 @@ export default function TreasuryPage() {
         setToTreasury(safe.id);
       }
 
-      // 2. Load Transactions
       const txRes = await axiosClient.get('/treasury-transactions/');
       setTransactions(txRes.data.results || txRes.data || []);
     } catch (err) {
@@ -62,7 +58,6 @@ export default function TreasuryPage() {
     }
     setSubmitting(true);
     try {
-      // Execute Paired Transfer Out and In
       await axiosClient.post('/treasury-transactions/', {
         treasury: fromTreasury,
         transaction_type: 'TRANSFER_OUT',
@@ -81,45 +76,43 @@ export default function TreasuryPage() {
       setShowTransferModal(false);
       loadTreasuryData();
     } catch (err) {
-      alert(err.response?.data?.detail || "Transfer failed. Check fund sufficiency.");
+      alert(err.response?.data?.detail || "Transfer failed.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const totalFunds = treasuries.reduce((acc, t) => acc + parseFloat(t.current_balance || 0), 0);
-
-  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">Loading Treasuries & Vaults...</div>;
+  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Treasury Vaults & Liquidity Management</h2>
-          <p className="text-sm text-slate-500">Multi-Drawer Cash Balancing, Safe Vault Transfers, and Financial Ledger Audit</p>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('treasury.title')}</h2>
+          <p className="text-sm text-slate-500">{t('treasury.subtitle')}</p>
         </div>
 
         <button
           onClick={() => setShowTransferModal(true)}
           className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
         >
-          <ArrowRightLeft size={16} /> Inter-Treasury Transfer
+          <ArrowRightLeft size={16} /> {t('treasury.transferBtn')}
         </button>
       </div>
 
       {/* Treasuries Grid Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {treasuries.map((t) => (
-          <div key={t.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between space-y-4">
+        {treasuries.map((tr) => (
+          <div key={tr.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold">
-                  {t.treasury_type === 'MAIN_SAFE' ? <Vault size={20} className="text-emerald-600" /> : <Banknote size={20} className="text-blue-600" />}
+                  {tr.treasury_type === 'MAIN_SAFE' ? <Vault size={20} className="text-emerald-600" /> : <Banknote size={20} className="text-blue-600" />}
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-900 text-sm">{t.name}</h4>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.treasury_type?.replace('_', ' ')}</span>
+                  <h4 className="font-bold text-slate-900 text-sm">{tr.name}</h4>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{tr.treasury_type?.replace('_', ' ')}</span>
                 </div>
               </div>
 
@@ -127,9 +120,9 @@ export default function TreasuryPage() {
             </div>
 
             <div className="pt-4 border-t border-slate-100 flex justify-between items-baseline">
-              <span className="text-xs text-slate-500 font-medium">Current Balance:</span>
+              <span className="text-xs text-slate-500 font-medium">{t('treasury.currentBalance')}</span>
               <span className="text-2xl font-black text-slate-900">
-                {parseFloat(t.current_balance || 0).toFixed(2)} <span className="text-xs font-normal text-slate-500">EGP</span>
+                {parseFloat(tr.current_balance || 0).toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span>
               </span>
             </div>
           </div>
@@ -141,24 +134,24 @@ export default function TreasuryPage() {
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div className="flex items-center gap-2">
             <Vault size={16} className="text-emerald-600" />
-            <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">Treasury Transactions Ledger</span>
+            <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">{t('treasury.ledgerHeader')}</span>
           </div>
 
-          <button onClick={loadTreasuryData} className="p-1.5 text-slate-500 hover:text-emerald-600 rounded-lg">
+          <button onClick={loadTreasuryData} className="p-1.5 text-slate-500 hover:text-emerald-600 rounded-lg cursor-pointer">
             <RotateCcw size={15} />
           </button>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs`}>
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
-                <th className="py-3.5 px-5">Date & Time</th>
-                <th className="py-3.5 px-5">Treasury Vault</th>
-                <th className="py-3.5 px-5">Type</th>
-                <th className="py-3.5 px-5">Description & Reference</th>
-                <th className="py-3.5 px-5 text-right">Amount (EGP)</th>
-                <th className="py-3.5 px-5 text-right">Running Balance</th>
+                <th className="py-3.5 px-5">التاريخ والوقت</th>
+                <th className="py-3.5 px-5">{t('treasury.colVault')}</th>
+                <th className="py-3.5 px-5">النوع</th>
+                <th className="py-3.5 px-5">البيان والتفاصيل</th>
+                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('treasury.colAmount')}</th>
+                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('treasury.colRunning')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-150 text-slate-800 font-medium font-mono">
@@ -176,11 +169,11 @@ export default function TreasuryPage() {
                       </span>
                     </td>
                     <td className="py-3.5 px-5 font-sans text-slate-600">{tx.description || 'Treasury transaction'}</td>
-                    <td className={`py-3.5 px-5 text-right font-bold text-sm ${amt >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                      {amt >= 0 ? `+${amt.toFixed(2)}` : amt.toFixed(2)} EGP
+                    <td className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-sm ${amt >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                      {amt >= 0 ? `+${amt.toFixed(2)}` : amt.toFixed(2)} {t('common.currency')}
                     </td>
-                    <td className="py-3.5 px-5 text-right font-bold text-slate-900 font-sans">
-                      {parseFloat(tx.running_balance || 0).toFixed(2)} EGP
+                    <td className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-slate-900 font-sans`}>
+                      {parseFloat(tx.running_balance || 0).toFixed(2)} {t('common.currency')}
                     </td>
                   </tr>
                 );
@@ -189,7 +182,7 @@ export default function TreasuryPage() {
               {transactions.length === 0 && (
                 <tr>
                   <td colSpan="6" className="py-16 text-center text-slate-400 text-xs font-sans">
-                    No treasury transactions recorded.
+                    لا توجد حركات مالية مسجلة بالخزائن.
                   </td>
                 </tr>
               )}
@@ -205,40 +198,40 @@ export default function TreasuryPage() {
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <ArrowRightLeft size={18} className="text-emerald-600" />
-                <h3 className="font-bold text-slate-900 text-base">Internal Treasury Transfer</h3>
+                <h3 className="font-bold text-slate-900 text-base">{t('treasury.modalTransferTitle')}</h3>
               </div>
-              <button onClick={() => setShowTransferModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              <button onClick={() => setShowTransferModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
             </div>
 
             <form onSubmit={handleExecuteTransfer} className="space-y-4 text-xs">
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Source Treasury (From) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">الخزينة المحول منها (المصدر) *</label>
                 <select
                   value={fromTreasury}
                   onChange={(e) => setFromTreasury(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
                 >
-                  {treasuries.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} (Balance: {parseFloat(t.current_balance || 0).toFixed(2)} EGP)</option>
+                  {treasuries.map(tr => (
+                    <option key={tr.id} value={tr.id}>{tr.name} (الرصيد: {parseFloat(tr.current_balance || 0).toFixed(2)} ج.م)</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Destination Treasury (To) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">الخزينة المحول إليها (المستهدف) *</label>
                 <select
                   value={toTreasury}
                   onChange={(e) => setToTreasury(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
                 >
-                  {treasuries.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} (Balance: {parseFloat(t.current_balance || 0).toFixed(2)} EGP)</option>
+                  {treasuries.map(tr => (
+                    <option key={tr.id} value={tr.id}>{tr.name} (الرصيد: {parseFloat(tr.current_balance || 0).toFixed(2)} ج.م)</option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Transfer Amount (EGP) *</label>
+                <label className="block font-semibold text-slate-700 mb-1">المبلغ المحول (ج.م) *</label>
                 <input
                   type="number"
                   step="10"
@@ -250,7 +243,7 @@ export default function TreasuryPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 mb-1">Transfer Reason / Notes</label>
+                <label className="block font-semibold text-slate-700 mb-1">سبب التحويل / الملاحظات</label>
                 <input
                   type="text"
                   value={transferNotes}
@@ -262,9 +255,9 @@ export default function TreasuryPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer text-xs"
               >
-                {submitting ? 'Executing Transfer...' : 'Confirm & Transfer Funds'}
+                {submitting ? t('common.loading') : 'تأكيد ونقل الأموال'}
               </button>
             </form>
           </div>
