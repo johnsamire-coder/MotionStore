@@ -1,22 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   Truck, 
   Plus, 
   Search, 
   FileText, 
-  CheckCircle2, 
   PackagePlus, 
   Building2, 
   DollarSign, 
-  Scale, 
   X, 
-  Calendar,
-  Layers,
-  Clock
+  Calendar
 } from 'lucide-react';
 
 export default function PurchasingPage() {
+  const { t, isRTL } = useLanguage();
+
   // Data States
   const [invoices, setInvoices] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
@@ -57,30 +56,25 @@ export default function PurchasingPage() {
   const loadPurchasingData = async () => {
     setLoading(true);
     try {
-      // 1. Load Purchase Invoices
       const invRes = await axiosClient.get('/purchases/');
       setInvoices(invRes.data.results || invRes.data || []);
 
-      // 2. Load Suppliers
       const supRes = await axiosClient.get('/suppliers/?is_active=true');
       const supList = supRes.data.results || supRes.data || [];
       setSuppliers(supList);
       if (supList.length > 0) setSelectedSupplier(supList[0].id);
 
-      // 3. Load Warehouses
       const whRes = await axiosClient.get('/warehouses/?is_active=true');
       const whList = whRes.data.results || whRes.data || [];
       setWarehouses(whList);
       const sortingWh = whList.find(w => w.warehouse_type === 'SORTING') || whList[0];
       if (sortingWh) setSelectedWarehouse(sortingWh.id);
 
-      // 4. Load Categories
       const catRes = await axiosClient.get('/categories/?is_active=true');
       const catList = catRes.data.results || catRes.data || [];
       setCategories(catList);
       if (catList.length > 0) setSelectedCategory(catList[0].id);
 
-      // Set random invoice code preview
       const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
       setInvoiceNumber(`PINV-${dateStr}-${Math.floor(1000 + Math.random() * 9000)}`);
     } catch (err) {
@@ -90,7 +84,6 @@ export default function PurchasingPage() {
     }
   };
 
-  // Create Purchase Invoice & Bale Line
   const handleCreateInvoice = async (e) => {
     e.preventDefault();
     if (!selectedSupplier || !selectedWarehouse) {
@@ -99,7 +92,6 @@ export default function PurchasingPage() {
     }
     setSubmitting(true);
     try {
-      // 1. Create Purchase Invoice
       const invRes = await axiosClient.post('/purchases/', {
         supplier: selectedSupplier,
         warehouse: selectedWarehouse,
@@ -115,7 +107,6 @@ export default function PurchasingPage() {
       const parsedCost = parseFloat(totalCost || 0);
       const unitCost = parsedWeight > 0 ? (parsedCost / parsedWeight).toFixed(2) : '0.00';
 
-      // 2. Create Bale Line Item
       await axiosClient.post('/purchase-line-items/', {
         invoice: invoiceId,
         item_type: 'RAW_BALE',
@@ -127,7 +118,6 @@ export default function PurchasingPage() {
         total_cost: parsedCost.toFixed(2)
       });
 
-      // 3. Automatically Create Raw Lot for Sorting Hub
       const lotCode = `BALE-${invoiceNumber.replace('PINV-', '')}`;
       await axiosClient.post('/raw-lots/', {
         lot_code: lotCode,
@@ -143,17 +133,16 @@ export default function PurchasingPage() {
         notes: `Procured bale ready for sorting`
       });
 
-      alert(`Purchase Invoice & Raw Bale Lot #${lotCode} created and ready in Sorting Hub!`);
+      alert(`Purchase Invoice & Raw Bale Lot #${lotCode} created!`);
       setShowNewInvoiceModal(false);
       loadPurchasingData();
     } catch (err) {
-      alert(err.response?.data?.detail || "Failed to create purchase invoice. Check unique invoice number.");
+      alert(err.response?.data?.detail || "Failed to create purchase invoice.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Create Quick Supplier
   const handleCreateSupplier = async (e) => {
     e.preventDefault();
     if (!newSupplierName) return;
@@ -179,25 +168,23 @@ export default function PurchasingPage() {
     }
   };
 
-  // KPIs
   const totalPurchasesCost = invoices.reduce((acc, i) => acc + parseFloat(i.total_cost || 0), 0);
   const totalInvoicesCount = invoices.length;
 
-  // Filtered List
   const filteredInvoices = invoices.filter(inv => 
     inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">Loading Purchasing & Bale Invoices...</div>;
+  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Purchasing & Raw Bale Procurement</h2>
-          <p className="text-sm text-slate-500">Raw Bale Intake, Precision Weight Invoicing, Freight Absorption, and Supplier Registry</p>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('purchasing.title')}</h2>
+          <p className="text-sm text-slate-500">{t('purchasing.subtitle')}</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -205,13 +192,13 @@ export default function PurchasingPage() {
             onClick={() => setShowNewSupplierModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
           >
-            <Building2 size={16} className="text-slate-500" /> New Supplier
+            <Building2 size={16} className="text-slate-500" /> {t('purchasing.newSupplier')}
           </button>
           <button
             onClick={() => setShowNewInvoiceModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
           >
-            <Plus size={16} /> New Bale Purchase
+            <Plus size={16} /> {t('purchasing.newInvoice')}
           </button>
         </div>
       </div>
@@ -219,35 +206,29 @@ export default function PurchasingPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Total Procurement Cost</span>
-          <div className="text-2xl font-black text-slate-900">{totalPurchasesCost.toFixed(2)} <span className="text-xs font-normal text-slate-500">EGP</span></div>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('purchasing.totalProcurement')}</span>
+          <div className="text-2xl font-black text-slate-900">{totalPurchasesCost.toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span></div>
           <p className="text-xs text-slate-500 mt-2 flex items-center gap-1 font-medium">
-            <DollarSign size={13} className="text-emerald-600" /> Across {totalInvoicesCount} purchase invoices
+            <DollarSign size={13} className="text-emerald-600" /> ({totalInvoicesCount}) Fواتير شراء
           </p>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Registered Suppliers</span>
-          <div className="text-2xl font-black text-indigo-600">{suppliers.length} <span className="text-xs font-normal text-slate-500">Vendors</span></div>
-          <p className="text-xs text-indigo-700 mt-2 font-medium">
-            Active Verified Exporters
-          </p>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('purchasing.registeredSuppliers')}</span>
+          <div className="text-2xl font-black text-indigo-600">{suppliers.length} <span className="text-xs font-normal text-slate-500">مورد</span></div>
+          <p className="text-xs text-indigo-700 mt-2 font-semibold">موردين معتمدين</p>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Receiving Warehouses</span>
-          <div className="text-2xl font-black text-amber-600">{warehouses.length} <span className="text-xs font-normal text-slate-500">Hubs</span></div>
-          <p className="text-xs text-slate-500 mt-2 font-medium">
-            Sorting & Storage Areas
-          </p>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">مخازن الاستلام</span>
+          <div className="text-2xl font-black text-amber-600">{warehouses.length} <span className="text-xs font-normal text-slate-500">مخزن</span></div>
+          <p className="text-xs text-slate-500 mt-2 font-medium">مساحات الاستلام والفرز</p>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Cost Absorption Engine</span>
-          <div className="text-2xl font-black text-emerald-600">Active <span className="text-xs font-normal text-slate-500">100%</span></div>
-          <p className="text-xs text-emerald-700 mt-2 font-medium">
-            Additional Freight Allocated
-          </p>
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">تحميل مصاريف الشحن</span>
+          <div className="text-2xl font-black text-emerald-600">نشط <span className="text-xs font-normal text-slate-500">100٪</span></div>
+          <p className="text-xs text-emerald-700 mt-2 font-semibold">امتصاص تكلفة النقل</p>
         </div>
       </div>
 
@@ -256,31 +237,31 @@ export default function PurchasingPage() {
         <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/50">
           <div className="flex items-center gap-2">
             <FileText size={16} className="text-emerald-600" />
-            <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">Purchase Invoices Registry</span>
+            <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">سجل فواتير الشراء</span>
           </div>
 
           <div className="relative max-w-xs flex-1">
-            <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
+            <Search size={15} className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5 text-slate-400`} />
             <input
               type="text"
-              placeholder="Search invoice # or supplier..."
+              placeholder={t('common.search')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-emerald-500"
+              className={`w-full ${isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'} py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-emerald-500`}
             />
           </div>
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs`}>
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
               <tr>
-                <th className="py-3.5 px-5">Invoice # & Date</th>
-                <th className="py-3.5 px-5">Supplier</th>
-                <th className="py-3.5 px-5">Receiving Hub</th>
-                <th className="py-3.5 px-5 text-right">Freight Costs</th>
-                <th className="py-3.5 px-5 text-right">Total Purchase Cost</th>
-                <th className="py-3.5 px-5 text-center">Status</th>
+                <th className="py-3.5 px-5">{t('purchasing.colInvNumber')}</th>
+                <th className="py-3.5 px-5">{t('purchasing.colSupplier')}</th>
+                <th className="py-3.5 px-5">{t('purchasing.colHub')}</th>
+                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('purchasing.colFreight')}</th>
+                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('purchasing.colTotalCost')}</th>
+                <th className="py-3.5 px-5 text-center">{t('common.status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-150 text-slate-800 font-medium">
@@ -296,11 +277,11 @@ export default function PurchasingPage() {
                     <div className="font-semibold text-slate-800">{inv.supplier_name || 'Global Vendor'}</div>
                   </td>
                   <td className="py-4 px-5 text-slate-600">{inv.warehouse_name || 'Sorting Center'}</td>
-                  <td className="py-4 px-5 text-right font-mono text-slate-500">
-                    +{parseFloat(inv.additional_costs || 0).toFixed(2)} EGP
+                  <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-mono text-slate-500`}>
+                    +{parseFloat(inv.additional_costs || 0).toFixed(2)} {t('common.currency')}
                   </td>
-                  <td className="py-4 px-5 text-right font-bold text-slate-900 text-sm">
-                    {parseFloat(inv.total_cost || 0).toFixed(2)} <span className="text-[10px] font-normal text-slate-500">EGP</span>
+                  <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-slate-900 text-sm`}>
+                    {parseFloat(inv.total_cost || 0).toFixed(2)} <span className="text-[10px] font-normal text-slate-500">{t('common.currency')}</span>
                   </td>
                   <td className="py-4 px-5 text-center">
                     <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
@@ -312,8 +293,8 @@ export default function PurchasingPage() {
 
               {filteredInvoices.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="py-16 text-center text-slate-400 text-xs">
-                    No purchase invoices found matching your criteria.
+                  <td colSpan="6" className="py-16 text-center text-slate-400 text-xs font-bold">
+                    لا توجد فواتير شراء سابقة.
                   </td>
                 </tr>
               )}
@@ -329,20 +310,19 @@ export default function PurchasingPage() {
             <div className="flex justify-between items-center pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <PackagePlus size={20} className="text-emerald-600" />
-                <h3 className="font-bold text-slate-900 text-base">New Raw Bale Purchase Invoice</h3>
+                <h3 className="font-bold text-slate-900 text-base">{t('purchasing.modalInvTitle')}</h3>
               </div>
-              <button onClick={() => setShowNewInvoiceModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              <button onClick={() => setShowNewInvoiceModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
             </div>
 
             <form onSubmit={handleCreateInvoice} className="space-y-4 text-xs">
-              {/* Invoice & Supplier Header */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Supplier / Vendor</label>
+                  <label className="block font-semibold text-slate-600 mb-1">المورد / المصدر *</label>
                   <select
                     value={selectedSupplier}
                     onChange={(e) => setSelectedSupplier(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     {suppliers.map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.code || 'Vendor'})</option>
@@ -351,11 +331,11 @@ export default function PurchasingPage() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Receiving Warehouse Hub</label>
+                  <label className="block font-semibold text-slate-600 mb-1">مخزن الاستلام (الفرز)</label>
                   <select
                     value={selectedWarehouse}
                     onChange={(e) => setSelectedWarehouse(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
                     {warehouses.map(w => (
                       <option key={w.id} value={w.id}>{w.name} ({w.warehouse_type})</option>
@@ -364,7 +344,7 @@ export default function PurchasingPage() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Invoice Number</label>
+                  <label className="block font-semibold text-slate-600 mb-1">رقم الفاتورة *</label>
                   <input
                     type="text"
                     required
@@ -375,7 +355,7 @@ export default function PurchasingPage() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Invoice Date</label>
+                  <label className="block font-semibold text-slate-600 mb-1">تاريخ الشراء *</label>
                   <input
                     type="date"
                     required
@@ -386,14 +366,13 @@ export default function PurchasingPage() {
                 </div>
               </div>
 
-              {/* Bale Line Item Details */}
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
                 <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider">
-                  Raw Bale Physical & Cost Specification
+                  مواصفات وتكلفة البالة الخام
                 </span>
 
                 <div>
-                  <label className="block text-slate-500 font-medium mb-1">Item / Bale Description</label>
+                  <label className="block text-slate-500 font-medium mb-1">وصف البالة / الشحنة *</label>
                   <input
                     type="text"
                     required
@@ -405,7 +384,7 @@ export default function PurchasingPage() {
 
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-slate-500 font-medium mb-1">Total Weight (KG)</label>
+                    <label className="block text-slate-500 font-medium mb-1">الوزن الإجمالي (كجم) *</label>
                     <input
                       type="number"
                       step="0.001"
@@ -417,18 +396,18 @@ export default function PurchasingPage() {
                   </div>
 
                   <div>
-                    <label className="block text-slate-500 font-medium mb-1">Est. Pieces (Optional)</label>
+                    <label className="block text-slate-500 font-medium mb-1">عدد القطع التقريبي</label>
                     <input
                       type="number"
                       value={estimatedPieces}
                       onChange={(e) => setEstimatedPieces(e.target.value)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                      placeholder="e.g. 100"
+                      placeholder="مثال: 100"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-500 font-medium mb-1">Base Cost (EGP)</label>
+                    <label className="block text-slate-500 font-medium mb-1">تكلفة الشراء (ج.م) *</label>
                     <input
                       type="number"
                       step="10"
@@ -441,7 +420,7 @@ export default function PurchasingPage() {
                 </div>
 
                 <div>
-                  <label className="block text-slate-500 font-medium mb-1">Freight & Customs Additional Cost (EGP)</label>
+                  <label className="block text-slate-500 font-medium mb-1">مصاريف الشحن والجمارك الإضافية (ج.م)</label>
                   <input
                     type="number"
                     step="10"
@@ -453,18 +432,18 @@ export default function PurchasingPage() {
               </div>
 
               <div className="pt-2 flex justify-between items-center text-xs">
-                <span className="text-slate-500">Net Invoice Cost:</span>
+                <span className="text-slate-500">إجمالي صافي التكلفة:</span>
                 <span className="font-extrabold text-slate-900 text-sm">
-                  {(parseFloat(totalCost || 0) + parseFloat(additionalCosts || 0)).toFixed(2)} EGP
+                  {(parseFloat(totalCost || 0) + parseFloat(additionalCosts || 0)).toFixed(2)} {t('common.currency')}
                 </span>
               </div>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition duration-150 shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition duration-150 shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer text-xs"
               >
-                {submitting ? 'Creating Invoice & Raw Lot...' : 'Confirm Purchase & Generate Raw Bale Lot'}
+                {submitting ? t('common.loading') : 'حفظ الفاتورة وإنشاء البالة الخام بساحة الفرز'}
               </button>
             </form>
           </div>
@@ -477,37 +456,37 @@ export default function PurchasingPage() {
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <Building2 size={18} className="text-emerald-600" /> Add New Supplier
+                <Building2 size={18} className="text-emerald-600" /> {t('purchasing.modalSupTitle')}
               </h3>
-              <button onClick={() => setShowNewSupplierModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              <button onClick={() => setShowNewSupplierModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
             </div>
 
             <form onSubmit={handleCreateSupplier} className="space-y-3 text-xs">
               <div>
-                <label className="block font-semibold text-slate-600 mb-1">Supplier Name *</label>
+                <label className="block font-semibold text-slate-600 mb-1">اسم المورد *</label>
                 <input
                   type="text"
                   required
                   value={newSupplierName}
                   onChange={(e) => setNewSupplierName(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                  placeholder="e.g. Vintage Italian Exporters"
+                  placeholder="مثال: الشركة الأوروبية لتصدير البالات"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Code / Prefix</label>
+                  <label className="block font-semibold text-slate-600 mb-1">كود المورد</label>
                   <input
                     type="text"
                     value={newSupplierCode}
                     onChange={(e) => setNewSupplierCode(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                    placeholder="e.g. SUP-IT"
+                    placeholder="SUP-001"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">Phone Number</label>
+                  <label className="block font-semibold text-slate-600 mb-1">رقم الهاتف</label>
                   <input
                     type="text"
                     value={newSupplierPhone}
@@ -519,7 +498,7 @@ export default function PurchasingPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-600 mb-1">Tax / Registration #</label>
+                <label className="block font-semibold text-slate-600 mb-1">الرقم الضريبي</label>
                 <input
                   type="text"
                   value={newSupplierTax}
@@ -532,9 +511,9 @@ export default function PurchasingPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition mt-2 shadow-md shadow-emerald-600/20"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition mt-2 shadow-md shadow-emerald-600/20 cursor-pointer"
               >
-                Save Supplier
+                {t('common.save')}
               </button>
             </form>
           </div>
