@@ -202,9 +202,22 @@ export default function POSPage() {
     return matchesSearch && matchesGrade;
   });
 
+  const renderReceiptLines = (invoice) => {
+    if (!invoice || !invoice.lines) return '';
+    return invoice.lines.map(l => {
+      const name = (l.product_name || 'Item').substring(0, 10);
+      const grade = (l.grade || '').substring(0, 4);
+      const wt = parseFloat(l.weight_kg || 0).toFixed(2);
+      const price = parseFloat(l.unit_price || 0).toFixed(0);
+      const total = parseFloat(l.total_price || 0).toFixed(2);
+      return `${name} (${grade})  ${wt}    ${price}    ${total}`;
+    }).join('
+');
+  };
+
   return (
     <div className="h-[calc(100vh-8rem)] flex gap-6" dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Left/Right: Product Catalog & Grade Tabs */}
+      {/* Product Catalog & Grade Tabs */}
       <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-xs flex flex-col overflow-hidden">
         <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/50">
           <div className="flex items-center gap-2">
@@ -486,13 +499,12 @@ export default function POSPage() {
 ----------------------------------------
 الصنف / الدرجة     الوزن    السعر   الإجمالي
 ----------------------------------------
-${lastInvoice.lines?.map(l => `${l.product_name?.substring(0, 10)} (${l.grade?.substring(0, 4)})  ${parseFloat(l.weight_kg).toFixed(2)}    ${parseFloat(l.unit_price).toFixed(0)}    ${parseFloat(l.total_price).toFixed(2)}`).join('
-')}
+${renderReceiptLines(lastInvoice)}
 ----------------------------------------
-الإجمالي الفرعي:               ${parseFloat(lastInvoice.subtotal).toFixed(2)} ج.م
-الصافي النهائي:                ${parseFloat(lastInvoice.total_amount).toFixed(2)} ج.م
+الإجمالي الفرعي:               ${parseFloat(lastInvoice.subtotal || 0).toFixed(2)} ج.م
+الصافي النهائي:                ${parseFloat(lastInvoice.total_amount || 0).toFixed(2)} ج.م
 ========================================
-طريقة السداد:                 ${parseFloat(lastInvoice.total_amount).toFixed(2)} ج.م
+طريقة السداد:                 ${parseFloat(lastInvoice.total_amount || 0).toFixed(2)} ج.م
 ----------------------------------------
       شكراً لزيارتكم موشن ستور!    
 ========================================`}
