@@ -4,7 +4,11 @@ export const translations = {
       currency: "ج.م",
       kg: "كجم",
       lot: "بالة",
-      refresh: "تحديث"
+      pcs: "قطعة",
+      refresh: "تحديث",
+      print: "طباعة",
+      close: "إغلاق",
+      clear: "تفريغ"
     },
     nav: {
       brand: "موشن ستور",
@@ -38,6 +42,37 @@ export const translations = {
       accountingLedger: "دفتر القيود المحاسبية",
       policyDesc: "الطريقة B (المعاملات) / الحالة 2 (فصل الهالك كخسارة)",
       ledgerDesc: "قيد مزدوج متوازن إجبارياً (مدين = دائن)"
+    },
+    pos: {
+      title: "نقطة البيع الكاشير",
+      terminal: "محطة البيع",
+      shift: "الوردية",
+      searchPlaceholder: "ابحث باسم الصنف أو القسم...",
+      allGrades: "جميع الدرجات",
+      newCollection: "✨ كريمة / سوبر لوكس (300 ج.م)",
+      middleGrade: "📦 وسط / درجة ثانية (150 ج.م)",
+      clearanceGrade: "🏷️ تصفيات / شعبي (50 ج.م)",
+      inStock: "كجم متاح بالمخزن",
+      perKg: "ج.م/كجم",
+      cartTitle: "سلة المبيعات الحالية",
+      clearCart: "تفريغ السلة",
+      emptyCart: "السلة فارغة. اختر الأصناف من القائمة.",
+      subtotal: "الإجمالي الفرعي:",
+      discount: "الخصم:",
+      netTotal: "الصافي النهائي:",
+      payButton: "ادفع وأكمل البيع",
+      selectPayment: "اختر طريقة السداد",
+      totalDue: "المبلغ المطلوب سداده",
+      confirmReceipt: "تأكيد التحصيل وإصدار الفاتورة",
+      submitting: "جاري تسجيل الفاتورة...",
+      openShiftRequired: "يلزم فتح وردية كاشير",
+      openShiftDesc: "لا توجد وردية مفتوحة على هذا الجهاز. أدخل رصيد الافتتاح لبدء البيع.",
+      openingFloat: "رصيد نقدية الافتتاح (ج.م)",
+      openShiftBtn: "فتح وردية الخزينة",
+      receiptTitle: "تمت عملية البيع بنجاح!",
+      printReceipt: "طباعة الفاتورة (80mm)",
+      newSale: "فاتورة جديدة",
+      noStock: "لا توجد أصناف متاحة تطابق البحث."
     }
   },
   en: {
@@ -45,7 +80,11 @@ export const translations = {
       currency: "EGP",
       kg: "KG",
       lot: "Lot",
-      refresh: "Refresh"
+      pcs: "pc",
+      refresh: "Refresh",
+      print: "Print",
+      close: "Close",
+      clear: "Clear"
     },
     nav: {
       brand: "MOTION STORE",
@@ -79,6 +118,37 @@ export const translations = {
       accountingLedger: "Accounting Ledger",
       policyDesc: "Method B (Coefficients) / Case 2 (Separate Waste Loss)",
       ledgerDesc: "Double-Entry Balanced (Dr = Cr)"
+    },
+    pos: {
+      title: "POS Cashier Terminal",
+      terminal: "Terminal",
+      shift: "Shift",
+      searchPlaceholder: "Search garments or categories...",
+      allGrades: "All Grades",
+      newCollection: "✨ New Collection (300 EGP)",
+      middleGrade: "📦 Middle Grade (150 EGP)",
+      clearanceGrade: "🏷️ Clearance (50 EGP)",
+      inStock: "KG in stock",
+      perKg: "EGP/KG",
+      cartTitle: "Current Sales Cart",
+      clearCart: "Clear Cart",
+      emptyCart: "Cart is empty. Select items from the catalog.",
+      subtotal: "Subtotal:",
+      discount: "Discount:",
+      netTotal: "NET TOTAL:",
+      payButton: "Pay & Complete Sale",
+      selectPayment: "Select Payment Method",
+      totalDue: "Total Amount Due",
+      confirmReceipt: "Confirm Payment & Issue Invoice",
+      submitting: "Recording Transaction...",
+      openShiftRequired: "Open Shift Required",
+      openShiftDesc: "No active shift on this terminal. Enter opening float cash to begin selling.",
+      openingFloat: "Opening Float Cash (EGP)",
+      openShiftBtn: "Open Register Shift",
+      receiptTitle: "Sale Completed Successfully!",
+      printReceipt: "Print Receipt (ESC/POS)",
+      newSale: "New Sale",
+      noStock: "No active stock available matching criteria."
     }
   }
 };
