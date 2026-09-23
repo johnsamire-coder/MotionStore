@@ -1,18 +1,18 @@
-﻿export const translations = {
+export const translations = {
   ar: {
     common: {
       currency: "ج.م",
       kg: "كجم",
       lot: "بالة",
       pcs: "قطعة",
-      loading: "جاري التحميل...",
-      search: "بحث...",
-      all: "الكل",
       refresh: "تحديث",
-      cancel: "إلغاء",
-      save: "حفظ",
       print: "طباعة",
-      close: "إغلاق"
+      close: "إغلاق",
+      clear: "تفريغ",
+      save: "حفظ",
+      cancel: "إلغاء",
+      all: "الكل",
+      search: "بحث..."
     },
     nav: {
       brand: "موشن ستور",
@@ -29,19 +29,6 @@
       logout: "تسجيل الخروج",
       workspace: "مساحة العمل التشغيلية",
       onlineEngine: "النظام متصل ويعمل"
-    },
-    login: {
-      title: "موشن ستور",
-      subtitle: "نظام إدارة البالات والملابس المستعملة",
-      username: "اسم المستخدم",
-      password: "كلمة المرور",
-      button: "دخول إلى مساحة العمل",
-      loading: "جاري التحقق...",
-      userPlaceholder: "أدخل اسم المستخدم",
-      passPlaceholder: "••••••••",
-      errorMsg: "اسم المستخدم أو كلمة المرور غير صحيحة.",
-      footer: "محرك معتمد للمحاسبة والمخازن والبالات",
-      langBtn: "English (EN)"
     },
     dashboard: {
       title: "لوحة المؤشرات التنفيذية",
@@ -222,20 +209,21 @@
       savedAlert: "تم حفظ وتفعيل الإعدادات بنجاح!"
     }
   },
+
   en: {
     common: {
       currency: "EGP",
       kg: "KG",
       lot: "Lot",
       pcs: "pc",
-      loading: "Loading...",
-      search: "Search...",
-      all: "All",
       refresh: "Refresh",
-      cancel: "Cancel",
-      save: "Save",
       print: "Print",
-      close: "Close"
+      close: "Close",
+      clear: "Clear",
+      save: "Save",
+      cancel: "Cancel",
+      all: "All",
+      search: "Search..."
     },
     nav: {
       brand: "MOTION STORE",
@@ -252,19 +240,6 @@
       logout: "Logout",
       workspace: "Enterprise Workspace",
       onlineEngine: "Online Core Engine"
-    },
-    login: {
-      title: "Motion Store",
-      subtitle: "Thrift & Bale Management Enterprise SaaS",
-      username: "Username",
-      password: "Password",
-      button: "Sign In to Workspace",
-      loading: "Authenticating...",
-      userPlaceholder: "Enter username",
-      passPlaceholder: "••••••••",
-      errorMsg: "Invalid username or password.",
-      footer: "Powered by Motion Store SaaS Engine",
-      langBtn: "العربية (AR)"
     },
     dashboard: {
       title: "Executive Dashboard",

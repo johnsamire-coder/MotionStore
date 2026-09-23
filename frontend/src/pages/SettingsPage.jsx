@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { 
   Building2, 
@@ -9,8 +9,6 @@ import {
   CheckCircle2, 
   Store, 
   Scale, 
-  DollarSign, 
-  Receipt,
   Save
 } from 'lucide-react';
 
@@ -25,12 +23,11 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState('+20 100 123 4567');
   const [currency, setCurrency] = useState('EGP');
   const [taxNumber, setTaxNumber] = useState('TR-987-654-321');
-  const [address, setAddress] = useState('شارع فوزي معاذ سموحة الإسكندرية');
+  const [address, setAddress] = useState('شارع فوزي معاذ، سموحة، الإسكندرية');
 
   // Costing Settings
   const [costingMethod, setCostingMethod] = useState('COEFFICIENTS');
   const [wasteTreatment, setWasteTreatment] = useState('SEPARATE');
-  const [normalWastePct, setNormalWastePct] = useState('5.00');
   const [coefNew, setCoefNew] = useState('3.00');
   const [coefMid, setCoefMid] = useState('1.50');
   const [coefClr, setCoefClr] = useState('0.50');
@@ -38,7 +35,7 @@ export default function SettingsPage() {
   // Thermal Printing Settings
   const [printerWidth, setPrinterWidth] = useState('80MM');
   const [receiptHeader, setReceiptHeader] = useState('موشن ستور - بالات وملابس أوروبية فاخرة');
-  const [receiptFooter, setReceiptFooter] = useState('شكرا لزيارتكم! البضاعة المباعة ترد وتستبدل خلال 14 يوما بالفاتورة');
+  const [receiptFooter, setReceiptFooter] = useState('شكراً لزيارتكم! البضاعة المباعة ترد وتستبدل خلال 14 يوماً بالفاتورة');
   const [showQR, setShowQR] = useState(true);
 
   // Security & Discount Limits
@@ -53,32 +50,32 @@ export default function SettingsPage() {
   };
 
   const tabs = [
-    { id: 'COMPANY', label: t('tab_company'), icon: Building2 },
-    { id: 'COSTING', label: t('tab_costing'), icon: Sliders },
-    { id: 'PRINTING', label: t('tab_printing'), icon: Printer },
-    { id: 'SECURITY', label: t('tab_security'), icon: ShieldCheck },
-    { id: 'USERS', label: t('tab_users'), icon: Users },
+    { id: 'COMPANY', label: t('settings.tabCompany'), icon: Building2 },
+    { id: 'COSTING', label: t('settings.tabCosting'), icon: Sliders },
+    { id: 'PRINTING', label: t('settings.tabPrinting'), icon: Printer },
+    { id: 'SECURITY', label: t('settings.tabSecurity'), icon: ShieldCheck },
+    { id: 'USERS', label: t('settings.tabUsers'), icon: Users },
   ];
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-6xl mx-auto" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('settings_title')}</h2>
-          <p className="text-sm text-slate-500">{t('settings_sub')}</p>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('settings.title')}</h2>
+          <p className="text-sm text-slate-500">{t('settings.subtitle')}</p>
         </div>
 
         {savedSuccess && (
-          <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold animate-fade-in">
+          <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold">
             <CheckCircle2 size={16} className="text-emerald-600" />
-            <span>{t('settings_saved')}</span>
+            <span>{t('settings.savedAlert')}</span>
           </div>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-        {/* Settings Navigation Tabs (Left / Right depending on RTL) */}
+        {/* Navigation Tabs */}
         <div className="space-y-1.5 bg-white p-3 rounded-2xl border border-slate-200 shadow-xs h-fit">
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -86,7 +83,7 @@ export default function SettingsPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-bold transition ${
+                className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-xs font-bold transition cursor-pointer ${
                   activeTab === tab.id
                     ? 'bg-emerald-600 text-white shadow-xs'
                     : 'text-slate-600 hover:bg-slate-100'
@@ -99,14 +96,14 @@ export default function SettingsPage() {
           })}
         </div>
 
-        {/* Settings Content Area */}
+        {/* Content Panel */}
         <div className="md:col-span-3 bg-white p-8 rounded-2xl border border-slate-200 shadow-xs">
           <form onSubmit={handleSave} className="space-y-6 text-xs">
-            {/* TAB 1: COMPANY & STORE PROFILE */}
+            {/* COMPANY */}
             {activeTab === 'COMPANY' && (
               <div className="space-y-5">
                 <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <Store size={18} className="text-emerald-600" /> بيانات المتجر والفرع الرسمي
+                  <Store size={18} className="text-emerald-600" /> {t('settings.tabCompany')}
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -147,12 +144,10 @@ export default function SettingsPage() {
                     <select
                       value={currency}
                       onChange={(e) => setCurrency(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
                     >
                       <option value="EGP">جنيه مصري (EGP)</option>
                       <option value="USD">دولار أمريكي (USD)</option>
-                      <option value="SAR">ريال سعودي (SAR)</option>
-                      <option value="AED">درهم إماراتي (AED)</option>
                     </select>
                   </div>
 
@@ -179,69 +174,47 @@ export default function SettingsPage() {
               </div>
             )}
 
-            {/* TAB 2: COSTING & BALE POLICIES */}
+            {/* COSTING */}
             {activeTab === 'COSTING' && (
               <div className="space-y-5">
                 <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <Scale size={18} className="text-emerald-600" /> سياسة احتساب وتوزيع تكلفة البالات
+                  <Scale size={18} className="text-emerald-600" /> {t('settings.tabCosting')}
                 </h3>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">طريقة توزيع التكلفة الأساسية (Costing Allocation Method)</label>
+                    <label className="block font-semibold text-slate-700 mb-1">طريقة توزيع التكلفة الأساسية (Costing Method)</label>
                     <select
                       value={costingMethod}
                       onChange={(e) => setCostingMethod(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
                     >
-                      <option value="COEFFICIENTS">الطريقة B: التوزيع بالمعاملات الموزونة (Weighted Coefficients) - موصى بها</option>
-                      <option value="SALES_VALUE">الطريقة C: التوزيع بالقيمة البيعية المتوقعة (Relative Sales Value / NRV)</option>
+                      <option value="COEFFICIENTS">الطريقة B: التوزيع بالمعاملات الموزونة (Weighted Coefficients)</option>
+                      <option value="SALES_VALUE">الطريقة C: التوزيع بالقيمة البيعية المتوقعة (Relative Sales Value)</option>
                       <option value="EQUAL_WEIGHT">الطريقة A: التوزيع المتساوي بالوزن (Equal Weight)</option>
-                      <option value="STANDARD">الطريقة D: التكلفة المعيارية الثابتة مع الفروقات (Standard Cost & Variance)</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">طريقة معالجة تكلفة الهالك (Waste Cost Treatment)</label>
+                    <label className="block font-semibold text-slate-700 mb-1">طريقة معالجة تكلفة الهالك (Waste Treatment)</label>
                     <select
                       value={wasteTreatment}
                       onChange={(e) => setWasteTreatment(e.target.value)}
-                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
                     >
-                      <option value="SEPARATE">الحالة 2: إثبات الهالك كخسارة فرز منفصلة في الأرباح والخسائر (Recognized Separate Loss)</option>
-                      <option value="ABSORBED">الحالة 1: امتصاص الهالك بالكامل ضمن تكلفة المخرجات الصالحة (Absorbed by Good Output)</option>
-                      <option value="SPLIT">الحالة 3: تقسيم الهالك (امتصاص الطبيعي وفصل الهالك الاستثنائي كخسارة)</option>
+                      <option value="SEPARATE">الحالة 2: إثبات الهالك كخسارة فرز منفصلة (Separate Loss)</option>
+                      <option value="ABSORBED">الحالة 1: امتصاص الهالك ضمن المخرجات الصالحة (Absorbed Cost)</option>
                     </select>
                   </div>
-
-                  {costingMethod === 'COEFFICIENTS' && (
-                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                      <span className="font-bold text-slate-800 block text-xs">معاملات توزيع التكلفة للدرجات (Coefficients Multipliers):</span>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
-                          <label className="block text-slate-500 mb-1">✨ كريمة (New)</label>
-                          <input type="number" step="0.1" value={coefNew} onChange={(e)=>setCoefNew(e.target.value)} className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-center text-indigo-700"/>
-                        </div>
-                        <div>
-                          <label className="block text-slate-500 mb-1">📦 وسط (Middle)</label>
-                          <input type="number" step="0.1" value={coefMid} onChange={(e)=>setCoefMid(e.target.value)} className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-center text-blue-700"/>
-                        </div>
-                        <div>
-                          <label className="block text-slate-500 mb-1">🏷️ تصفيات (Clearance)</label>
-                          <input type="number" step="0.1" value={coefClr} onChange={(e)=>setCoefClr(e.target.value)} className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-center text-amber-700"/>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
 
-            {/* TAB 3: THERMAL PRINTING */}
+            {/* PRINTING */}
             {activeTab === 'PRINTING' && (
               <div className="space-y-5">
                 <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <Printer size={18} className="text-emerald-600" /> إعدادات الطابعات الحرارية وفاتورة الكاشير
+                  <Printer size={18} className="text-emerald-600" /> {t('settings.tabPrinting')}
                 </h3>
 
                 <div className="space-y-4">
@@ -250,10 +223,10 @@ export default function SettingsPage() {
                     <select
                       value={printerWidth}
                       onChange={(e) => setPrinterWidth(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
                     >
-                      <option value="80MM">80 مم (80mm Standard POS Printer) - مقاس الفواتير الكبير</option>
-                      <option value="58MM">58 مم (58mm Compact POS Printer) - مقاس الطابعات الصغيرة</option>
+                      <option value="80MM">80 مم (80mm Standard POS Printer)</option>
+                      <option value="58MM">58 مم (58mm Compact POS Printer)</option>
                     </select>
                   </div>
 
@@ -276,28 +249,15 @@ export default function SettingsPage() {
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-none focus:border-emerald-500"
                     ></textarea>
                   </div>
-
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="checkbox"
-                      id="showqr"
-                      checked={showQR}
-                      onChange={(e) => setShowQR(e.target.checked)}
-                      className="w-4 h-4 text-emerald-600 rounded"
-                    />
-                    <label htmlFor="showqr" className="font-semibold text-slate-700 cursor-pointer">
-                      طباعة رمز الاستجابة السريعة (QR Code / E-Invoice) في نهاية الإيصال
-                    </label>
-                  </div>
                 </div>
               </div>
             )}
 
-            {/* TAB 4: DISCOUNTS & SECURITY */}
+            {/* SECURITY */}
             {activeTab === 'SECURITY' && (
               <div className="space-y-5">
                 <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <ShieldCheck size={18} className="text-emerald-600" /> سياسات الخصومات وضبط الورديات
+                  <ShieldCheck size={18} className="text-emerald-600" /> {t('settings.tabSecurity')}
                 </h3>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -309,7 +269,6 @@ export default function SettingsPage() {
                       onChange={(e) => setCashierMaxDiscount(e.target.value)}
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
                     />
-                    <p className="text-[10px] text-slate-400 mt-1">أي خصم أعلى يتطلب موافقة المدير</p>
                   </div>
 
                   <div>
@@ -321,29 +280,15 @@ export default function SettingsPage() {
                       className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
-
-                  <div className="md:col-span-2 pt-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={requireShiftApproval}
-                        onChange={(e) => setRequireShiftApproval(e.target.checked)}
-                        className="w-4 h-4 text-emerald-600 rounded"
-                      />
-                      <span className="font-semibold text-slate-700">
-                        إلزام الكاشير بعد النقدية وتوثيق سبب العجز والزيادة عند إغلاق كل وردية
-                      </span>
-                    </label>
-                  </div>
                 </div>
               </div>
             )}
 
-            {/* TAB 5: USERS DIRECTORY */}
+            {/* USERS */}
             {activeTab === 'USERS' && (
               <div className="space-y-5">
                 <h3 className="font-bold text-slate-900 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
-                  <Users size={18} className="text-emerald-600" /> دليل المستخدمين والأدوار الوظيفية
+                  <Users size={18} className="text-emerald-600" /> {t('settings.tabUsers')}
                 </h3>
 
                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
@@ -353,30 +298,20 @@ export default function SettingsPage() {
                       <div className="text-[10px] text-slate-400">admin@motionstore.com</div>
                     </div>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                      ADMIN / مسؤل كامل
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-100">
-                    <div>
-                      <div className="font-bold text-slate-900">pos_cashier_01 (كاشير صالة البيع)</div>
-                      <div className="text-[10px] text-slate-400">cashier@motionstore.com</div>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
-                      CASHIER / نقطة بيع
+                      ADMIN / مسؤول كامل
                     </span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Save Action */}
+            {/* Save Button */}
             <div className="pt-6 border-t border-slate-100 flex justify-end">
               <button
                 type="submit"
                 className="flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer text-xs"
               >
-                <Save size={16} /> {t('save_settings')}
+                <Save size={16} /> {t('settings.saveBtn')}
               </button>
             </div>
           </form>
