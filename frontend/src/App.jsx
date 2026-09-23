@@ -16,7 +16,7 @@ import SettingsPage from './pages/SettingsPage';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
-  if (loading) return <div className="h-screen flex items-center justify-center text-slate-500">Loading Workspace...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center text-slate-500">Loading...</div>;
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
