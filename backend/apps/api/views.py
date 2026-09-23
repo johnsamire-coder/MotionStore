@@ -173,3 +173,8 @@ class JournalEntryViewSet(BaseTenantViewSet):
     model = JournalEntry
     serializer_class = JournalEntrySerializer
 
+
+
+class PurchaseLineItemViewSet(BaseTenantViewSet):
+    model = PurchaseLineItem
+    serializer_class = PurchaseLineItemSerializer
