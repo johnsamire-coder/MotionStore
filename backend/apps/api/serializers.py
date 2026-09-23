@@ -60,6 +60,13 @@ class SupplierSerializer(serializers.ModelSerializer):
         model = Supplier
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'code', 'created_at', 'updated_at']
+        extra_kwargs = {'tenant': {'required': False, 'allow_null': True}}
+        validators = []
+
+    class Meta:
+        model = Supplier
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'code', 'created_at', 'updated_at']
 
 class PurchaseLineItemSerializer(serializers.ModelSerializer):
     class Meta:

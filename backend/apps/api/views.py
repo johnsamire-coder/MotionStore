@@ -172,3 +172,4 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
 class JournalEntryViewSet(BaseTenantViewSet):
     model = JournalEntry
     serializer_class = JournalEntrySerializer
+
