@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from decimal import Decimal
+from apps.tenants.models import Tenant
 from apps.tenants.context import get_current_tenant
 from apps.companies.models import Company
 from apps.branches.models import Branch
@@ -24,18 +25,23 @@ from apps.accounting.models import JournalEntry
 from apps.api.serializers import *
 
 class BaseTenantViewSet(viewsets.ModelViewSet):
-    def get_queryset(self):
+    def get_tenant(self):
         tenant = getattr(self.request, 'tenant', None) or get_current_tenant()
+        if not tenant and hasattr(self.request, 'user') and self.request.user.is_authenticated:
+            tenant = getattr(self.request.user, 'tenant', None)
+        if not tenant:
+            tenant = Tenant.objects.filter(is_active=True).first()
+        return tenant
+
+    def get_queryset(self):
+        tenant = self.get_tenant()
         if tenant:
             return self.model.objects.filter(tenant=tenant)
         return self.model.objects.all()
 
     def perform_create(self, serializer):
-        tenant = getattr(self.request, 'tenant', None) or get_current_tenant()
-        if tenant:
-            serializer.save(tenant=tenant)
-        else:
-            serializer.save()
+        tenant = self.get_tenant()
+        serializer.save(tenant=tenant)
 
 class CompanyViewSet(BaseTenantViewSet):
     model = Company
@@ -60,6 +66,18 @@ class ProductViewSet(BaseTenantViewSet):
 class SupplierViewSet(BaseTenantViewSet):
     model = Supplier
     serializer_class = SupplierSerializer
+
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        name = request.data.get('name', '').strip()
+        
+        # Check if supplier with same name exists for this tenant
+        existing = Supplier.objects.filter(tenant=tenant, name__iexact=name).first() if tenant else Supplier.objects.filter(name__iexact=name).first()
+        if existing:
+            serializer = self.get_serializer(existing)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        return super().create(request, *args, **kwargs)
 
 class PurchaseInvoiceViewSet(BaseTenantViewSet):
     model = PurchaseInvoice
@@ -106,7 +124,7 @@ class InventoryTransactionViewSet(BaseTenantViewSet):
 
 class PriceListViewSet(BaseTenantViewSet):
     model = PriceList
-    serializer_class = PriceListViewSet if False else PriceListSerializer
+    serializer_class = PriceListSerializer
 
 class POSTerminalViewSet(BaseTenantViewSet):
     model = POSTerminal

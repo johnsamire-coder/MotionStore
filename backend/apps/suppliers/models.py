@@ -1,5 +1,5 @@
 from django.db import models
-from apps.tenants.models import TenantAwareModel
+from apps.tenants.models import TenantAwareModel, Tenant
 from apps.tenants.context import get_current_tenant
 
 class Supplier(TenantAwareModel):
@@ -30,7 +30,9 @@ class Supplier(TenantAwareModel):
             ct = get_current_tenant()
             if ct:
                 self.tenant = ct
+            else:
+                self.tenant = Tenant.objects.filter(is_active=True).first()
         if not self.code:
-            count = Supplier.objects.filter(tenant_id=self.tenant_id).count() + 1 if self.tenant_id else Supplier.objects.count() + 1
+            count = Supplier.objects.filter(tenant_id=self.tenant_id).count() + 1
             self.code = f"SUP-{count:04d}"
         super().save(*args, **kwargs)
