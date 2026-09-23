@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
+import { useLanguage } from '../context/LanguageContext';
 import { 
   Layers, 
   Scale, 
-  TrendingUp, 
   Trash2, 
   CheckCircle2, 
   AlertTriangle, 
   Play, 
-  Calculator, 
-  ArrowRight,
   Database,
   PlusCircle,
   ClipboardList
 } from 'lucide-react';
 
 export default function SortingPage() {
+  const { t, isRTL } = useLanguage();
+
   // Data States
   const [rawLots, setRawLots] = useState([]);
   const [selectedLot, setSelectedLot] = useState(null);
@@ -53,11 +53,9 @@ export default function SortingPage() {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      // Load pending raw lots
       const lotRes = await axiosClient.get('/raw-lots/');
       setRawLots((lotRes.data.results || lotRes.data || []).filter(l => l.status !== 'SORTED'));
 
-      // Load warehouses and products
       const whRes = await axiosClient.get('/warehouses/?is_active=true');
       setWarehouses(whRes.data.results || whRes.data || []);
 
@@ -74,7 +72,6 @@ export default function SortingPage() {
     setSelectedLot(lot);
     setSubmitting(true);
     try {
-      // 1. Create Sorting Order on Backend
       const orderCode = `SRT-${lot.lot_code}`;
       const res = await axiosClient.post('/sorting-orders/', {
         order_code: orderCode,
@@ -112,7 +109,6 @@ export default function SortingPage() {
       const defaultWh = warehouses.find(w => w.warehouse_type === 'MAIN')?.id || warehouses[0]?.id;
       const defaultProd = products[0]?.id;
 
-      // 1. Post Output Lines
       const lines = [
         { grade: 'NEW_COLLECTION', wt: newWeight, pc: newPieces },
         { grade: 'MIDDLE', wt: midWeight, pc: midPieces },
@@ -130,7 +126,6 @@ export default function SortingPage() {
         });
       }
 
-      // 2. Post Waste Line
       await axiosClient.post('/sorting-waste-lines/', {
         sorting_order: sortingOrder.id,
         weight_kg: wasteWeight,
@@ -139,7 +134,6 @@ export default function SortingPage() {
         reason: wasteReason
       });
 
-      // 3. Trigger backend Reconcile
       const recRes = await axiosClient.post(`/sorting-orders/${sortingOrder.id}/reconcile/`);
       if (recRes.data.balanced) {
         setIsReconciled(true);
@@ -173,7 +167,6 @@ export default function SortingPage() {
       await axiosClient.post(`/sorting-orders/${sortingOrder.id}/post_inventory/`);
       setIsPosted(true);
       alert("Successfully posted sorted grades to Finished Inventory Ledger!");
-      // Reset
       setSelectedLot(null);
       setSortingOrder(null);
       loadInitialData();
@@ -184,22 +177,22 @@ export default function SortingPage() {
     }
   };
 
-  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">Loading Sorting Hub...</div>;
+  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Header */}
       <div>
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Bale Sorting & Weight Reconciliation</h2>
-        <p className="text-sm text-slate-500">Dual-unit Physical Weight Matching, Costing Apportionment, and Finished Stock Ledger Posting</p>
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('sorting.title')}</h2>
+        <p className="text-sm text-slate-500">{t('sorting.subtitle')}</p>
       </div>
 
       {!selectedLot ? (
         /* LIST OF RECEIVED BALES PENDING SORTING */
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
             <ClipboardList size={18} className="text-emerald-600" />
-            <span className="font-bold text-slate-800 text-sm">Pending Raw Bales in Storage</span>
+            <span className="font-bold text-slate-800 text-sm">{t('sorting.pendingBales')}</span>
           </div>
 
           <div className="divide-y divide-slate-150">
@@ -207,27 +200,27 @@ export default function SortingPage() {
               <div key={lot.id} className="p-5 flex items-center justify-between hover:bg-slate-50/50 transition">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-sm">Bale ID: {lot.lot_code}</span>
+                    <span className="font-bold text-slate-900 text-sm">{t('common.lot')}: {lot.lot_code}</span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase tracking-wider">
                       {lot.status?.replace('_', ' ')}
                     </span>
                   </div>
                   <p className="text-xs text-slate-500">
-                    Supplier: {lot.supplier_name} | Received Date: {lot.received_date} | Warehouse: {lot.warehouse_name}
+                    {lot.supplier_name} | {lot.received_date} | {lot.warehouse_name}
                   </p>
                 </div>
 
                 <div className="flex items-center gap-6">
-                  <div className="text-right">
-                    <div className="font-extrabold text-slate-900 text-sm">{lot.original_weight_kg} KG</div>
-                    <div className="text-xs text-slate-500 font-semibold">{lot.purchase_cost} EGP Actual Cost</div>
+                  <div className={isRTL ? 'text-left' : 'text-right'}>
+                    <div className="font-extrabold text-slate-900 text-sm">{lot.original_weight_kg} {t('common.kg')}</div>
+                    <div className="text-xs text-slate-500 font-semibold">{lot.purchase_cost} {t('common.currency')}</div>
                   </div>
 
                   <button
                     onClick={() => handleStartSorting(lot)}
                     className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/10 cursor-pointer"
                   >
-                    <Play size={12} fill="currentColor" /> Start Sorting
+                    <Play size={12} fill="currentColor" /> {t('sorting.startSorting')}
                   </button>
                 </div>
               </div>
@@ -235,44 +228,43 @@ export default function SortingPage() {
 
             {rawLots.length === 0 && (
               <div className="py-20 text-center text-slate-400 text-xs">
-                No pending bales in raw storage. Create and confirm purchase invoices first.
+                {t('sorting.pendingBales')} - 0
               </div>
             )}
           </div>
         </div>
       ) : (
-        /* SORTING WORKSPACE (BALE ACTIVE) */
+        /* SORTING WORKSPACE */
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Inputs Panel (Left 2 columns) */}
+          {/* Inputs Panel */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Bale Summary Info */}
             <div className="bg-slate-900 text-white p-5 rounded-2xl flex items-center justify-between shadow-md">
               <div className="space-y-1">
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">ACTIVE WORKSPACE</span>
-                <h3 className="text-lg font-bold">Sorting Lot: {selectedLot.lot_code}</h3>
-                <p className="text-xs text-slate-400">Supplier: {selectedLot.supplier_name} | Warehouse: {selectedLot.warehouse_name}</p>
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">{t('sorting.activeWorkspace')}</span>
+                <h3 className="text-lg font-bold">{selectedLot.lot_code}</h3>
+                <p className="text-xs text-slate-400">{selectedLot.supplier_name} | {selectedLot.warehouse_name}</p>
               </div>
 
-              <div className="text-right border-l border-slate-800 pl-6 space-y-1">
-                <div className="text-xs text-slate-400">Target Bale Weight</div>
-                <div className="text-xl font-black text-emerald-400 flex items-center gap-1.5 justify-end">
-                  <Scale size={18} /> {selectedLot.original_weight_kg} KG
+              <div className={`border-slate-800 ${isRTL ? 'border-r pr-6 text-left' : 'border-l pl-6 text-right'} space-y-1`}>
+                <div className="text-xs text-slate-400">{t('sorting.targetWeight')}</div>
+                <div className="text-xl font-black text-emerald-400 flex items-center gap-1.5">
+                  <Scale size={18} /> {selectedLot.original_weight_kg} {t('common.kg')}
                 </div>
               </div>
             </div>
 
             {/* Weights Input Form */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
               <h3 className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
-                <PlusCircle size={16} className="text-emerald-600" /> Enter Sorted Weights & Piece Counts
+                <PlusCircle size={16} className="text-emerald-600" /> {t('sorting.weightKg')} & {t('sorting.countPcs')}
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* New Collection */}
                 <div className="p-4 bg-emerald-50/20 border border-emerald-100 rounded-xl space-y-3">
-                  <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">✨ New Collection</span>
+                  <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">{t('sorting.newCollection')}</span>
                   <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Weight (KG)</label>
+                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.weightKg')}</label>
                     <input
                       type="number"
                       step="0.001"
@@ -283,7 +275,7 @@ export default function SortingPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Count (Pieces)</label>
+                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.countPcs')}</label>
                     <input
                       type="number"
                       disabled={isReconciled}
@@ -296,9 +288,9 @@ export default function SortingPage() {
 
                 {/* Middle Grade */}
                 <div className="p-4 bg-blue-50/20 border border-blue-100 rounded-xl space-y-3">
-                  <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">📦 Middle Grade</span>
+                  <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">{t('sorting.middle')}</span>
                   <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Weight (KG)</label>
+                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.weightKg')}</label>
                     <input
                       type="number"
                       step="0.001"
@@ -309,7 +301,7 @@ export default function SortingPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Count (Pieces)</label>
+                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.countPcs')}</label>
                     <input
                       type="number"
                       disabled={isReconciled}
@@ -322,9 +314,9 @@ export default function SortingPage() {
 
                 {/* Clearance */}
                 <div className="p-4 bg-amber-50/20 border border-amber-100 rounded-xl space-y-3">
-                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">🏷️ Clearance / Low</span>
+                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">{t('sorting.clearance')}</span>
                   <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Weight (KG)</label>
+                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.weightKg')}</label>
                     <input
                       type="number"
                       step="0.001"
@@ -335,7 +327,7 @@ export default function SortingPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Count (Pieces)</label>
+                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.countPcs')}</label>
                     <input
                       type="number"
                       disabled={isReconciled}
@@ -351,11 +343,11 @@ export default function SortingPage() {
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-4 border-b border-slate-200 pb-1 flex items-center justify-between">
                   <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                    <Trash2 size={13} /> Waste / Damages (هالك الفرز)
+                    <Trash2 size={13} /> {t('sorting.waste')}
                   </span>
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Waste Weight (KG)</label>
+                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.weightKg')}</label>
                   <input
                     type="number"
                     step="0.001"
@@ -366,7 +358,7 @@ export default function SortingPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Waste Pieces</label>
+                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.countPcs')}</label>
                   <input
                     type="number"
                     disabled={isReconciled}
@@ -376,26 +368,25 @@ export default function SortingPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Classification</label>
+                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.wasteClass')}</label>
                   <select
                     disabled={isReconciled}
                     value={wasteClass}
                     onChange={(e) => setWasteClass(e.target.value)}
                     className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
                   >
-                    <option value="NORMAL">Normal / Expected</option>
-                    <option value="ABNORMAL">Abnormal / Excess</option>
+                    <option value="NORMAL">{t('sorting.normalWaste')}</option>
+                    <option value="ABNORMAL">{t('sorting.abnormalWaste')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Waste Reason</label>
+                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Notes</label>
                   <input
                     type="text"
                     disabled={isReconciled}
                     value={wasteReason}
                     onChange={(e) => setWasteReason(e.target.value)}
                     className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-emerald-500"
-                    placeholder="e.g. torn, stained"
                   />
                 </div>
               </div>
@@ -403,7 +394,7 @@ export default function SortingPage() {
               {/* Adjustments Section */}
               <div className="p-4 bg-rose-50/10 rounded-xl border border-rose-100 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[11px] text-rose-700 font-bold mb-1 block">Humidity / Moisture Adjustment Weight (KG)</label>
+                  <label className="text-[11px] text-rose-700 font-bold mb-1 block">{t('sorting.moistureAdj')}</label>
                   <input
                     type="number"
                     step="0.001"
@@ -414,37 +405,34 @@ export default function SortingPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-rose-700 font-bold mb-1 block">Mandatory Adjustment Reason</label>
+                  <label className="text-[11px] text-rose-700 font-bold mb-1 block">{t('sorting.adjReason')}</label>
                   <input
                     type="text"
                     disabled={isReconciled}
                     value={adjReason}
                     onChange={(e) => setAdjReason(e.target.value)}
                     className="w-full px-3 py-1.5 bg-white border border-rose-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-rose-500"
-                    placeholder="e.g. 500g moisture weight loss"
                   />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Reconciliation & Workflow Dashboard (Right 1 column) */}
+          {/* Reconciliation & Workflow Dashboard */}
           <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
               <h3 className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-3 flex items-center gap-1.5">
-                <Scale size={16} className="text-emerald-600" /> Reconciliation Status
+                <Scale size={16} className="text-emerald-600" /> {t('sorting.statusTitle')}
               </h3>
 
-              {/* Dynamic Balanced Indicator */}
               <div className={`p-4 rounded-xl border text-center space-y-1.5 ${
                 isWeightsBalanced
                   ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
                   : 'bg-rose-50 border-rose-100 text-rose-800'
               }`}>
-                <span className="text-[10px] font-bold uppercase tracking-wider block">WEIGHT MATCHING ENGINE</span>
                 <div className="text-2xl font-black flex items-center justify-center gap-2">
                   {isWeightsBalanced ? <CheckCircle2 className="text-emerald-600" /> : <AlertTriangle className="text-rose-600" />}
-                  {isWeightsBalanced ? 'BALANCED' : 'UNBALANCED'}
+                  {isWeightsBalanced ? t('sorting.balanced') : t('sorting.unbalanced')}
                 </div>
                 <p className="text-xs font-medium">
                   {isWeightsBalanced 
@@ -454,34 +442,24 @@ export default function SortingPage() {
                 </p>
               </div>
 
-              {/* Stats Breakdown */}
-              <div className="space-y-2.5 text-xs">
-                <div className="flex justify-between font-medium text-slate-500">
-                  <span>Target weight:</span>
-                  <span className="font-bold text-slate-900">{originalBaleWeight.toFixed(3)} KG</span>
+              <div className="space-y-2.5 text-xs font-medium">
+                <div className="flex justify-between text-slate-500">
+                  <span>Target:</span>
+                  <span className="font-bold text-slate-900">{originalBaleWeight.toFixed(3)} {t('common.kg')}</span>
                 </div>
-                <div className="flex justify-between font-medium text-slate-500">
-                  <span>Good Outputs sorted:</span>
-                  <span className="font-bold text-slate-900">{sumOutputs.toFixed(3)} KG</span>
+                <div className="flex justify-between text-slate-500">
+                  <span>Good Outputs:</span>
+                  <span className="font-bold text-slate-900">{sumOutputs.toFixed(3)} {t('common.kg')}</span>
                 </div>
-                <div className="flex justify-between font-medium text-slate-500">
+                <div className="flex justify-between text-slate-500">
                   <span>Waste:</span>
-                  <span className="font-bold text-slate-900">{parseFloat(wasteWeight || 0).toFixed(3)} KG</span>
-                </div>
-                <div className="flex justify-between font-medium text-slate-500">
-                  <span>Moisture Adjustment:</span>
-                  <span className="font-bold text-slate-900">{parseFloat(adjWeight || 0).toFixed(3)} KG</span>
+                  <span className="font-bold text-slate-900">{parseFloat(wasteWeight || 0).toFixed(3)} {t('common.kg')}</span>
                 </div>
               </div>
             </div>
 
-            {/* Workflow Control Steps (Calculated & Immutable Process) */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-              <h3 className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-3 flex items-center gap-1.5">
-                <Database size={16} className="text-emerald-600" /> Sorting Progress Steps
-              </h3>
-
-              {/* Step 1 Button */}
+            {/* Workflow Control Steps */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
               <button
                 onClick={handleReconcile}
                 disabled={isReconciled || !isWeightsBalanced || submitting}
@@ -495,12 +473,11 @@ export default function SortingPage() {
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${isReconciled ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 text-white'}`}>
                     1
                   </div>
-                  <span className="text-xs">Reconcile & Save Weights</span>
+                  <span className="text-xs">{t('sorting.step1')}</span>
                 </div>
                 {isReconciled && <CheckCircle2 size={16} className="text-emerald-600" />}
               </button>
 
-              {/* Step 2 Button */}
               <button
                 onClick={handleCalculateCosting}
                 disabled={!isReconciled || costingRecord || submitting}
@@ -514,12 +491,11 @@ export default function SortingPage() {
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${costingRecord ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 text-white'}`}>
                     2
                   </div>
-                  <span className="text-xs">Run Costing Allocation</span>
+                  <span className="text-xs">{t('sorting.step2')}</span>
                 </div>
                 {costingRecord && <CheckCircle2 size={16} className="text-emerald-600" />}
               </button>
 
-              {/* Step 3 Button */}
               <button
                 onClick={handlePostToInventory}
                 disabled={!costingRecord || isPosted || submitting}
@@ -533,37 +509,35 @@ export default function SortingPage() {
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${isPosted ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 text-white'}`}>
                     3
                   </div>
-                  <span className="text-xs">Post Finished Stock Ledger</span>
+                  <span className="text-xs">{t('sorting.step3')}</span>
                 </div>
               </button>
 
-              {/* Workspace Exit / Cancel */}
               <button
                 onClick={() => { setSelectedLot(null); setSortingOrder(null); }}
                 className="w-full text-center py-2 text-xs text-slate-400 hover:text-slate-600 transition"
               >
-                Cancel Workspace
+                {t('common.cancel')}
               </button>
             </div>
 
-            {/* Live Costing Results Box */}
             {costingRecord && (
-              <div className="bg-emerald-950 text-emerald-300 p-5 rounded-2xl shadow-sm space-y-4">
+              <div className="bg-emerald-950 text-emerald-300 p-5 rounded-2xl shadow-xs space-y-4">
                 <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-400 border-b border-emerald-900 pb-2">
-                  Allocated Costs Preview
+                  {t('sorting.costingPreview')}
                 </h4>
                 <div className="space-y-2.5 text-xs">
                   <div className="flex justify-between">
-                    <span>Costing Method:</span>
+                    <span>Method:</span>
                     <span className="font-bold text-white">{costingRecord.method}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Waste Loss Cost:</span>
-                    <span className="font-bold text-white">{costingRecord.waste_loss} EGP</span>
+                    <span>Waste Loss:</span>
+                    <span className="font-bold text-white">{costingRecord.waste_loss} {t('common.currency')}</span>
                   </div>
                   <div className="flex justify-between border-t border-emerald-900 pt-2 font-bold text-sm text-white">
-                    <span>Good Stock Cost:</span>
-                    <span>{costingRecord.allocated_cost} EGP</span>
+                    <span>Good Cost:</span>
+                    <span>{costingRecord.allocated_cost} {t('common.currency')}</span>
                   </div>
                 </div>
               </div>
