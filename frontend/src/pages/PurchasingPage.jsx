@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
-import { 
-  Truck, 
-  Plus, 
-  Search, 
-  FileText, 
-  PackagePlus, 
-  Building2, 
-  DollarSign, 
-  X, 
-  Calendar
+import {
+  Truck,
+  Plus,
+  Search,
+  FileText,
+  PackagePlus,
+  Building2,
+  DollarSign,
+  X,
+  Calendar,
+  Sparkles
 } from 'lucide-react';
 
 export default function PurchasingPage() {
@@ -34,15 +35,28 @@ export default function PurchasingPage() {
   const [selectedSupplier, setSelectedSupplier] = useState('');
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
   const [additionalCosts, setAdditionalCosts] = useState('0.00');
-  
-  // Line Item States
-  const [itemDescription, setItemDescription] = useState('بالة ملابس أوروبية شتوي');
+
+  // Line Item States (Bale Presets List)
+  const balePresets = [
+    'بالة ملابس أوروبية شتوي',
+    'بالة ملابس أوروبية صيفي',
+    'بالة ملابس أطفال شتوي',
+    'بالة ملابس أطفال صيفي',
+    'بالة أحذية أوروبية فاخرة',
+    'بالة مفروشات وبياضات',
+    'بالة ملابس حريمي سوبر لوكس',
+    'بالة ملابس رجالي تصفيات',
+    'بالة جاكيت ومعاطف ثقيلة',
+    'بالة رياضية متنوّعة'
+  ];
+
+  const [itemDescription, setItemDescription] = useState(balePresets[0]);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [weightKg, setWeightKg] = useState('100.000');
   const [estimatedPieces, setEstimatedPieces] = useState('');
   const [totalCost, setTotalCost] = useState('10000.00');
 
-  // New Supplier Form States (Name & Tax ONLY)
+  // New Supplier Form States
   const [newSupplierName, setNewSupplierName] = useState('');
   const [newSupplierTax, setNewSupplierTax] = useState('');
 
@@ -50,35 +64,56 @@ export default function PurchasingPage() {
     loadPurchasingData();
   }, []);
 
+  const generateInvoiceNumber = () => {
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    return `PINV-${dateStr}-${randomNum}`;
+  };
+
   const loadPurchasingData = async () => {
     setLoading(true);
+
     try {
       const invRes = await axiosClient.get('/purchases/');
       setInvoices(invRes.data.results || invRes.data || []);
+    } catch (e) { console.error("Error loading purchases", e); }
 
+    try {
       const supRes = await axiosClient.get('/suppliers/?is_active=true');
       const supList = supRes.data.results || supRes.data || [];
       setSuppliers(supList);
-      if (supList.length > 0) setSelectedSupplier(supList[0].id);
+      if (supList.length > 0 && !selectedSupplier) setSelectedSupplier(supList[0].id);
+    } catch (e) { console.error("Error loading suppliers", e); }
 
+    try {
       const whRes = await axiosClient.get('/warehouses/?is_active=true');
       const whList = whRes.data.results || whRes.data || [];
       setWarehouses(whList);
       const sortingWh = whList.find(w => w.warehouse_type === 'SORTING') || whList[0];
       if (sortingWh) setSelectedWarehouse(sortingWh.id);
+    } catch (e) { console.error("Error loading warehouses", e); }
 
+    try {
       const catRes = await axiosClient.get('/categories/?is_active=true');
       const catList = catRes.data.results || catRes.data || [];
       setCategories(catList);
       if (catList.length > 0) setSelectedCategory(catList[0].id);
+    } catch (e) { console.error("Error loading categories", e); }
 
-      const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
-      setInvoiceNumber(`PINV-${dateStr}-${Math.floor(1000 + Math.random() * 9000)}`);
-    } catch (err) {
-      console.error("Failed to load purchasing data:", err);
-    } finally {
-      setLoading(false);
+    setInvoiceNumber(generateInvoiceNumber());
+    setLoading(false);
+  };
+
+  const handleOpenNewInvoiceModal = () => {
+    setInvoiceNumber(generateInvoiceNumber());
+    if (warehouses.length > 0 && !selectedWarehouse) {
+      const sortingWh = warehouses.find(w => w.warehouse_type === 'SORTING') || warehouses[0];
+      if (sortingWh) setSelectedWarehouse(sortingWh.id);
     }
+    if (suppliers.length > 0 && !selectedSupplier) {
+      setSelectedSupplier(suppliers[0].id);
+    }
+    setShowNewInvoiceModal(true);
   };
 
   const handleCreateInvoice = async (e) => {
@@ -134,7 +169,7 @@ export default function PurchasingPage() {
       setShowNewInvoiceModal(false);
       loadPurchasingData();
     } catch (err) {
-      alert(err.response?.data?.detail || "فشل حفظ فاتورة الشراء. يرجى التأكد من عدم تكرار رقم الفاتورة.");
+      alert(err.response?.data?.detail || "فشل حفظ فاتورة الشراء.");
     } finally {
       setSubmitting(false);
     }
@@ -144,9 +179,13 @@ export default function PurchasingPage() {
     e.preventDefault();
     if (!newSupplierName.trim()) return;
     setSubmitting(true);
+
+    const uniqueSupplierCode = `SUP-${Math.floor(10000 + Math.random() * 90000)}`;
+
     try {
       const res = await axiosClient.post('/suppliers/', {
         name: newSupplierName.trim(),
+        code: uniqueSupplierCode,
         tax_number: newSupplierTax.trim() || null
       });
       setSuppliers(prev => [...prev, res.data]);
@@ -154,11 +193,11 @@ export default function PurchasingPage() {
       setShowNewSupplierModal(false);
       setNewSupplierName('');
       setNewSupplierTax('');
-      alert(`تم حفظ المورد [${res.data.name}] وتوليد الكود التلقائي (${res.data.code}) بنجاح!`);
+      alert(`تم حفظ المورد [${res.data.name}] بنجاح!`);
     } catch (err) {
       console.error("Supplier Create Error:", err.response?.data);
-      const errorDetail = err.response?.data?.name?.[0] || err.response?.data?.detail || "فشل حفظ المورد. يرجى التأكد من عدم تكرار اسم المورد.";
-      alert(errorDetail);
+      const errorMsg = err.response?.data?.name?.[0] || err.response?.data?.detail || "اسم المورد موجود مسبقاً، يرجى كتابة اسم مختلف قليلاً.";
+      alert(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -167,7 +206,7 @@ export default function PurchasingPage() {
   const totalPurchasesCost = invoices.reduce((acc, i) => acc + parseFloat(i.total_cost || 0), 0);
   const totalInvoicesCount = invoices.length;
 
-  const filteredInvoices = invoices.filter(inv => 
+  const filteredInvoices = invoices.filter(inv =>
     inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     inv.supplier_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -190,7 +229,7 @@ export default function PurchasingPage() {
             <Building2 size={16} className="text-slate-500" /> {t('purchasing.newSupplier')}
           </button>
           <button
-            onClick={() => setShowNewInvoiceModal(true)}
+            onClick={handleOpenNewInvoiceModal}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
           >
             <Plus size={16} /> {t('purchasing.newInvoice')}
@@ -313,10 +352,12 @@ export default function PurchasingPage() {
                 <div>
                   <label className="block font-semibold text-slate-600 mb-1">المورد / المصدر *</label>
                   <select
+                    required
                     value={selectedSupplier}
                     onChange={(e) => setSelectedSupplier(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
+                    <option value="">اختر المورد...</option>
                     {suppliers.map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.code || 'Vendor'})</option>
                     ))}
@@ -324,12 +365,14 @@ export default function PurchasingPage() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">مخزن الاستلام (الفرز)</label>
+                  <label className="block font-semibold text-slate-600 mb-1">مخزن الاستلام (الفرز) *</label>
                   <select
+                    required
                     value={selectedWarehouse}
                     onChange={(e) => setSelectedWarehouse(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
+                    <option value="">اختر المخزن...</option>
                     {warehouses.map(w => (
                       <option key={w.id} value={w.id}>{w.name} ({w.warehouse_type})</option>
                     ))}
@@ -337,14 +380,16 @@ export default function PurchasingPage() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-600 mb-1">رقم الفاتورة *</label>
-                  <input
-                    type="text"
-                    required
-                    value={invoiceNumber}
-                    onChange={(e) => setInvoiceNumber(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
-                  />
+                  <label className="block font-semibold text-slate-600 mb-1">رقم الفاتورة (تلقائي) *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      readOnly
+                      value={invoiceNumber}
+                      className="w-full px-3 py-2 bg-slate-100 border border-slate-300 rounded-xl font-mono font-bold text-emerald-800 cursor-not-allowed"
+                    />
+                    <Sparkles size={14} className="absolute left-3 top-2.5 text-emerald-600" />
+                  </div>
                 </div>
 
                 <div>
@@ -366,13 +411,16 @@ export default function PurchasingPage() {
 
                 <div>
                   <label className="block text-slate-500 font-medium mb-1">وصف البالة / الشحنة *</label>
-                  <input
-                    type="text"
+                  <select
                     required
                     value={itemDescription}
                     onChange={(e) => setItemDescription(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                  />
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    {balePresets.map((preset, idx) => (
+                      <option key={idx} value={preset}>{preset}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
@@ -443,7 +491,7 @@ export default function PurchasingPage() {
         </div>
       )}
 
-      {/* MODAL: New Quick Supplier (ONLY NAME & TAX) */}
+      {/* MODAL: New Quick Supplier */}
       {showNewSupplierModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
@@ -479,7 +527,7 @@ export default function PurchasingPage() {
               </div>
 
               <div className="p-3 bg-emerald-50/60 border border-emerald-100 rounded-xl text-[11px] text-emerald-800 font-semibold">
-                ℹ️ يتولد كود المورد تلقائياً بالترتيب (مثال: SUP-0001) لمنع التكرار.
+                ℹ️ يتولد كود المورد تلقائياً بالترتيب لمنع التكرار.
               </div>
 
               <div className="flex gap-3 pt-2">
