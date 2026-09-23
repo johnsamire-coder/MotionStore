@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { translations } from '../i18n/translations';
 
 const LanguageContext = createContext(null);
@@ -17,21 +17,25 @@ export const LanguageProvider = ({ children }) => {
   };
 
   const t = (path) => {
+    if (!path) return '';
     const keys = path.split('.');
-    let result = translations[lang];
+    let current = translations[lang];
     for (const k of keys) {
-      if (result && result[k]) {
-        result = result[k];
+      if (current && current[k] !== undefined) {
+        current = current[k];
       } else {
         let fallback = translations['en'];
         for (const fk of keys) {
-          if (fallback && fallback[fk]) fallback = fallback[fk];
-          else return path;
+          if (fallback && fallback[fk] !== undefined) {
+            fallback = fallback[fk];
+          } else {
+            return path;
+          }
         }
         return fallback;
       }
     }
-    return result;
+    return current;
   };
 
   return (

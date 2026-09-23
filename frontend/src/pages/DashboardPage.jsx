@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { DollarSign, Package, TrendingUp, Layers, ArrowUpRight } from 'lucide-react';
 
@@ -28,7 +28,7 @@ export default function DashboardPage() {
           </div>
           <div className="text-2xl font-black text-slate-900">{stats.totalRevenue} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span></div>
           <p className="text-xs text-emerald-600 flex items-center gap-1 mt-2 font-bold">
-            <ArrowUpRight size={14} /> POS Shift Verified
+            <ArrowUpRight size={14} /> {t('dashboard.reconciledShift')}
           </p>
         </div>
 
@@ -49,9 +49,7 @@ export default function DashboardPage() {
             <Package size={20} className="text-amber-600" />
           </div>
           <div className="text-2xl font-black text-slate-900">{stats.stockAvailableKg} <span className="text-xs font-normal text-slate-500">{t('common.kg')}</span></div>
-          <p className="text-xs text-slate-500 mt-2 font-bold">
-            Ledger Balance
-          </p>
+          <p className="text-xs text-slate-500 mt-2 font-bold">{t('dashboard.ledgerVerified')}</p>
         </div>
 
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs">
@@ -59,15 +57,13 @@ export default function DashboardPage() {
             <span className="text-xs font-bold uppercase tracking-wider">{t('dashboard.processedBales')}</span>
             <Layers size={20} className="text-blue-600" />
           </div>
-          <div className="text-2xl font-black text-slate-900">{stats.activeBales} <span className="text-xs font-normal text-slate-500">Lot</span></div>
-          <p className="text-xs text-blue-600 mt-2 font-bold">
-            100% Reconciled
-          </p>
+          <div className="text-2xl font-black text-slate-900">{stats.activeBales} <span className="text-xs font-normal text-slate-500">{t('common.lot')}</span></div>
+          <p className="text-xs text-blue-600 mt-2 font-bold">{t('dashboard.weightReconciled')}</p>
         </div>
       </div>
 
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
-        <h3 className="font-bold text-slate-800 text-sm">System Status & Policies</h3>
+        <h3 className="font-bold text-slate-800 text-sm">{t('dashboard.statusTitle')}</h3>
         <div className="space-y-3">
           <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-100">
             <span className="text-xs font-bold text-slate-700">{t('dashboard.costingPolicy')}</span>
