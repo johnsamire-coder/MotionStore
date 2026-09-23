@@ -1,5 +1,6 @@
 from django.db import models
 from apps.tenants.models import TenantAwareModel
+from apps.tenants.context import get_current_tenant
 
 class Supplier(TenantAwareModel):
     name = models.CharField(max_length=255, verbose_name="Supplier Name")
@@ -25,8 +26,11 @@ class Supplier(TenantAwareModel):
         return f"{self.name} ({self.code or 'No Code'})"
 
     def save(self, *args, **kwargs):
-        # Auto-generate unique sequential Supplier Code if not set
-        if not self.code and self.tenant:
-            count = Supplier.objects.filter(tenant=self.tenant).count() + 1
+        if not self.tenant_id:
+            ct = get_current_tenant()
+            if ct:
+                self.tenant = ct
+        if not self.code:
+            count = Supplier.objects.filter(tenant_id=self.tenant_id).count() + 1 if self.tenant_id else Supplier.objects.count() + 1
             self.code = f"SUP-{count:04d}"
         super().save(*args, **kwargs)

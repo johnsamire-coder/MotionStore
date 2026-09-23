@@ -16,7 +16,6 @@ import {
 export default function PurchasingPage() {
   const { t, isRTL } = useLanguage();
 
-  // Data States
   const [invoices, setInvoices] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -37,16 +36,14 @@ export default function PurchasingPage() {
   const [additionalCosts, setAdditionalCosts] = useState('0.00');
   
   // Line Item States
-  const [itemDescription, setItemDescription] = useState('Grade A European Apparel Bale');
+  const [itemDescription, setItemDescription] = useState('بالة ملابس أوروبية شتوي');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [weightKg, setWeightKg] = useState('100.000');
   const [estimatedPieces, setEstimatedPieces] = useState('');
   const [totalCost, setTotalCost] = useState('10000.00');
 
-  // New Supplier Form States
+  // New Supplier Form States (Name & Tax ONLY)
   const [newSupplierName, setNewSupplierName] = useState('');
-  const [newSupplierCode, setNewSupplierCode] = useState('');
-  const [newSupplierPhone, setNewSupplierPhone] = useState('');
   const [newSupplierTax, setNewSupplierTax] = useState('');
 
   useEffect(() => {
@@ -87,7 +84,7 @@ export default function PurchasingPage() {
   const handleCreateInvoice = async (e) => {
     e.preventDefault();
     if (!selectedSupplier || !selectedWarehouse) {
-      alert("Please select supplier and warehouse.");
+      alert("يرجى اختيار المورد ومخزن الاستلام.");
       return;
     }
     setSubmitting(true);
@@ -99,7 +96,7 @@ export default function PurchasingPage() {
         invoice_date: invoiceDate,
         status: 'CONFIRMED',
         additional_costs: parseFloat(additionalCosts || 0).toFixed(2),
-        notes: `Raw bale procurement - ${itemDescription}`
+        notes: `شراء بالة خام - ${itemDescription}`
       });
 
       const invoiceId = invRes.data.id;
@@ -130,14 +127,14 @@ export default function PurchasingPage() {
         purchase_cost: parsedCost.toFixed(2),
         status: 'RECEIVED',
         received_date: invoiceDate,
-        notes: `Procured bale ready for sorting`
+        notes: `بالة جديدة بانتظار الفرز`
       });
 
-      alert(`Purchase Invoice & Raw Bale Lot #${lotCode} created!`);
+      alert(`تم حفظ الفاتورة وإنشاء البالة الخام رقم #${lotCode} بنجاح!`);
       setShowNewInvoiceModal(false);
       loadPurchasingData();
     } catch (err) {
-      alert(err.response?.data?.detail || "Failed to create purchase invoice.");
+      alert(err.response?.data?.detail || "فشل حفظ فاتورة الشراء. يرجى التأكد من عدم تكرار رقم الفاتورة.");
     } finally {
       setSubmitting(false);
     }
@@ -145,24 +142,23 @@ export default function PurchasingPage() {
 
   const handleCreateSupplier = async (e) => {
     e.preventDefault();
-    if (!newSupplierName) return;
+    if (!newSupplierName.trim()) return;
     setSubmitting(true);
     try {
       const res = await axiosClient.post('/suppliers/', {
-        name: newSupplierName,
-        code: newSupplierCode || `SUP-${Date.now().toString().slice(-4)}`,
-        phone: newSupplierPhone || null,
-        tax_number: newSupplierTax || null
+        name: newSupplierName.trim(),
+        tax_number: newSupplierTax.trim() || null
       });
-      setSuppliers([...suppliers, res.data]);
+      setSuppliers(prev => [...prev, res.data]);
       setSelectedSupplier(res.data.id);
       setShowNewSupplierModal(false);
       setNewSupplierName('');
-      setNewSupplierCode('');
-      setNewSupplierPhone('');
       setNewSupplierTax('');
+      alert(`تم حفظ المورد [${res.data.name}] وتوليد الكود التلقائي (${res.data.code}) بنجاح!`);
     } catch (err) {
-      alert(err.response?.data?.detail || "Failed to create supplier.");
+      console.error("Supplier Create Error:", err.response?.data);
+      const errorDetail = err.response?.data?.name?.[0] || err.response?.data?.detail || "فشل حفظ المورد. يرجى التأكد من عدم تكرار اسم المورد.";
+      alert(errorDetail);
     } finally {
       setSubmitting(false);
     }
@@ -209,7 +205,7 @@ export default function PurchasingPage() {
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('purchasing.totalProcurement')}</span>
           <div className="text-2xl font-black text-slate-900">{totalPurchasesCost.toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span></div>
           <p className="text-xs text-slate-500 mt-2 flex items-center gap-1 font-medium">
-            <DollarSign size={13} className="text-emerald-600" /> ({totalInvoicesCount}) Fواتير شراء
+            <DollarSign size={13} className="text-emerald-600" /> ({totalInvoicesCount}) فواتير شراء
           </p>
         </div>
 
@@ -452,7 +448,7 @@ export default function PurchasingPage() {
 
       {/* MODAL: New Quick Supplier */}
       {showNewSupplierModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50" dir={isRTL ? 'rtl' : 'ltr'}>
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
