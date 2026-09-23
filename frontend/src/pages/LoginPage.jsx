@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { Lock, User, AlertCircle, Globe } from 'lucide-react';
@@ -10,8 +10,8 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const { login } = useAuth();
+
+  const { login, isAuthenticated } = useAuth();
   const { lang, toggleLanguage } = useLanguage();
   const isAr = lang === 'ar';
   const navigate = useNavigate();
@@ -25,6 +25,11 @@ export default function LoginPage() {
       setUsername('admin');
     }
   }, []);
+
+  // لو المستخدم مسجل دخول بالفعل، ادخل فوراً للرئيسية
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -46,7 +51,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div 
+    <div
       className="min-h-screen relative flex items-center justify-center p-4 bg-cover bg-center font-sans"
       style={{ backgroundImage: "url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1920&auto=format&fit=crop')" }}
       dir={isAr ? 'rtl' : 'ltr'}
@@ -65,7 +70,7 @@ export default function LoginPage() {
 
       {/* Login Card */}
       <div className="relative z-10 w-full max-w-[420px] bg-slate-950/85 border border-slate-800/80 p-8 rounded-[2rem] shadow-2xl backdrop-blur-xl">
-        
+
         {/* Header */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-slate-950 font-black text-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/30">
@@ -125,9 +130,9 @@ export default function LoginPage() {
 
           {/* Remember Me */}
           <div className="flex items-center gap-2 pt-1">
-            <input 
-              type="checkbox" 
-              id="remember" 
+            <input
+              type="checkbox"
+              id="remember"
               checked={rememberMe}
               onChange={(e) => setRememberMe(e.target.checked)}
               className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-950 cursor-pointer"
@@ -143,14 +148,14 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl transition duration-200 mt-2 flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 disabled:opacity-50 cursor-pointer text-sm"
           >
-            {loading 
-              ? (isAr ? 'جاري التحقق...' : 'Authenticating...') 
+            {loading
+              ? (isAr ? 'جاري التحقق...' : 'Authenticating...')
               : (isAr ? 'دخول إلى مساحة العمل' : 'Sign In to Workspace')
             }
           </button>
         </form>
 
-        {/* Footer: Powered by Motion Store */}
+        {/* Footer */}
         <div className="mt-10 pt-6 border-t border-slate-800/80 flex flex-col items-center justify-center gap-2">
           <div className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">
             {isAr ? 'مشغل بواسطة محرك' : 'Powered by'}

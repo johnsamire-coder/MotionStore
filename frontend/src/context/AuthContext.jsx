@@ -4,14 +4,42 @@ import axiosClient from '../api/axiosClient';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [tenant, setTenant] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // 1. قراءة بيانات المستخدم فوراً عند فتح الصفحة لمنع الطرد
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user_data');
+    if (savedUser) {
+      try {
+        return JSON.parse(savedUser);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
 
+  // 2. قراءة بيانات الشركة التابع لها المستخدم
+  const [tenant, setTenant] = useState(() => {
+    const savedUser = localStorage.getItem('user_data');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        if (u.tenant) {
+          return typeof u.tenant === 'object' ? u.tenant : { id: u.tenant };
+        }
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const [loading, setLoading] = useState(false);
+
+  // 3. كود بسيط جداً للتأكد من وجود البيانات وتثبيتها
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     const savedUser = localStorage.getItem('user_data');
-
+    
     if (token && savedUser) {
       try {
         const u = JSON.parse(savedUser);
@@ -19,30 +47,15 @@ export const AuthProvider = ({ children }) => {
         if (u.tenant) {
           const tObj = typeof u.tenant === 'object' ? u.tenant : { id: u.tenant };
           setTenant(tObj);
-          localStorage.setItem('tenant_id', tObj.id || tObj);
         }
       } catch (e) {
-        console.error("Error reading saved user session:", e);
+        console.error("Error restoring session", e);
       }
-
-      // Silent background sync
-      axiosClient.get('/auth/me/')
-        .then(res => {
-          setUser(res.data);
-          localStorage.setItem('user_data', JSON.stringify(res.data));
-          if (res.data.tenant) {
-            const tObj = typeof res.data.tenant === 'object' ? res.data.tenant : { id: res.data.tenant };
-            setTenant(tObj);
-            localStorage.setItem('tenant_id', tObj.id || tObj);
-          }
-        })
-        .catch(err => {
-          console.warn("Background auth sync handled gracefully.");
-        });
     }
     setLoading(false);
   }, []);
 
+  // دالة تسجيل الدخول
   const login = async (username, password) => {
     const res = await axiosClient.post('/auth/login/', { username, password });
     const { access, refresh, user: userData } = res.data;
@@ -61,6 +74,7 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
+  // دالة تسجيل الخروج
   const logout = () => {
     localStorage.clear();
     setUser(null);
