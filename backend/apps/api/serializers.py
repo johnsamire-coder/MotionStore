@@ -28,43 +28,53 @@ class CompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class BranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class WarehouseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Warehouse
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.ReadOnlyField(source='category.name')
     class Meta:
         model = Product
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'code', 'created_at', 'updated_at']
 
 class PurchaseLineItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseLineItem
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class PurchaseInvoiceSerializer(serializers.ModelSerializer):
     items = PurchaseLineItemSerializer(many=True, read_only=True)
+    supplier_name = serializers.ReadOnlyField(source='supplier.name')
+    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
     class Meta:
         model = PurchaseInvoice
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class RawLotSerializer(serializers.ModelSerializer):
     supplier_name = serializers.ReadOnlyField(source='supplier.name')
@@ -72,17 +82,20 @@ class RawLotSerializer(serializers.ModelSerializer):
     class Meta:
         model = RawLot
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class SortingOutputLineSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
     class Meta:
         model = SortingOutputLine
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class SortingWasteLineSerializer(serializers.ModelSerializer):
     class Meta:
         model = SortingWasteLine
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class SortingOrderSerializer(serializers.ModelSerializer):
     output_lines = SortingOutputLineSerializer(many=True, read_only=True)
@@ -90,6 +103,7 @@ class SortingOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = SortingOrder
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class StockItemSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
@@ -97,45 +111,60 @@ class StockItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = StockItem
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class InventoryTransactionSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
     class Meta:
         model = InventoryTransaction
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class PriceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = PriceList
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class PriceListItemSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
     class Meta:
         model = PriceListItem
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class POSTerminalSerializer(serializers.ModelSerializer):
     class Meta:
         model = POSTerminal
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class ShiftSerializer(serializers.ModelSerializer):
+    cashier_username = serializers.ReadOnlyField(source='cashier.username')
     class Meta:
         model = Shift
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class SaleLineItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
     class Meta:
         model = SaleLineItem
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class SaleInvoiceSerializer(serializers.ModelSerializer):
     lines = SaleLineItemSerializer(many=True, read_only=True)
+    cashier_username = serializers.ReadOnlyField(source='cashier.username')
+    branch_name = serializers.ReadOnlyField(source='branch.name')
     class Meta:
         model = SaleInvoice
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class JournalEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = JournalEntry
         fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']

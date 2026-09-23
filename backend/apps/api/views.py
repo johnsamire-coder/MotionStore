@@ -1,7 +1,8 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from apps.tenants.models import Tenant
+from decimal import Decimal
+from apps.tenants.context import get_current_tenant
 from apps.companies.models import Company
 from apps.branches.models import Branch
 from apps.warehouses.models import Warehouse
@@ -10,24 +11,31 @@ from apps.suppliers.models import Supplier
 from apps.purchasing.models import PurchaseInvoice
 from apps.raw_lots.models import RawLot
 from apps.sorting.models import SortingOrder
-from apps.sorting.models import SortingStatus
 from apps.costing.services import calculate_sorting_costs
 from apps.inventory.models import StockItem, InventoryTransaction
 from apps.inventory.services import post_sorting_to_inventory
-from apps.pricing.models import PriceList, PriceListItem
+from apps.pricing.models import PriceList
 from apps.pos.models import POSTerminal
 from apps.shifts.models import Shift
 from apps.shifts.services import open_shift, close_shift
 from apps.sales.models import SaleInvoice
 from apps.sales.services import process_pos_sale
 from apps.accounting.models import JournalEntry
-from apps.reports.services import get_sales_performance_summary, get_income_statement_summary
 from apps.api.serializers import *
 
 class BaseTenantViewSet(viewsets.ModelViewSet):
-    """ Base viewset that automatically scopes queries to current active tenant """
     def get_queryset(self):
+        tenant = getattr(self.request, 'tenant', None) or get_current_tenant()
+        if tenant:
+            return self.model.objects.filter(tenant=tenant)
         return self.model.objects.all()
+
+    def perform_create(self, serializer):
+        tenant = getattr(self.request, 'tenant', None) or get_current_tenant()
+        if tenant:
+            serializer.save(tenant=tenant)
+        else:
+            serializer.save()
 
 class CompanyViewSet(BaseTenantViewSet):
     model = Company
@@ -98,7 +106,7 @@ class InventoryTransactionViewSet(BaseTenantViewSet):
 
 class PriceListViewSet(BaseTenantViewSet):
     model = PriceList
-    serializer_class = PriceListSerializer
+    serializer_class = PriceListViewSet if False else PriceListSerializer
 
 class POSTerminalViewSet(BaseTenantViewSet):
     model = POSTerminal

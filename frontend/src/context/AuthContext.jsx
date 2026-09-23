@@ -9,7 +9,6 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Read local storage immediately on refresh - Zero delay
     const token = localStorage.getItem('access_token');
     const savedUser = localStorage.getItem('user_data');
 
@@ -18,12 +17,28 @@ export const AuthProvider = ({ children }) => {
         const u = JSON.parse(savedUser);
         setUser(u);
         if (u.tenant) {
-          setTenant(typeof u.tenant === 'object' ? u.tenant : { id: u.tenant });
-          localStorage.setItem('tenant_id', typeof u.tenant === 'object' ? u.tenant.id : u.tenant);
+          const tObj = typeof u.tenant === 'object' ? u.tenant : { id: u.tenant };
+          setTenant(tObj);
+          localStorage.setItem('tenant_id', tObj.id || tObj);
         }
       } catch (e) {
         console.error("Error reading saved user session:", e);
       }
+
+      // Silent background sync
+      axiosClient.get('/auth/me/')
+        .then(res => {
+          setUser(res.data);
+          localStorage.setItem('user_data', JSON.stringify(res.data));
+          if (res.data.tenant) {
+            const tObj = typeof res.data.tenant === 'object' ? res.data.tenant : { id: res.data.tenant };
+            setTenant(tObj);
+            localStorage.setItem('tenant_id', tObj.id || tObj);
+          }
+        })
+        .catch(err => {
+          console.warn("Background auth sync handled gracefully.");
+        });
     }
     setLoading(false);
   }, []);

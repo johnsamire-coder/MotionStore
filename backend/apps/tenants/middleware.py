@@ -1,3 +1,5 @@
+import uuid
+from django.core.exceptions import ValidationError
 from .context import set_current_tenant, clear_current_tenant
 from .models import Tenant
 
@@ -10,12 +12,17 @@ class TenantMiddleware:
         tenant_slug = request.headers.get('X-Tenant-Slug')
 
         tenant = None
-        if tenant_id:
-            tenant = Tenant.objects.filter(id=tenant_id, is_active=True).first()
-        elif tenant_slug:
+        if tenant_id and str(tenant_id).lower() not in ('undefined', 'null', 'none', ''):
+            try:
+                uuid.UUID(str(tenant_id))
+                tenant = Tenant.objects.filter(id=tenant_id, is_active=True).first()
+            except (ValidationError, ValueError):
+                tenant = None
+
+        if not tenant and tenant_slug and str(tenant_slug).lower() not in ('undefined', 'null', 'none', ''):
             tenant = Tenant.objects.filter(slug=tenant_slug, is_active=True).first()
-        elif hasattr(request, 'user') and request.user.is_authenticated:
-            # User tenant link (handled when Users domain is active)
+
+        if not tenant and hasattr(request, 'user') and request.user.is_authenticated:
             tenant = getattr(request.user, 'tenant', None)
 
         if tenant:

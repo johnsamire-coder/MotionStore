@@ -9,31 +9,26 @@ const axiosClient = axios.create({
   },
 });
 
-// Request Interceptor: Attach JWT Token & Tenant ID
 axiosClient.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   const tenantId = localStorage.getItem('tenant_id');
 
-  if (token) {
+  if (token && token !== 'undefined' && token !== 'null') {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  if (tenantId) {
+  
+  if (tenantId && tenantId !== 'undefined' && tenantId !== 'null' && tenantId !== 'None') {
     config.headers['X-Tenant-ID'] = tenantId;
   }
   return config;
-}, (error) => {
-  return Promise.reject(error);
-});
+}, (error) => Promise.reject(error));
 
-// Response Interceptor: Handle Token Refresh
-axiosClient.interceptors.response.use((response) => {
-  return response;
-}, async (error) => {
+axiosClient.interceptors.response.use((response) => response, async (error) => {
   const originalRequest = error.config;
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
     const refreshToken = localStorage.getItem('refresh_token');
-    if (refreshToken) {
+    if (refreshToken && refreshToken !== 'undefined' && refreshToken !== 'null') {
       try {
         const res = await axios.post(`${API_BASE_URL}/auth/refresh/`, { refresh: refreshToken });
         const newAccessToken = res.data.access;
