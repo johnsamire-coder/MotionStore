@@ -1,9 +1,9 @@
 ﻿import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
-import { useAuth } from '../context/AuthContext';
-import { useLanguage } from '../context/LanguageContext';
-import {
-  ShoppingCart, Search, Trash2, Plus, Minus, CreditCard, Banknote,
+import { Package, useAuth } from '../context/AuthContext';
+import { Package, useLanguage } from '../context/LanguageContext';
+import { Package,
+  ShoppingCart, Search, Trash2, Plus, Minus, CreditCard, Banknote, Package,
   Printer, Clock, CheckCircle2, X, Scale, Tag, Sparkles, Gift, Layers,
   Receipt, ArrowRight, User
 } from 'lucide-react';
@@ -591,3 +591,4 @@ export default function POSPage() {
     </div>
   );
 }
+
