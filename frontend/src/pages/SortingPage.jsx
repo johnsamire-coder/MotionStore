@@ -50,6 +50,7 @@ export default function SortingPage() {
   ]);
 
   const [brandsList, setBrandsList] = useState([
+    'غير محدد / بدون براند',
     'Zara',
     'H&M',
     'Bershka',
@@ -62,18 +63,18 @@ export default function SortingPage() {
     'براندات متنوعة'
   ]);
 
-  // Dynamic Multi-Line Grade Inputs (إمكانية إضافة أسطر متعددة لكل درجة)
+  // Dynamic Multi-Line Grade Inputs (البراند اختياري)
   const [creamLines, setCreamLines] = useState([
-    { id: 1, category: 'بنطلون', brand: 'Zara', weight: '15.000', pieces: '30' },
-    { id: 2, category: 'بلوزة', brand: 'H&M', weight: '10.000', pieces: '20' }
+    { id: 1, category: 'بنطلون', brand: 'غير محدد / بدون براند', weight: '15.000', pieces: '30' },
+    { id: 2, category: 'بلوزة', brand: 'غير محدد / بدون براند', weight: '10.000', pieces: '20' }
   ]);
 
   const [midLines, setMidLines] = useState([
-    { id: 1, category: 'قميص', brand: 'براندات متنوعة', weight: '15.000', pieces: '25' }
+    { id: 1, category: 'قميص', brand: 'غير محدد / بدون براند', weight: '15.000', pieces: '25' }
   ]);
 
   const [clrLines, setClrLines] = useState([
-    { id: 1, category: 'تصفيات وتدشين', brand: 'بدون براند', weight: '4.000', pieces: '10' }
+    { id: 1, category: 'تصفيات وتدشين', brand: 'غير محدد / بدون براند', weight: '4.000', pieces: '10' }
   ]);
 
   const [wasteWeight, setWasteWeight] = useState('1.000');
@@ -113,11 +114,10 @@ export default function SortingPage() {
     setLoading(false);
   };
 
-  // Helper functions for dynamic lines
   const addLine = (gradeType) => {
     setReconciled(false);
     const newId = Date.now();
-    const defaultObj = { id: newId, category: categoriesList[0] || 'بنطلون', brand: brandsList[0] || 'Zara', weight: '0.000', pieces: '' };
+    const defaultObj = { id: newId, category: categoriesList[0] || 'بنطلون', brand: 'غير محدد / بدون براند', weight: '0.000', pieces: '' };
     
     if (gradeType === 'CREAM') setCreamLines(prev => [...prev, defaultObj]);
     if (gradeType === 'MID') setMidLines(prev => [...prev, defaultObj]);
@@ -167,13 +167,12 @@ export default function SortingPage() {
     if (!newCustomBrand.trim()) return;
     const brandName = newCustomBrand.trim();
 
-    setBrandsList(prev => [brandName, ...prev]);
+    setBrandsList(prev => [...prev, brandName]);
     setNewCustomBrand('');
     setShowNewBrandModal(false);
     alert(`تم إضافة البراند الجديد [${brandName}] بنجاح!`);
   };
 
-  // أوزان الإجمالي لكل درجة
   const totalCreamWeight = creamLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
   const totalMidWeight = midLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
   const totalClrWeight = clrLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
@@ -183,7 +182,6 @@ export default function SortingPage() {
   const sumSortedWeight = totalCreamWeight + totalMidWeight + totalClrWeight + wasteWeightNum;
   const isWeightBalanced = Math.abs(originalWeight - sumSortedWeight) < 0.001 && originalWeight > 0;
 
-  // نسبة الهالك الحالية
   const wastePercentage = originalWeight > 0 ? ((wasteWeightNum / originalWeight) * 100).toFixed(2) : '0.00';
 
   const handleReconcile = () => {
@@ -353,7 +351,7 @@ export default function SortingPage() {
                 </div>
               </div>
 
-              {/* Top Quick Actions for Categories and Brands */}
+              {/* Top Quick Actions */}
               <div className="flex justify-between items-center p-3 bg-slate-100 rounded-xl border border-slate-200 text-xs">
                 <span className="font-bold text-slate-700">تعريف خيارات جديدة:</span>
                 <div className="flex gap-2">
@@ -378,7 +376,7 @@ export default function SortingPage() {
                   <Scale size={18} className="text-emerald-600" /> 2. إدخال أصناف وأوزان وقطع الفرز
                 </h3>
 
-                {/* GRADE 1: CREAM (✨ الكريمة) - DYNAMIC MULTI-LINE */}
+                {/* GRADE 1: CREAM */}
                 <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3 text-xs">
                   <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
                     <span className="font-bold text-emerald-900 text-xs flex items-center gap-1.5">
@@ -393,7 +391,7 @@ export default function SortingPage() {
                     </button>
                   </div>
 
-                  {creamLines.map((line, index) => (
+                  {creamLines.map((line) => (
                     <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-emerald-100">
                       <div className="md:col-span-3">
                         <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
@@ -407,11 +405,11 @@ export default function SortingPage() {
                       </div>
 
                       <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">البراند *</label>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
                         <select
                           value={line.brand}
                           onChange={(e) => updateLine('CREAM', line.id, 'brand', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-emerald-500"
                         >
                           {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
                         </select>
@@ -456,7 +454,7 @@ export default function SortingPage() {
                   ))}
                 </div>
 
-                {/* GRADE 2: MIDDLE (📦 الوسط) - DYNAMIC MULTI-LINE */}
+                {/* GRADE 2: MIDDLE */}
                 <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3 text-xs">
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
                     <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
@@ -471,7 +469,7 @@ export default function SortingPage() {
                     </button>
                   </div>
 
-                  {midLines.map((line, index) => (
+                  {midLines.map((line) => (
                     <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
                       <div className="md:col-span-3">
                         <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
@@ -485,11 +483,11 @@ export default function SortingPage() {
                       </div>
 
                       <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">البراند *</label>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
                         <select
                           value={line.brand}
                           onChange={(e) => updateLine('MID', line.id, 'brand', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-indigo-500"
                         >
                           {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
                         </select>
@@ -534,7 +532,7 @@ export default function SortingPage() {
                   ))}
                 </div>
 
-                {/* GRADE 3: CLEARANCE (🏷️ التصفيات) - DYNAMIC MULTI-LINE */}
+                {/* GRADE 3: CLEARANCE */}
                 <div className="p-4 bg-amber-50/30 rounded-2xl border border-amber-200/80 space-y-3 text-xs">
                   <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
                     <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
@@ -549,7 +547,7 @@ export default function SortingPage() {
                     </button>
                   </div>
 
-                  {clrLines.map((line, index) => (
+                  {clrLines.map((line) => (
                     <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
                       <div className="md:col-span-3">
                         <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
@@ -563,11 +561,11 @@ export default function SortingPage() {
                       </div>
 
                       <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">البراند *</label>
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
                         <select
                           value={line.brand}
                           onChange={(e) => updateLine('CLR', line.id, 'brand', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-amber-500"
                         >
                           {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
                         </select>
@@ -612,14 +610,13 @@ export default function SortingPage() {
                   ))}
                 </div>
 
-                {/* GRADE 4: WASTE (🗑️ الهالك / العادم) */}
+                {/* GRADE 4: WASTE */}
                 <div className="p-4 bg-rose-50/40 rounded-2xl border border-rose-200/80 space-y-3 text-xs">
                   <div className="flex items-center justify-between border-b border-rose-200/60 pb-2">
                     <span className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
                       <Trash2 size={15} className="text-rose-600" /> 🗑️ الهالك / العادم (Waste)
                     </span>
 
-                    {/* SMART WASTE PERCENTAGE BADGE */}
                     <div className="flex items-center gap-2">
                       <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full flex items-center gap-1 border ${
                         parseFloat(wastePercentage) > 10
