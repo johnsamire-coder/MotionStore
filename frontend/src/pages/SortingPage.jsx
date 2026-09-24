@@ -14,13 +14,11 @@ export default function SortingPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Manager Unlock States
   const [isUnlockedByManager, setIsUnlockedByManager] = useState(false);
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [managerPassword, setManagerPassword] = useState('');
   const [unlockError, setUnlockError] = useState('');
 
-  // Modals for Quick Add
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
   const [showNewBrandModal, setShowNewBrandModal] = useState(false);
   const [newCustomCategory, setNewCustomCategory] = useState('');
@@ -29,7 +27,6 @@ export default function SortingPage() {
   const [categoriesList, setCategoriesList] = useState(['بنطلون', 'بلوزة', 'قميص', 'فستان', 'جاكيت ومعاطف', 'تيشيرت', 'ملابس أطفال']);
   const [brandsList, setBrandsList] = useState(['غير محدد / بدون براند', 'Zara', 'H&M', 'Nike', 'Adidas', 'Bershka']);
 
-  // أسطر الدرجات الأربعة الكاملة
   const [creamLines, setCreamLines] = useState([{ id: 1, category: 'بنطلون', brand: 'Zara', weight: '20.000', pieces: '40' }]);
   const [midLines, setMidLines] = useState([{ id: 2, category: 'قميص', brand: 'H&M', weight: '15.000', pieces: '30' }]);
   const [clrLines, setClrLines] = useState([{ id: 3, category: 'فستان', brand: 'غير محدد / بدون براند', weight: '14.000', pieces: '25' }]);
@@ -117,18 +114,17 @@ export default function SortingPage() {
     alert(`تم إضافة البراند الجديد [${brandName}] بنجاح!`);
   };
 
-  // فك القفل (مستحيل تلاقي الباسورد مكتوب في الشاشة تاني!)
   const handleUnlockByManager = (e) => {
     e.preventDefault();
     setUnlockError('');
     if (managerPassword !== '123456') {
-      setUnlockError('❌ عذرا كلمة سر المدير غير صحيحة!');
+      setUnlockError('❌ كلمة سر المدير غير صحيحة!');
       return;
     }
     setIsUnlockedByManager(true);
     setShowUnlockModal(false);
     setManagerPassword('');
-    alert('🔓 تم التحقق من هوية المدير.. تم فك قفل التعديل بنجاح.');
+    alert('🔓 تم فك قفل البالة بموافقة المدير بنجاح.');
   };
 
   const totalCreamWeight = creamLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
@@ -151,6 +147,7 @@ export default function SortingPage() {
     alert("✅ تم مطابقة أوزان جميع الدرجات الـ 4 بنجاح 100%!");
   };
 
+  // 🚀 ترحيل الفرز وربطه بالاسم العربي المطابق دقيقا بدون أخطاء
   const handlePostToInventory = async () => {
     if (!reconciled) {
       alert("يرجى مطابقة الأوزان أولا قبل الترحيل.");
@@ -165,14 +162,19 @@ export default function SortingPage() {
         ...clrLines.map(l => ({ ...l, grade: 'CLEARANCE' }))
       ].filter(l => parseFloat(l.weight || 0) > 0);
 
+      // جلب جميع المنتجات المسجلة بالسيرفر
+      let prodRes = await axiosClient.get('/products/?is_active=true');
+      let prodList = prodRes.data.results || prodRes.data || [];
+
       for (const line of allLines) {
-        let prodRes = await axiosClient.get(`/products/?search=${encodeURIComponent(line.category)}`);
-        let prodList = prodRes.data.results || prodRes.data || [];
-        let prodId = prodList[0]?.id;
+        const exactName = line.category.trim();
+        let existingProd = prodList.find(p => p.name === exactName);
+        let prodId = existingProd?.id;
 
         if (!prodId) {
-          let newProd = await axiosClient.post('/products/', { name: `${line.category}`, code: `PRD-${Math.floor(1000+Math.random()*9000)}` });
+          let newProd = await axiosClient.post('/products/', { name: exactName, code: `PRD-${Math.floor(1000+Math.random()*9000)}` });
           prodId = newProd.data.id;
+          prodList.push(newProd.data);
         }
 
         await axiosClient.post('/stock-items/', {
@@ -182,12 +184,12 @@ export default function SortingPage() {
           grade: line.grade,
           total_weight_kg: parseFloat(line.weight).toFixed(3),
           total_quantity_pieces: line.pieces ? parseInt(line.pieces) : null
-        }).catch(() => console.log("Updated stock item"));
+        }).catch(() => console.log("Stock item processed"));
       }
 
       await axiosClient.patch(`/raw-lots/${selectedLot.id}/`, { status: 'SORTED' });
 
-      alert(`🎉 تم ترحيل أسطر الفرز للبالة [${selectedLot.lot_code}] بنجاح للمخزون التام!\n\nتم إغلاق البالة وقفلها 🔒.`);
+      alert(`🎉 تم ترحيل أسطر الفرز للبالة [${selectedLot.lot_code}] بنجاح للمخزون التام!\n\nتم قفل البالة 🔒.`);
       
       setSelectedLot(prev => prev ? { ...prev, status: 'SORTED' } : null);
       setRawLots(prev => prev.map(l => l.id === selectedLot.id ? { ...l, status: 'SORTED' } : l));
@@ -262,7 +264,7 @@ export default function SortingPage() {
           </div>
         </div>
 
-        {/* Panel 2: Sorting Form (SECURED) */}
+        {/* Panel 2: Sorting Form */}
         <div className="lg:col-span-2 space-y-6">
           {selectedLot ? (
             <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-6">
@@ -320,22 +322,20 @@ export default function SortingPage() {
               ) : (
                 /* Editable Form */
                 <div className="space-y-6">
-                   {/* Top Actions */}
                    <div className="flex justify-between items-center p-3 bg-slate-100 rounded-xl border border-slate-200 text-xs">
                     <span className="font-bold text-slate-700">تعريف خيارات جديدة:</span>
                     <div className="flex gap-2">
-                      <button onClick={() => setShowNewCategoryModal(true)} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition cursor-pointer">+ صنف جديد</button>
-                      <button onClick={() => setShowNewBrandModal(true)} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition cursor-pointer">+ براند جديد</button>
+                      <button onClick={() => setShowNewCategoryModal(true)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold transition cursor-pointer">+ صنف جديد</button>
+                      <button onClick={() => setShowNewBrandModal(true)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-bold transition cursor-pointer">+ براند جديد</button>
                     </div>
                   </div>
 
-                  {/* Grades */}
                   <div className="space-y-6">
                     <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                       <Scale size={18} className="text-emerald-600" /> 2. تفاصيل الفرز للدرجات الأربعة
                     </h3>
 
-                    {/* 1. CREAM */}
+                    {/* CREAM */}
                     <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3 text-xs">
                       <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
                         <span className="font-bold text-emerald-900 text-xs">✨ 1. درجة أولى / كريمة (Super Lux)</span>
@@ -364,7 +364,7 @@ export default function SortingPage() {
                       ))}
                     </div>
 
-                    {/* 2. MIDDLE */}
+                    {/* MIDDLE */}
                     <div className="p-4 bg-indigo-50/40 rounded-2xl border border-indigo-200/80 space-y-3 text-xs">
                       <div className="flex items-center justify-between border-b border-indigo-200/60 pb-2">
                         <span className="font-bold text-indigo-900 text-xs">📦 2. درجة ثانية / وسط (Middle Grade)</span>
@@ -393,7 +393,7 @@ export default function SortingPage() {
                       ))}
                     </div>
 
-                    {/* 3. CLEARANCE */}
+                    {/* CLEARANCE */}
                     <div className="p-4 bg-amber-50/40 rounded-2xl border border-amber-200/80 space-y-3 text-xs">
                       <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
                         <span className="font-bold text-amber-950 text-xs">🏷️ 3. تصفيات / شعبي (Clearance)</span>
@@ -422,7 +422,7 @@ export default function SortingPage() {
                       ))}
                     </div>
 
-                    {/* 4. WASTE */}
+                    {/* WASTE */}
                     <div className="p-4 bg-rose-50/40 rounded-2xl border border-rose-200/80 space-y-3 text-xs">
                       <div className="flex items-center justify-between border-b border-rose-200/60 pb-2">
                         <span className="font-bold text-rose-900 text-xs">🗑️ 4. الهالك / العادم (Waste)</span>
@@ -458,22 +458,18 @@ export default function SortingPage() {
                 </div>
               )}
             </div>
-          ) : (
-             <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs font-bold space-y-3">
-              <Package size={32} className="mx-auto text-slate-300" />
-              <div>اختر بالة من القائمة الجانبية للبدء في الفرز ومطابقة الأوزان.</div>
-            </div>
-          )}
+          ) : null}
         </div>
+
       </div>
 
-      {/* MODAL: Manager Unlock Password (SECURED) */}
+      {/* MODAL: Manager Unlock Password */}
       {showUnlockModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h3 className="font-bold text-rose-600 text-base flex items-center gap-2"><ShieldCheck size={18} /> موافقة المدير المطلوبة</h3>
-              <button onClick={() => setShowUnlockModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
+              <button onClick={() => setShowUnlockModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={16} /></button>
             </div>
             <div className="p-3 bg-rose-50 text-rose-800 rounded-xl text-xs font-semibold">⚠️ يرجى إدخال كلمة السر الخاصة بالمدير للسماح بتعديل الفرز المرحل.</div>
             <form onSubmit={handleUnlockByManager} className="space-y-4">
@@ -498,7 +494,7 @@ export default function SortingPage() {
         </div>
       )}
 
-      {/* OTHER MODALS (Add Category/Brand) remain same but simplified */}
+      {/* MODALS */}
       {showNewCategoryModal && (
         <div className="fixed inset-0 bg-slate-950/60 flex items-center justify-center p-4 z-[60]">
           <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl text-xs">
