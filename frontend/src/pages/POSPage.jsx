@@ -1,11 +1,11 @@
 ﻿import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
-import { Package, useAuth } from '../context/AuthContext';
-import { Package, useLanguage } from '../context/LanguageContext';
-import { Package,
-  ShoppingCart, Search, Trash2, Plus, Minus, CreditCard, Banknote, Package,
+import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
+import {
+  ShoppingCart, Search, Trash2, Plus, Minus, CreditCard, Banknote,
   Printer, Clock, CheckCircle2, X, Scale, Tag, Sparkles, Gift, Layers,
-  Receipt, ArrowRight, User
+  Receipt, ArrowRight, User, Package
 } from 'lucide-react';
 
 export default function POSPage() {
@@ -153,7 +153,6 @@ export default function POSPage() {
   const cartSubtotal = cart.reduce((sum, item) => sum + parseFloat(item.totalPrice || 0), 0);
   const netTotal = Math.max(0, cartSubtotal - parseFloat(discountAmount || 0));
 
-  // فتح شباك الدفع وتقسيم الكاش والفيزا
   const openCheckout = () => {
     if (cart.length === 0) {
       alert("السلة فارغة! يرجى إضافة منتجات أو وزنة مجمعة أولا.");
@@ -164,7 +163,6 @@ export default function POSPage() {
     setShowCheckoutModal(true);
   };
 
-  // إتمام المبيعات وطباعة الفاتورة الحرارية
   const handleFinalCheckout = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -276,7 +274,6 @@ export default function POSPage() {
               <div className="space-y-1 flex-1">
                 <div className="font-bold text-slate-900 text-xs">{item.name}</div>
                 
-                {/* Details for Weighed Lot */}
                 {item.isWeighedLot ? (
                   <div className="text-[10px] text-slate-500 space-y-0.5">
                     <div>الوزن: <strong>{item.weightKg} كجم</strong> @ {item.pricePerKg} ج.م/كجم</div>
@@ -382,7 +379,6 @@ export default function POSPage() {
                 />
               </div>
 
-              {/* Sub Items inside this Weighed Lot */}
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                 <span className="font-bold text-slate-700 block text-[11px]">محتويات وزنة الميزان (تظهر في الفاتورة):</span>
                 <div className="flex flex-wrap gap-1.5">
@@ -591,4 +587,3 @@ export default function POSPage() {
     </div>
   );
 }
-
