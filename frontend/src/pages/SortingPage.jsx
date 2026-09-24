@@ -219,7 +219,6 @@ export default function SortingPage() {
     alert("✅ تم مطابقة أوزان جميع الأصناف والدرجات بنجاح 100%!");
   };
 
-  // 🚀 ترحيل الفرز وتغيير الحالة إلى SORTED المعرف بالسيرفر
   const handlePostToInventory = async () => {
     if (!reconciled) {
       alert("يرجى مطابقة الأوزان أولا قبل الترحيل.");
@@ -228,14 +227,12 @@ export default function SortingPage() {
 
     setSubmitting(true);
     try {
-      // إرسال حالة SORTED المعرف في نموذج RawLot بالسيرفر
       await axiosClient.patch(`/raw-lots/${selectedLot.id}/`, {
         status: 'SORTED'
       });
 
       alert(`🎉 تم ترحيل البالة رقم [${selectedLot.lot_code}] بنجاح إلى المخزون التام!\n\nتم قفل البالة 🔒.`);
       
-      // تحديث البالة محلية
       setSelectedLot(prev => prev ? { ...prev, status: 'SORTED' } : null);
       setRawLots(prev => prev.map(l => l.id === selectedLot.id ? { ...l, status: 'SORTED' } : l));
       setIsUnlockedByManager(false);
@@ -281,7 +278,7 @@ export default function SortingPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Panel 1: Select Raw Bale */}
+        {/* Panel 1: Select Raw Bale (NO COST DISPLAY) */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
             <Package size={18} className="text-emerald-600" /> 1. اختر البالة/الشحنة للفرز
@@ -311,8 +308,7 @@ export default function SortingPage() {
                   </div>
                   <div className="text-xs text-slate-600 font-semibold">{lot.notes || 'شحنة بساحة الفرز'}</div>
                   <div className="mt-2 pt-2 border-t border-slate-200/60 flex justify-between text-[11px] text-slate-500">
-                    <span>الوزن الأصلي: <strong>{lot.original_weight_kg} كجم</strong></span>
-                    <span>التكلفة: <strong>{lot.purchase_cost} ج.م</strong></span>
+                    <span>الوزن التكليفي الأصلي: <strong>{lot.original_weight_kg} كجم</strong></span>
                   </div>
                 </div>
               );
@@ -348,7 +344,7 @@ export default function SortingPage() {
 
                 <div className="flex items-center gap-3">
                   <div className="text-left">
-                    <span className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">الوزن الأصلي</span>
+                    <span className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">الوزن الأصلي المطلوب مطابقتة</span>
                     <span className="font-black text-emerald-700 text-lg">{selectedLot.original_weight_kg} كجم</span>
                   </div>
 
@@ -385,7 +381,7 @@ export default function SortingPage() {
                   </button>
                 </div>
               ) : (
-                /* Sorting Form (Active if Editable) */
+                /* Sorting Form */
                 <div className="space-y-6">
                   
                   {/* Top Quick Actions */}
