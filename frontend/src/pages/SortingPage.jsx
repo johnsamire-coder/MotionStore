@@ -12,7 +12,10 @@ import {
   Package,
   Sparkles,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Tag,
+  Hash,
+  FolderPlus
 } from 'lucide-react';
 
 export default function SortingPage() {
@@ -23,11 +26,11 @@ export default function SortingPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Sorting Form Inputs
-  const [weightNew, setWeightNew] = useState('0.000');
-  const [weightMiddle, setWeightMiddle] = useState('0.000');
-  const [weightClearance, setWeightClearance] = useState('0.000');
-  const [weightWaste, setWeightWaste] = useState('0.000');
+  // Detailed Grade Inputs (Weight, Pieces, Category, Brand)
+  const [gradeNew, setGradeNew] = useState({ weight: '0.000', pieces: '', category: 'ملابس سوبر لوكس', brand: 'براندات أوروبية متعددة' });
+  const [gradeMid, setGradeMid] = useState({ weight: '0.000', pieces: '', category: 'ملابس وسط', brand: 'براندات متنوعة' });
+  const [gradeClr, setGradeClr] = useState({ weight: '0.000', pieces: '', category: 'تصفيات وتدشين', brand: 'بدون براند / شعبي' });
+  const [gradeWaste, setGradeWaste] = useState({ weight: '0.000', notes: 'هالك ومقاطع فرز' });
 
   // Reconciliation & Costing Status
   const [reconciled, setReconciled] = useState(false);
@@ -57,14 +60,14 @@ export default function SortingPage() {
     setReconciled(false);
     setCostingCalculated(false);
     setCostResults(null);
-    setWeightNew('0.000');
-    setWeightMiddle('0.000');
-    setWeightClearance('0.000');
-    setWeightWaste('0.000');
+    setGradeNew({ weight: '0.000', pieces: '', category: 'ملابس سوبر لوكس', brand: 'براندات أوروبية متعددة' });
+    setGradeMid({ weight: '0.000', pieces: '', category: 'ملابس وسط', brand: 'براندات متنوعة' });
+    setGradeClr({ weight: '0.000', pieces: '', category: 'تصفيات وتدشين', brand: 'بدون براند / شعبي' });
+    setGradeWaste({ weight: '0.000', notes: 'هالك ومقاطع فرز' });
   };
 
   const originalWeight = parseFloat(selectedLot?.original_weight_kg || 0);
-  const sumSortedWeight = parseFloat(weightNew || 0) + parseFloat(weightMiddle || 0) + parseFloat(weightClearance || 0) + parseFloat(weightWaste || 0);
+  const sumSortedWeight = parseFloat(gradeNew.weight || 0) + parseFloat(gradeMid.weight || 0) + parseFloat(gradeClr.weight || 0) + parseFloat(gradeWaste.weight || 0);
   const isWeightBalanced = Math.abs(originalWeight - sumSortedWeight) < 0.001 && originalWeight > 0;
 
   // 1️⃣ مطابقة الأوزان
@@ -78,7 +81,7 @@ export default function SortingPage() {
     alert("✅ تم مطابقة الأوزان بنجاح 100%! جاهز لاحتساب توزيع التكلفة.");
   };
 
-  // 2️⃣ احتساب التكلفة بمحرك المعاملات (Method B)
+  // 2️⃣ احتساب التكلفة بمحرك المعاملات
   const handleCalculateCosting = () => {
     if (!reconciled) {
       alert("يرجى مطابقة الأوزان أولا.");
@@ -86,9 +89,9 @@ export default function SortingPage() {
     }
 
     const totalPurchaseCost = parseFloat(selectedLot.purchase_cost || 0);
-    const wNew = parseFloat(weightNew || 0);
-    const wMid = parseFloat(weightMiddle || 0);
-    const wClr = parseFloat(weightClearance || 0);
+    const wNew = parseFloat(gradeNew.weight || 0);
+    const wMid = parseFloat(gradeMid.weight || 0);
+    const wClr = parseFloat(gradeClr.weight || 0);
 
     const weightedTotal = (wNew * 3.0) + (wMid * 1.5) + (wClr * 0.5);
 
@@ -108,14 +111,14 @@ export default function SortingPage() {
       midCostTotal: (costPerKgMid * wMid).toFixed(2),
       clrCostKg: costPerKgClr.toFixed(2),
       clrCostTotal: (costPerKgClr * wClr).toFixed(2),
-      wasteLoss: (parseFloat(weightWaste || 0) > 0) ? "1000.00" : "0.00"
+      wasteLoss: (parseFloat(gradeWaste.weight || 0) > 0) ? "1000.00" : "0.00"
     });
 
     setCostingCalculated(true);
     alert("⚡ تم احتساب توزيع التكلفة العادل بنجاح بمحرك المعاملات (Weighted Coefficients)!");
   };
 
-  // 3️⃣ ترحيل البضاعة إلى المخزون التام والحرصات
+  // 3️⃣ ترحيل البضاعة إلى المخزون التام
   const handlePostToInventory = async () => {
     if (!costingCalculated) {
       alert("يرجى احتساب التكلفة أولا قبل الترحيل.");
@@ -129,7 +132,7 @@ export default function SortingPage() {
         status: 'POSTED'
       }).catch(() => console.log("Handled posting flow"));
 
-      alert(`🎉 تم ترحيل المنتجات المفروزة بنجاح لجدول المخزون التام!\n\nجاهزة الآن للبيع بنقطة البيع (POS).`);
+      alert(`🎉 تم ترحيل المنتجات المفروزة وتحديث كروت المخزون التام بنجاح!\n\nجاهزة الآن للبيع بنقطة البيع (POS).`);
       handleResetSelection();
       loadRawLots();
     } catch (err) {
@@ -214,7 +217,7 @@ export default function SortingPage() {
           </div>
         </div>
 
-        {/* Panel 2 & 3: Weight Reconciliation & Costing Calculation */}
+        {/* Panel 2 & 3: Detailed Sorting Inputs */}
         <div className="lg:col-span-2 space-y-6">
           
           {selectedLot ? (
@@ -241,56 +244,220 @@ export default function SortingPage() {
                 </div>
               </div>
 
-              {/* 2. Weight Inputs */}
+              {/* 2. Detailed Inputs for Grades */}
               <div className="space-y-4">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <Scale size={18} className="text-emerald-600" /> 2. إدخال أوزان الدرجات الناتجة من الفرز (كجم)
+                  <Scale size={18} className="text-emerald-600" /> 2. تفاصيل أوزان وقطع ودرجات الفرز
                 </h3>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">✨ كريمة (Super Lux)</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={weightNew}
-                      onChange={(e) => { setWeightNew(e.target.value); setReconciled(false); }}
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                    />
+                <div className="space-y-4 text-xs">
+                  
+                  {/* GRADE 1: NEW COLLECTION */}
+                  <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3">
+                    <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
+                      <span className="font-bold text-emerald-900 text-xs flex items-center gap-1.5">
+                        <Sparkles size={15} className="text-emerald-600" /> ✨ درجة أولى / كريمة (Super Lux)
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">معامل × 3.0</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-slate-600 font-bold mb-1">الوزن (كجم) *</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          required
+                          value={gradeNew.weight}
+                          onChange={(e) => { setGradeNew({...gradeNew, weight: e.target.value}); setReconciled(false); }}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">عدد القطع</label>
+                        <input
+                          type="number"
+                          placeholder="مثال: 50 قطعة"
+                          value={gradeNew.pieces}
+                          onChange={(e) => setGradeNew({...gradeNew, pieces: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (اختياري)</label>
+                        <input
+                          type="text"
+                          placeholder="مثال: ملابس حريمي شتوي"
+                          value={gradeNew.category}
+                          onChange={(e) => setGradeNew({...gradeNew, category: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">البراند (اختياري)</label>
+                        <input
+                          type="text"
+                          placeholder="مثال: Zara / مشكل"
+                          value={gradeNew.brand}
+                          onChange={(e) => setGradeNew({...gradeNew, brand: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">📦 وسط (Middle Grade)</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={weightMiddle}
-                      onChange={(e) => { setWeightMiddle(e.target.value); setReconciled(false); }}
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                    />
+                  {/* GRADE 2: MIDDLE GRADE */}
+                  <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                      <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                        <Package size={15} className="text-indigo-600" /> 📦 درجة ثانية / وسط (Middle Grade)
+                      </span>
+                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded">معامل × 1.5</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-slate-600 font-bold mb-1">الوزن (كجم) *</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          required
+                          value={gradeMid.weight}
+                          onChange={(e) => { setGradeMid({...gradeMid, weight: e.target.value}); setReconciled(false); }}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">عدد القطع</label>
+                        <input
+                          type="number"
+                          placeholder="مثال: 40 قطعة"
+                          value={gradeMid.pieces}
+                          onChange={(e) => setGradeMid({...gradeMid, pieces: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (اختياري)</label>
+                        <input
+                          type="text"
+                          placeholder="مثال: تيشيرت بناتي"
+                          value={gradeMid.category}
+                          onChange={(e) => setGradeMid({...gradeMid, category: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">البراند (اختياري)</label>
+                        <input
+                          type="text"
+                          placeholder="مثال: H&M / مشكل"
+                          value={gradeMid.brand}
+                          onChange={(e) => setGradeMid({...gradeMid, brand: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1">🏷️ تصفيات (Clearance)</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={weightClearance}
-                      onChange={(e) => { setWeightClearance(e.target.value); setReconciled(false); }}
-                      className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                    />
+                  {/* GRADE 3: CLEARANCE */}
+                  <div className="p-4 bg-amber-50/30 rounded-2xl border border-amber-200/80 space-y-3">
+                    <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                      <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                        <Tag size={15} className="text-amber-600" /> 🏷️ تصفيات / شعبي (Clearance)
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">معامل × 0.5</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-slate-600 font-bold mb-1">الوزن (كجم) *</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          required
+                          value={gradeClr.weight}
+                          onChange={(e) => { setGradeClr({...gradeClr, weight: e.target.value}); setReconciled(false); }}
+                          className="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">عدد القطع</label>
+                        <input
+                          type="number"
+                          placeholder="مثال: 20 قطعة"
+                          value={gradeClr.pieces}
+                          onChange={(e) => setGradeClr({...gradeClr, pieces: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (اختياري)</label>
+                        <input
+                          type="text"
+                          placeholder="تصفيات عامة"
+                          value={gradeClr.category}
+                          onChange={(e) => setGradeClr({...gradeClr, category: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">البراند (اختياري)</label>
+                        <input
+                          type="text"
+                          placeholder="بدون براند"
+                          value={gradeClr.brand}
+                          onChange={(e) => setGradeClr({...gradeClr, brand: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="p-3 bg-rose-50/50 rounded-xl border border-rose-200">
-                    <label className="block text-[11px] font-bold text-rose-800 mb-1">🗑️ هالك / عادم (Waste)</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      value={weightWaste}
-                      onChange={(e) => { setWeightWaste(e.target.value); setReconciled(false); }}
-                      className="w-full p-2 bg-white border border-rose-300 rounded-lg font-bold text-rose-900 text-xs focus:outline-none focus:border-rose-500"
-                    />
+                  {/* GRADE 4: WASTE */}
+                  <div className="p-4 bg-rose-50/40 rounded-2xl border border-rose-200/80 space-y-3">
+                    <div className="flex items-center justify-between border-b border-rose-200/60 pb-2">
+                      <span className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
+                        <Trash2 size={15} className="text-rose-600" /> 🗑️ الهالك / العادم (Waste)
+                      </span>
+                      <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded">خسارة فرز مستقلة</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-slate-600 font-bold mb-1">وزن الهالك (كجم) *</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          required
+                          value={gradeWaste.weight}
+                          onChange={(e) => { setGradeWaste({...gradeWaste, weight: e.target.value}); setReconciled(false); }}
+                          className="w-full p-2 bg-white border border-rose-300 rounded-xl font-bold text-rose-900 text-xs focus:outline-none focus:border-rose-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-slate-600 font-semibold mb-1">سبب الهالك / ملاحظات</label>
+                        <input
+                          type="text"
+                          placeholder="قطع تالفة ومقاطع فرز"
+                          value={gradeWaste.notes}
+                          onChange={(e) => setGradeWaste({...gradeWaste, notes: e.target.value})}
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-rose-500"
+                        />
+                      </div>
+                    </div>
                   </div>
+
                 </div>
 
                 {/* Weight Reconciliation Bar */}
@@ -359,7 +526,7 @@ export default function SortingPage() {
                     disabled={submitting}
                     className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl transition shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer text-xs"
                   >
-                    <Send size={16} /> ترحيل النتائج إلى المخزون التام ونقطة البيع (POS)
+                    <Send size={16} /> ترحيل النتائج وتحديث كروت المخزون التام ونقطة البيع (POS)
                   </button>
                 </div>
               )}
