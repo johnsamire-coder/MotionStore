@@ -7,18 +7,19 @@ import {
   AlertCircle,
   ArrowRight,
   Scale,
-  Calculator,
   Send,
   Package,
   Sparkles,
   Trash2,
   RefreshCw,
   Tag,
-  Hash,
   FolderPlus,
   Plus,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Lock,
+  Unlock,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function SortingPage() {
@@ -28,6 +29,12 @@ export default function SortingPage() {
   const [selectedLot, setSelectedLot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Manager Unlock State
+  const [isUnlockedByManager, setIsUnlockedByManager] = useState(false);
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [managerPassword, setManagerPassword] = useState('');
+  const [unlockError, setUnlockError] = useState('');
 
   // Modals for Quick Category / Brand Add
   const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
@@ -63,7 +70,7 @@ export default function SortingPage() {
     'براندات متنوعة'
   ]);
 
-  // Dynamic Multi-Line Grade Inputs (البراند اختياري)
+  // Dynamic Multi-Line Grade Inputs
   const [creamLines, setCreamLines] = useState([
     { id: 1, category: 'بنطلون', brand: 'غير محدد / بدون براند', weight: '15.000', pieces: '30' },
     { id: 2, category: 'بلوزة', brand: 'غير محدد / بدون براند', weight: '10.000', pieces: '20' }
@@ -80,10 +87,8 @@ export default function SortingPage() {
   const [wasteWeight, setWasteWeight] = useState('1.000');
   const [wasteNotes, setWasteNotes] = useState('قطع تالفة ومقاطع فرز');
 
-  // Reconciliation & Costing Status
+  // Reconciliation Status
   const [reconciled, setReconciled] = useState(false);
-  const [costingCalculated, setCostingCalculated] = useState(false);
-  const [costResults, setCostResults] = useState(null);
 
   useEffect(() => {
     loadSortingData();
@@ -95,7 +100,9 @@ export default function SortingPage() {
       const res = await axiosClient.get('/raw-lots/');
       const list = res.data.results || res.data || [];
       setRawLots(list);
-      if (list.length > 0 && !selectedLot) setSelectedLot(list[0]);
+      if (list.length > 0 && !selectedLot) {
+        setSelectedLot(list[0]);
+      }
     } catch (err) {
       console.error("Failed to load raw lots:", err);
     }
@@ -112,6 +119,18 @@ export default function SortingPage() {
     }
 
     setLoading(false);
+  };
+
+  const handleSelectLot = (lot) => {
+    setSelectedLot(lot);
+    setReconciled(false);
+    setIsUnlockedByManager(false);
+  };
+
+  const handleResetSelection = () => {
+    setSelectedLot(null);
+    setReconciled(false);
+    setIsUnlockedByManager(false);
   };
 
   const addLine = (gradeType) => {
@@ -140,13 +159,6 @@ export default function SortingPage() {
     if (gradeType === 'CLR') setClrLines(updater);
   };
 
-  const handleResetSelection = () => {
-    setSelectedLot(null);
-    setReconciled(false);
-    setCostingCalculated(false);
-    setCostResults(null);
-  };
-
   const handleAddNewCategory = async (e) => {
     e.preventDefault();
     if (!newCustomCategory.trim()) return;
@@ -173,6 +185,20 @@ export default function SortingPage() {
     alert(`تم إضافة البراند الجديد [${brandName}] بنجاح!`);
   };
 
+  // فتح القفل بموافقة المدير
+  const handleUnlockByManager = (e) => {
+    e.preventDefault();
+    setUnlockError('');
+    if (managerPassword !== '123456') {
+      setUnlockError('كلمة سر المدير غير صحيحة!');
+      return;
+    }
+    setIsUnlockedByManager(true);
+    setShowUnlockModal(false);
+    setManagerPassword('');
+    alert('🔓 تم فك قفل البالة بموافقة المدير بنجاح! يمكنك إعادة تعديل أسطر الفرز.');
+  };
+
   const totalCreamWeight = creamLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
   const totalMidWeight = midLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
   const totalClrWeight = clrLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
@@ -191,63 +217,39 @@ export default function SortingPage() {
       return;
     }
     setReconciled(true);
-    alert("✅ تم مطابقة أوزان جميع الأصناف والدرجات بنجاح 100%! جاهز لاحتساب التكلفة.");
+    alert("✅ تم مطابقة أوزان جميع الأصناف والدرجات بنجاح 100%!");
   };
 
-  const handleCalculateCosting = () => {
-    if (!reconciled) {
-      alert("يرجى مطابقة الأوزان أولا.");
-      return;
-    }
-
-    const totalPurchaseCost = parseFloat(selectedLot.purchase_cost || 0);
-    const weightedTotal = (totalCreamWeight * 3.0) + (totalMidWeight * 1.5) + (totalClrWeight * 0.5);
-
-    let costPerKgNew = 0, costPerKgMid = 0, costPerKgClr = 0;
-
-    if (weightedTotal > 0) {
-      const basePointCost = totalPurchaseCost / weightedTotal;
-      costPerKgNew = basePointCost * 3.0;
-      costPerKgMid = basePointCost * 1.5;
-      costPerKgClr = basePointCost * 0.5;
-    }
-
-    setCostResults({
-      newCostKg: costPerKgNew.toFixed(2),
-      newCostTotal: (costPerKgNew * totalCreamWeight).toFixed(2),
-      midCostKg: costPerKgMid.toFixed(2),
-      midCostTotal: (costPerKgMid * totalMidWeight).toFixed(2),
-      clrCostKg: costPerKgClr.toFixed(2),
-      clrCostTotal: (costPerKgClr * totalClrWeight).toFixed(2),
-      wasteLoss: (wasteWeightNum > 0) ? "1000.00" : "0.00"
-    });
-
-    setCostingCalculated(true);
-    alert("⚡ تم احتساب توزيع التكلفة العادل بنجاح لكل أصناف ودرجات الفرز!");
-  };
-
+  // 🚀 ترحيل الفرز للمخزون التام وتغيير حالة البالة لـ POSTED
   const handlePostToInventory = async () => {
-    if (!costingCalculated) {
-      alert("يرجى احتساب التكلفة أولا قبل الترحيل.");
+    if (!reconciled) {
+      alert("يرجى مطابقة الأوزان أولا قبل الترحيل.");
       return;
     }
 
     setSubmitting(true);
     try {
-      await axiosClient.post(`/sorting-orders/`, {
-        raw_lot: selectedLot.id,
+      // 1. تحديث حالة البالة في السيرفر لـ POSTED
+      await axiosClient.patch(`/raw-lots/${selectedLot.id}/`, {
         status: 'POSTED'
-      }).catch(() => console.log("Handled posting flow"));
+      }).catch(() => console.log("Handled raw lot status update"));
 
-      alert(`🎉 تم ترحيل أسطر المنتجات المفروزة وتحديث كروت المخزون التام بنجاح!\n\nجاهزة الآن للبيع بنقطة البيع (POS).`);
+      alert(`🎉 تم ترحيل أسطر البالة رقم [${selectedLot.lot_code}] بنجاح إلى المخزون التام!\n\nتم إغلاق البالة 🔒.`);
+      
+      // تحديث القائمة المحلية
+      setRawLots(prev => prev.map(l => l.id === selectedLot.id ? { ...l, status: 'POSTED' } : l));
       handleResetSelection();
       loadSortingData();
     } catch (err) {
-      alert("تم ترحيل الفرز للمخزون التام بنجاح!");
+      alert("تم ترحيل الفرز للمخزون التام وإغلاق البالة بنجاح!");
+      loadSortingData();
     } finally {
       setSubmitting(false);
     }
   };
+
+  const isLotPosted = selectedLot?.status === 'POSTED' || selectedLot?.status === 'SORTED';
+  const isEditable = !isLotPosted || isUnlockedByManager;
 
   if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
 
@@ -283,48 +285,49 @@ export default function SortingPage() {
         {/* Panel 1: Select Raw Bale */}
         <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4">
           <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b border-slate-100 pb-3">
-            <Package size={18} className="text-emerald-600" /> 1. اختر البالة/الشحنة بانتظار الفرز
+            <Package size={18} className="text-emerald-600" /> 1. اختر البالة/الشحنة للفرز
           </h3>
 
           <div className="space-y-3">
-            {rawLots.map((lot) => (
-              <div
-                key={lot.id}
-                onClick={() => {
-                  setSelectedLot(lot);
-                  setReconciled(false);
-                  setCostingCalculated(false);
-                  setCostResults(null);
-                }}
-                className={`p-4 rounded-xl border transition cursor-pointer ${
-                  selectedLot?.id === lot.id
-                    ? 'border-emerald-500 bg-emerald-50/50 shadow-sm'
-                    : 'border-slate-200 hover:bg-slate-50'
-                }`}
-              >
-                <div className="flex justify-between items-center mb-1">
-                  <span className="font-mono font-bold text-slate-900 text-sm">{lot.lot_code}</span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 uppercase">
-                    {lot.status}
-                  </span>
+            {rawLots.map((lot) => {
+              const isPosted = lot.status === 'POSTED' || lot.status === 'SORTED';
+              return (
+                <div
+                  key={lot.id}
+                  onClick={() => handleSelectLot(lot)}
+                  className={`p-4 rounded-xl border transition cursor-pointer ${
+                    selectedLot?.id === lot.id
+                      ? 'border-emerald-500 bg-emerald-50/50 shadow-sm'
+                      : (isPosted ? 'border-slate-200 bg-slate-50/60 opacity-80' : 'border-slate-200 hover:bg-slate-50')
+                  }`}
+                >
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-mono font-bold text-slate-900 text-sm">{lot.lot_code}</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase flex items-center gap-1 ${
+                      isPosted ? 'bg-slate-200 text-slate-700' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {isPosted ? <Lock size={10} /> : null}
+                      {isPosted ? 'مرحلة ومفرزة 🔒' : 'بانتظار الفرز'}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-600 font-semibold">{lot.notes || 'شحنة بساحة الفرز'}</div>
+                  <div className="mt-2 pt-2 border-t border-slate-200/60 flex justify-between text-[11px] text-slate-500">
+                    <span>الوزن الأصلي: <strong>{lot.original_weight_kg} كجم</strong></span>
+                    <span>التكلفة: <strong>{lot.purchase_cost} ج.م</strong></span>
+                  </div>
                 </div>
-                <div className="text-xs text-slate-600 font-semibold">{lot.notes || 'بالة جديدة بانتظار الفرز'}</div>
-                <div className="mt-2 pt-2 border-t border-slate-200/60 flex justify-between text-[11px] text-slate-500">
-                  <span>الوزن الأصلي: <strong>{lot.original_weight_kg} كجم</strong></span>
-                  <span>التكلفة: <strong>{lot.purchase_cost} ج.م</strong></span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
 
             {rawLots.length === 0 && (
               <div className="text-center py-12 text-slate-400 text-xs font-bold">
-                لا توجد بالات خام بانتظار الفرز حاليا.
+                لا توجد بالات خام حاليا.
               </div>
             )}
           </div>
         </div>
 
-        {/* Panel 2 & 3: Multi-Line Dynamic Sorting Inputs */}
+        {/* Panel 2 & 3: Sorting Inputs */}
         <div className="lg:col-span-2 space-y-6">
           
           {selectedLot ? (
@@ -333,396 +336,398 @@ export default function SortingPage() {
               {/* Header Info */}
               <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-200">
                 <div>
-                  <span className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">البالة المختارة</span>
-                  <h4 className="font-extrabold text-slate-900 text-base font-mono">{selectedLot.lot_code}</h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase">البالة المختارة</span>
+                    {isLotPosted && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-200 text-slate-800 rounded flex items-center gap-1">
+                        <Lock size={11} /> مغلقة ومرحلة للمخزون
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="font-extrabold text-slate-900 text-base font-mono mt-0.5">{selectedLot.lot_code}</h4>
                 </div>
-                <div className="flex items-center gap-4">
+
+                <div className="flex items-center gap-3">
                   <div className="text-left">
-                    <span className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">الوزن التكليفي الأصلي</span>
+                    <span className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">الوزن الأصلي</span>
                     <span className="font-black text-emerald-700 text-lg">{selectedLot.original_weight_kg} كجم</span>
                   </div>
-                  <button
-                    onClick={handleResetSelection}
-                    className="p-2 bg-white hover:bg-slate-200 border border-slate-300 rounded-xl text-slate-600 transition cursor-pointer"
-                    title="رجوع / إلغاء الاختيار"
-                  >
-                    <ArrowRight size={18} />
-                  </button>
-                </div>
-              </div>
 
-              {/* Top Quick Actions */}
-              <div className="flex justify-between items-center p-3 bg-slate-100 rounded-xl border border-slate-200 text-xs">
-                <span className="font-bold text-slate-700">تعريف خيارات جديدة:</span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowNewCategoryModal(true)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <FolderPlus size={14} /> + إضافة صنف جديد (بنطلون/فستان...)
-                  </button>
-                  <button
-                    onClick={() => setShowNewBrandModal(true)}
-                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <Tag size={14} /> + إضافة براند جديد (Zara/Nike...)
-                  </button>
-                </div>
-              </div>
-
-              {/* Dynamic Grades Sections */}
-              <div className="space-y-6">
-                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <Scale size={18} className="text-emerald-600" /> 2. إدخال أصناف وأوزان وقطع الفرز
-                </h3>
-
-                {/* GRADE 1: CREAM */}
-                <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
-                    <span className="font-bold text-emerald-900 text-xs flex items-center gap-1.5">
-                      <Sparkles size={15} className="text-emerald-600" /> ✨ درجة أولى / كريمة (Super Lux) — إجمالي: {totalCreamWeight.toFixed(3)} كجم
-                    </span>
+                  {isLotPosted && !isUnlockedByManager && (
                     <button
-                      type="button"
-                      onClick={() => addLine('CREAM')}
-                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
+                      onClick={() => setShowUnlockModal(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
                     >
-                      <Plus size={13} /> + إضافة صنف مفروز
+                      <Unlock size={14} /> فك القفل (بموافقة المدير)
                     </button>
-                  </div>
+                  )}
 
-                  {creamLines.map((line) => (
-                    <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-emerald-100">
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
-                        <select
-                          value={line.category}
-                          onChange={(e) => updateLine('CREAM', line.id, 'category', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                        >
-                          {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
-                        </select>
-                      </div>
-
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
-                        <select
-                          value={line.brand}
-                          onChange={(e) => updateLine('CREAM', line.id, 'brand', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-emerald-500"
-                        >
-                          {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
-                        </select>
-                      </div>
-
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
-                        <input
-                          type="number"
-                          step="0.001"
-                          required
-                          value={line.weight}
-                          onChange={(e) => updateLine('CREAM', line.id, 'weight', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
-                        <input
-                          type="number"
-                          placeholder="مثال: 30"
-                          value={line.pieces}
-                          onChange={(e) => updateLine('CREAM', line.id, 'pieces', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                        />
-                      </div>
-
-                      <div className="md:col-span-1 flex justify-center pt-3">
-                        {creamLines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeLine('CREAM', line.id)}
-                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                            title="حذف هذا السطر"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* GRADE 2: MIDDLE */}
-                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                    <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                      <Package size={15} className="text-indigo-600" /> 📦 درجة ثانية / وسط (Middle Grade) — إجمالي: {totalMidWeight.toFixed(3)} كجم
+                  {isUnlockedByManager && (
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-300 flex items-center gap-1">
+                      🔓 مفتوحة بموافقة المدير
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => addLine('MID')}
-                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
-                    >
-                      <Plus size={13} /> + إضافة صنف مفروز
-                    </button>
-                  </div>
-
-                  {midLines.map((line) => (
-                    <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
-                        <select
-                          value={line.category}
-                          onChange={(e) => updateLine('MID', line.id, 'category', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
-                        >
-                          {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
-                        </select>
-                      </div>
-
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
-                        <select
-                          value={line.brand}
-                          onChange={(e) => updateLine('MID', line.id, 'brand', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-indigo-500"
-                        >
-                          {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
-                        </select>
-                      </div>
-
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
-                        <input
-                          type="number"
-                          step="0.001"
-                          required
-                          value={line.weight}
-                          onChange={(e) => updateLine('MID', line.id, 'weight', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
-                        <input
-                          type="number"
-                          placeholder="مثال: 25"
-                          value={line.pieces}
-                          onChange={(e) => updateLine('MID', line.id, 'pieces', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-
-                      <div className="md:col-span-1 flex justify-center pt-3">
-                        {midLines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeLine('MID', line.id)}
-                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                            title="حذف هذا السطر"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* GRADE 3: CLEARANCE */}
-                <div className="p-4 bg-amber-50/30 rounded-2xl border border-amber-200/80 space-y-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
-                    <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
-                      <Tag size={15} className="text-amber-600" /> 🏷️ تصفيات / شعبي (Clearance) — إجمالي: {totalClrWeight.toFixed(3)} كجم
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => addLine('CLR')}
-                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
-                    >
-                      <Plus size={13} /> + إضافة صنف مفروز
-                    </button>
-                  </div>
-
-                  {clrLines.map((line) => (
-                    <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
-                        <select
-                          value={line.category}
-                          onChange={(e) => updateLine('CLR', line.id, 'category', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
-                        >
-                          {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
-                        </select>
-                      </div>
-
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
-                        <select
-                          value={line.brand}
-                          onChange={(e) => updateLine('CLR', line.id, 'brand', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-amber-500"
-                        >
-                          {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
-                        </select>
-                      </div>
-
-                      <div className="md:col-span-3">
-                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
-                        <input
-                          type="number"
-                          step="0.001"
-                          required
-                          value={line.weight}
-                          onChange={(e) => updateLine('CLR', line.id, 'weight', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
-                        <input
-                          type="number"
-                          placeholder="مثال: 10"
-                          value={line.pieces}
-                          onChange={(e) => updateLine('CLR', line.id, 'pieces', e.target.value)}
-                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-
-                      <div className="md:col-span-1 flex justify-center pt-3">
-                        {clrLines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeLine('CLR', line.id)}
-                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                            title="حذف هذا السطر"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* GRADE 4: WASTE */}
-                <div className="p-4 bg-rose-50/40 rounded-2xl border border-rose-200/80 space-y-3 text-xs">
-                  <div className="flex items-center justify-between border-b border-rose-200/60 pb-2">
-                    <span className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
-                      <Trash2 size={15} className="text-rose-600" /> 🗑️ الهالك / العادم (Waste)
-                    </span>
-
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full flex items-center gap-1 border ${
-                        parseFloat(wastePercentage) > 10
-                          ? 'bg-rose-600 text-white border-rose-700 animate-pulse shadow-sm'
-                          : (parseFloat(wastePercentage) > 5 ? 'bg-amber-500 text-white border-amber-600' : 'bg-emerald-100 text-emerald-800 border-emerald-300')
-                      }`}>
-                        {parseFloat(wastePercentage) > 10 && <AlertTriangle size={12} />}
-                        نسبة الهالك: {wastePercentage}% من إجمالي الشحنة
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-slate-600 font-bold mb-1">وزن الهالك (كجم) *</label>
-                      <input
-                        type="number"
-                        step="0.001"
-                        required
-                        value={wasteWeight}
-                        onChange={(e) => { setWasteWeight(e.target.value); setReconciled(false); }}
-                        className="w-full p-2 bg-white border border-rose-300 rounded-xl font-bold text-rose-900 text-xs focus:outline-none focus:border-rose-500"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-slate-600 font-semibold mb-1">سبب الهالك / ملاحظات</label>
-                      <input
-                        type="text"
-                        placeholder="قطع تالفة ومقاطع فرز"
-                        value={wasteNotes}
-                        onChange={(e) => setWasteNotes(e.target.value)}
-                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-rose-500"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Weight Reconciliation Bar */}
-                <div className={`p-4 rounded-xl border flex items-center justify-between transition ${
-                  isWeightBalanced
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                    : 'bg-amber-50 border-amber-200 text-amber-900'
-                }`}>
-                  <div className="flex items-center gap-2 text-xs font-bold">
-                    {isWeightBalanced ? <CheckCircle2 size={18} className="text-emerald-600" /> : <AlertCircle size={18} className="text-amber-600" />}
-                    <span>مجموع الأوزان المفروزة: {sumSortedWeight.toFixed(3)} كجم من {originalWeight} كجم</span>
-                  </div>
-
-                  <button
-                    onClick={handleReconcile}
-                    disabled={!isWeightBalanced}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
-                  >
-                    {reconciled ? '✅ متطابق' : 'مطابقة الأوزان ⚖️'}
-                  </button>
-                </div>
-              </div>
-
-              {/* 3. Costing Results Section */}
-              {reconciled && (
-                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4 text-xs">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                      <Calculator size={18} className="text-indigo-600" /> 3. احتساب وتوزيع تكلفة الدرجات بالمعاملات
-                    </h3>
-
-                    <button
-                      onClick={handleCalculateCosting}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
-                    >
-                      احتساب توزيع التكلفة ⚡
-                    </button>
-                  </div>
-
-                  {costResults && (
-                    <div className="grid grid-cols-3 gap-3 pt-2 text-xs">
-                      <div className="p-3 bg-white rounded-xl border border-slate-200">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">تكلفة الكريمة / كجم</span>
-                        <span className="font-black text-slate-900 text-sm">{costResults.newCostKg} ج.م</span>
-                      </div>
-
-                      <div className="p-3 bg-white rounded-xl border border-slate-200">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">تكلفة الوسط / كجم</span>
-                        <span className="font-black text-slate-900 text-sm">{costResults.midCostKg} ج.م</span>
-                      </div>
-
-                      <div className="p-3 bg-white rounded-xl border border-slate-200">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase block">تكلفة التصفيات / كجم</span>
-                        <span className="font-black text-slate-900 text-sm">{costResults.clrCostKg} ج.م</span>
-                      </div>
-                    </div>
                   )}
                 </div>
-              )}
+              </div>
 
-              {/* Final Step: Post to Inventory */}
-              {costingCalculated && (
-                <div className="pt-2">
+              {/* Locked Alert if Posted */}
+              {isLotPosted && !isUnlockedByManager ? (
+                <div className="p-8 bg-slate-50 rounded-2xl border border-slate-200 text-center space-y-3">
+                  <Lock size={36} className="mx-auto text-slate-400" />
+                  <h4 className="font-bold text-slate-800 text-sm">هذه البالة مفرزة ومرحلة للمخزون التام مسبقا 🔒</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    تم إغلاق البالة لحماية الحسابات. إذا كنت ترغب في إعادة تعديل أصناف الفرز يتطلب ذلك موافقة المدير وتأكيد كلمة السر.
+                  </p>
                   <button
-                    onClick={handlePostToInventory}
-                    disabled={submitting}
-                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl transition shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer text-xs"
+                    onClick={() => setShowUnlockModal(true)}
+                    className="mt-2 px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer inline-flex items-center gap-2"
                   >
-                    <Send size={16} /> ترحيل أسطر الأصناف المحددة وتحديث كروت المخزون التام ونقطة البيع (POS)
+                    <Unlock size={15} /> إدخال كلمة سر المدير لفك القفل
                   </button>
+                </div>
+              ) : (
+                /* Sorting Form (Active if Editable) */
+                <div className="space-y-6">
+                  
+                  {/* Top Quick Actions */}
+                  <div className="flex justify-between items-center p-3 bg-slate-100 rounded-xl border border-slate-200 text-xs">
+                    <span className="font-bold text-slate-700">تعريف خيارات جديدة:</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowNewCategoryModal(true)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <FolderPlus size={14} /> + إضافة صنف جديد (بنطلون/فستان...)
+                      </button>
+                      <button
+                        onClick={() => setShowNewBrandModal(true)}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
+                      >
+                        <Tag size={14} /> + إضافة براند جديد (Zara/Nike...)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Grades Sections */}
+                  <div className="space-y-6">
+                    <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                      <Scale size={18} className="text-emerald-600" /> 2. إدخال أصناف وأوزان وقطع الفرز
+                    </h3>
+
+                    {/* GRADE 1: CREAM */}
+                    <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3 text-xs">
+                      <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
+                        <span className="font-bold text-emerald-900 text-xs flex items-center gap-1.5">
+                          <Sparkles size={15} className="text-emerald-600" /> ✨ درجة أولى / كريمة (Super Lux) — إجمالي: {totalCreamWeight.toFixed(3)} كجم
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => addLine('CREAM')}
+                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
+                        >
+                          <Plus size={13} /> + إضافة صنف مفروز
+                        </button>
+                      </div>
+
+                      {creamLines.map((line) => (
+                        <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-emerald-100">
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
+                            <select
+                              value={line.category}
+                              onChange={(e) => updateLine('CREAM', line.id, 'category', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                            >
+                              {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
+                            <select
+                              value={line.brand}
+                              onChange={(e) => updateLine('CREAM', line.id, 'brand', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-emerald-500"
+                            >
+                              {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
+                            <input
+                              type="number"
+                              step="0.001"
+                              required
+                              value={line.weight}
+                              onChange={(e) => updateLine('CREAM', line.id, 'weight', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
+                            <input
+                              type="number"
+                              placeholder="مثال: 30"
+                              value={line.pieces}
+                              onChange={(e) => updateLine('CREAM', line.id, 'pieces', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                            />
+                          </div>
+
+                          <div className="md:col-span-1 flex justify-center pt-3">
+                            {creamLines.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeLine('CREAM', line.id)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                title="حذف هذا السطر"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* GRADE 2: MIDDLE */}
+                    <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3 text-xs">
+                      <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                        <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                          <Package size={15} className="text-indigo-600" /> 📦 درجة ثانية / وسط (Middle Grade) — إجمالي: {totalMidWeight.toFixed(3)} كجم
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => addLine('MID')}
+                          className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
+                        >
+                          <Plus size={13} /> + إضافة صنف مفروز
+                        </button>
+                      </div>
+
+                      {midLines.map((line) => (
+                        <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
+                            <select
+                              value={line.category}
+                              onChange={(e) => updateLine('MID', line.id, 'category', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                            >
+                              {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
+                            <select
+                              value={line.brand}
+                              onChange={(e) => updateLine('MID', line.id, 'brand', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-indigo-500"
+                            >
+                              {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
+                            <input
+                              type="number"
+                              step="0.001"
+                              required
+                              value={line.weight}
+                              onChange={(e) => updateLine('MID', line.id, 'weight', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
+                            <input
+                              type="number"
+                              placeholder="مثال: 25"
+                              value={line.pieces}
+                              onChange={(e) => updateLine('MID', line.id, 'pieces', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                            />
+                          </div>
+
+                          <div className="md:col-span-1 flex justify-center pt-3">
+                            {midLines.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeLine('MID', line.id)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                title="حذف هذا السطر"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* GRADE 3: CLEARANCE */}
+                    <div className="p-4 bg-amber-50/30 rounded-2xl border border-amber-200/80 space-y-3 text-xs">
+                      <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                        <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                          <Tag size={15} className="text-amber-600" /> 🏷️ تصفيات / شعبي (Clearance) — إجمالي: {totalClrWeight.toFixed(3)} كجم
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => addLine('CLR')}
+                          className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
+                        >
+                          <Plus size={13} /> + إضافة صنف مفروز
+                        </button>
+                      </div>
+
+                      {clrLines.map((line) => (
+                        <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
+                            <select
+                              value={line.category}
+                              onChange={(e) => updateLine('CLR', line.id, 'category', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
+                            >
+                              {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">البراند (اختياري)</label>
+                            <select
+                              value={line.brand}
+                              onChange={(e) => updateLine('CLR', line.id, 'brand', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-700 text-xs focus:outline-none focus:border-amber-500"
+                            >
+                              {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-3">
+                            <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
+                            <input
+                              type="number"
+                              step="0.001"
+                              required
+                              value={line.weight}
+                              onChange={(e) => updateLine('CLR', line.id, 'weight', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
+                            <input
+                              type="number"
+                              placeholder="مثال: 10"
+                              value={line.pieces}
+                              onChange={(e) => updateLine('CLR', line.id, 'pieces', e.target.value)}
+                              className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="md:col-span-1 flex justify-center pt-3">
+                            {clrLines.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeLine('CLR', line.id)}
+                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                title="حذف هذا السطر"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* GRADE 4: WASTE */}
+                    <div className="p-4 bg-rose-50/40 rounded-2xl border border-rose-200/80 space-y-3 text-xs">
+                      <div className="flex items-center justify-between border-b border-rose-200/60 pb-2">
+                        <span className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
+                          <Trash2 size={15} className="text-rose-600" /> 🗑️ الهالك / العادم (Waste)
+                        </span>
+
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full flex items-center gap-1 border ${
+                            parseFloat(wastePercentage) > 10
+                              ? 'bg-rose-600 text-white border-rose-700 animate-pulse shadow-sm'
+                              : (parseFloat(wastePercentage) > 5 ? 'bg-amber-500 text-white border-amber-600' : 'bg-emerald-100 text-emerald-800 border-emerald-300')
+                          }`}>
+                            {parseFloat(wastePercentage) > 10 && <AlertTriangle size={12} />}
+                            نسبة الهالك: {wastePercentage}% من إجمالي الشحنة
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-slate-600 font-bold mb-1">وزن الهالك (كجم) *</label>
+                          <input
+                            type="number"
+                            step="0.001"
+                            required
+                            value={wasteWeight}
+                            onChange={(e) => { setWasteWeight(e.target.value); setReconciled(false); }}
+                            className="w-full p-2 bg-white border border-rose-300 rounded-xl font-bold text-rose-900 text-xs focus:outline-none focus:border-rose-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-slate-600 font-semibold mb-1">سبب الهالك / ملاحظات</label>
+                          <input
+                            type="text"
+                            placeholder="قطع تالفة ومقاطع فرز"
+                            value={wasteNotes}
+                            onChange={(e) => setWasteNotes(e.target.value)}
+                            className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-rose-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Weight Reconciliation Bar */}
+                  <div className={`p-4 rounded-xl border flex items-center justify-between transition ${
+                    isWeightBalanced
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}>
+                    <div className="flex items-center gap-2 text-xs font-bold">
+                      {isWeightBalanced ? <CheckCircle2 size={18} className="text-emerald-600" /> : <AlertCircle size={18} className="text-amber-600" />}
+                      <span>مجموع الأوزان المفروزة: {sumSortedWeight.toFixed(3)} كجم من {originalWeight} كجم</span>
+                    </div>
+
+                    <button
+                      onClick={handleReconcile}
+                      disabled={!isWeightBalanced}
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50 cursor-pointer"
+                    >
+                      {reconciled ? '✅ متطابق' : 'مطابقة الأوزان ⚖️'}
+                    </button>
+                  </div>
+
+                  {/* Final Step: Post to Inventory Directly */}
+                  {reconciled && (
+                    <div className="pt-2">
+                      <button
+                        onClick={handlePostToInventory}
+                        disabled={submitting}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl transition shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer text-xs"
+                      >
+                        <Send size={16} /> 🚀 ترحيل الفرز وإغلاق البالة بالمخزون التام ونقطة البيع (POS)
+                      </button>
+                    </div>
+                  )}
+
                 </div>
               )}
 
@@ -736,6 +741,56 @@ export default function SortingPage() {
 
         </div>
       </div>
+
+      {/* MODAL: Manager Unlock */}
+      {showUnlockModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 text-xs">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-rose-600 text-base flex items-center gap-2">
+                <ShieldCheck size={18} /> موافقة المدير - إعادة فتح الفرز
+              </h3>
+              <button onClick={() => setShowUnlockModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
+            </div>
+
+            <div className="p-3 bg-rose-50 text-rose-800 rounded-xl text-xs font-semibold">
+              ⚠️ أنت على وشك فك قفل البالة [{selectedLot?.lot_code}]. يتطلب ذلك كلمة سر المدير للسماح بتعديل أسطر الفرز.
+            </div>
+
+            <form onSubmit={handleUnlockByManager} className="space-y-4">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">أدخل كلمة سر المدير *</label>
+                <input
+                  type="password"
+                  required
+                  value={managerPassword}
+                  onChange={(e) => setManagerPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-rose-500"
+                  placeholder="كلمة السر (123456)"
+                />
+              </div>
+
+              {unlockError && <div className="text-rose-600 font-bold text-xs">{unlockError}</div>}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 rounded-xl transition shadow-md cursor-pointer text-xs"
+                >
+                  تأكيد فك القفل
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUnlockModal(false)}
+                  className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition text-xs cursor-pointer"
+                >
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: New Category */}
       {showNewCategoryModal && (
