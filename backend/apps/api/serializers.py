@@ -124,6 +124,9 @@ class StockItemSerializer(serializers.ModelSerializer):
 class InventoryTransactionSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
+    weight_kg = serializers.ReadOnlyField(source='weight_change_kg')
+    product_name = serializers.ReadOnlyField(source='product.name')
+    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
     class Meta:
         model = InventoryTransaction
         fields = '__all__'
@@ -176,4 +179,5 @@ class JournalEntrySerializer(serializers.ModelSerializer):
         model = JournalEntry
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
 
