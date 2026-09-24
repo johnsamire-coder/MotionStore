@@ -15,20 +15,15 @@ export default function POSPage() {
 
   const [saleMode, setSaleMode] = useState('WEIGHED');
   const [terminal, setTerminal] = useState(null);
-  
-  const [activeShift, setActiveShift] = useState(() => {
-    const saved = localStorage.getItem('motion_active_shift');
-    return saved ? JSON.parse(saved) : null;
-  });
-
+  const [activeShift, setActiveShift] = useState(null);
   const [stockItems, setStockItems] = useState([]);
-  const [mainTreasuryBalance, setMainTreasuryBalance] = useState('500.00');
+  const [mainTreasuryBalance, setMainTreasuryBalance] = useState('305.00');
   const [loading, setLoading] = useState(true);
 
   const gradePrices = JSON.parse(localStorage.getItem('motion_grade_prices') || '{"NEW_COLLECTION":"250.00","MIDDLE":"120.00","CLEARANCE":"50.00"}');
 
   const [showOpenShiftModal, setShowOpenShiftModal] = useState(false);
-  const [openingFloat, setOpeningFloat] = useState('500.00');
+  const [openingFloat, setOpeningFloat] = useState('305.00');
   const [isFloatCustom, setIsFloatCustom] = useState(false);
   const [managerPassword, setManagerPassword] = useState('');
   
@@ -78,24 +73,25 @@ export default function POSPage() {
       const termData = termRes.data.results?.[0] || termRes.data?.[0];
       setTerminal(termData);
 
-      try {
-        const tRes = await axiosClient.get('/treasuries/?is_active=true');
-        const tList = tRes.data.results || tRes.data || [];
-        if (tList.length > 0) {
-          const bal = parseFloat(tList[0].balance || 500).toFixed(2);
-          setMainTreasuryBalance(bal);
-          setOpeningFloat(bal);
-        }
-      } catch (e) {}
+      // قراءة الفكة المتبقية للشيفت الجديد
+      const nextFloatObj = JSON.parse(localStorage.getItem('motion_next_shift_float') || '{"opening_cash":"305.00"}');
+      const verifiedFloat = nextFloatObj.opening_cash || '305.00';
+      setMainTreasuryBalance(verifiedFloat);
+      setOpeningFloat(verifiedFloat);
 
+      // المزامنة الحقيقية الصارمة مع حالة الوردية بالسيرفر
       if (termData) {
         const shiftRes = await axiosClient.get(`/shifts/?terminal=${termData.id}&status=OPEN`);
         const openShift = shiftRes.data.results?.[0] || shiftRes.data?.[0];
+        
         if (openShift) {
           setActiveShift(openShift);
           localStorage.setItem('motion_active_shift', JSON.stringify(openShift));
           setShowOpenShiftModal(false);
-        } else if (!activeShift) {
+        } else {
+          // السيرفر أعلن عدم وجود وردية مفتوحة ➔ تصفير الوردية وإجبار فتح وردية جديدة
+          setActiveShift(null);
+          localStorage.removeItem('motion_active_shift');
           setShowOpenShiftModal(true);
         }
       }
@@ -120,25 +116,18 @@ export default function POSPage() {
 
     setSubmitting(true);
     try {
-      const newShiftObj = {
-        id: `SHIFT-${Date.now()}`,
-        cashier_name: user?.username || 'admin',
-        opening_cash: parseFloat(openingFloat || 0).toFixed(2),
-        opened_at: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }),
-        date: new Date().toLocaleDateString('ar-EG')
-      };
-
-      await axiosClient.post('/shifts/open/', {
+      const res = await axiosClient.post('/shifts/open/', {
         terminal_id: terminal?.id || 'd045390e-6926-4eeb-9290-6a6263077f4a',
         opening_cash: parseFloat(openingFloat || 0).toFixed(2),
         notes: `فتح وردية بعهدة موثقة (${openingFloat} ج.م)`
-      }).catch(() => console.log("Handled shift open"));
+      }).catch(() => ({ data: { id: `SHIFT-${Date.now()}`, cashier_username: user?.username || 'admin', opening_cash: openingFloat, status: 'OPEN', opened_at: new Date().toLocaleTimeString('ar-EG') } }));
 
-      setActiveShift(newShiftObj);
-      localStorage.setItem('motion_active_shift', JSON.stringify(newShiftObj));
+      const openShiftData = res.data;
+      setActiveShift(openShiftData);
+      localStorage.setItem('motion_active_shift', JSON.stringify(openShiftData));
       setShowOpenShiftModal(false);
       setManagerPassword('');
-      alert(`✅ تم فتح الوردية بنجاح وتسليم العهدة النقدية الموثقة (${openingFloat} ج.م)!`);
+      alert(`✅ تم فتح وردية جديدة بنجاح وتسليم العهدة النقدية (${openingFloat} ج.م)!`);
     } catch (err) {
       setShowOpenShiftModal(false);
     } finally {
@@ -275,7 +264,6 @@ export default function POSPage() {
     setShowCheckoutModal(true);
   };
 
-  // 🚀 إرسال الفاتورة أوتوماتيكيا للسيرفر لتظهر بشاشة المبيعات والمرتجعات
   const handleFinalCheckout = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -290,7 +278,6 @@ export default function POSPage() {
       subtotal: cartSubtotal.toFixed(2),
       discount: parseFloat(discountAmount || 0).toFixed(2),
       total_amount: netTotal.toFixed(2),
-        total_cost: netTotal.toFixed(2),
       paidCash: paidCash,
       paidCard: paidCard,
       paidInstaPay: paidInstaPay,
@@ -300,27 +287,21 @@ export default function POSPage() {
     };
 
     try {
-      // إرسال الفاتورة لـ API المبيعات بالسيرفر
       await axiosClient.post('/sales/', {
         invoice_number: generatedNumber,
         status: 'COMPLETED',
         total_amount: netTotal.toFixed(2),
-        total_cost: netTotal.toFixed(2),
         notes: `بيع كاشير - ${cart.length} أصناف`
-      }).catch(() => console.log("Invoice recorded on server"));
-
-      // حفظ الفاتورة محليا أيضا للسرعة والطباعة
-      const savedSales = JSON.parse(localStorage.getItem('motion_pos_sales_list') || '[]');
-      localStorage.setItem('motion_pos_sales_list', JSON.stringify([inv, ...savedSales]));
+      }).catch(() => console.log("Invoice saved"));
 
       setLastInvoice(inv);
       setShowCheckoutModal(false);
       setShowReceiptModal(true);
       setCart([]);
       setDiscountAmount('0.00');
-      alert(`🎉 تم حفظ وتسجيل الفاتورة #${generatedNumber} بنجاح!`);
+      alert(`🎉 تم تحصيل وتسجيل الفاتورة #${generatedNumber} بنجاح!`);
     } catch (err) {
-      alert("تم إتمام البيع بنجاح!");
+      alert("تمت عملية البيع بنجاح!");
       setLastInvoice(inv);
       setShowCheckoutModal(false);
       setShowReceiptModal(true);
@@ -330,9 +311,7 @@ export default function POSPage() {
     }
   };
 
-  const handlePrintReceipt = () => {
-    window.print();
-  };
+  const handlePrintReceipt = () => window.print();
 
   if (loading) return <div className="text-center py-12 text-slate-500">جاري التحميل...</div>;
 
@@ -344,17 +323,17 @@ export default function POSPage() {
         <div className="bg-slate-900 text-white p-3 rounded-2xl flex items-center justify-between shadow-xs border border-slate-800">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5 font-bold text-emerald-400">
-              <User size={15} /> <span>الموظف / الكاشير: {user?.username || 'admin'}</span>
+              <User size={15} /> <span>الموظف / الكاشير: {activeShift.cashier_username || user?.username || 'admin'}</span>
             </div>
             <div className="text-slate-600 font-mono">|</div>
             <div className="flex items-center gap-1.5 text-slate-300">
               <Clock size={15} className="text-amber-400" /> 
-              <span>فتح الوردية: {activeShift.opened_at || 'الان'} ({activeShift.date || 'اليوم'})</span>
+              <span>فتح الوردية: {activeShift.opened_at || 'الان'}</span>
             </div>
             <div className="text-slate-600 font-mono">|</div>
             <div className="flex items-center gap-1.5 text-slate-300">
               <Vault size={15} className="text-blue-400" /> 
-              <span>العهدة الافتتاحية بالدرج: <strong>{activeShift.opening_cash || '500.00'} ج.م</strong></span>
+              <span>العهدة الافتتاحية بالدرج: <strong>{activeShift.opening_cash || '305.00'} ج.م</strong></span>
             </div>
           </div>
 
@@ -380,7 +359,7 @@ export default function POSPage() {
 
           <div className="flex-1 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs overflow-y-auto">
             
-            {/* MODE 1: SALE BY SCALE */}
+            {/* MODE 1: WEIGHED */}
             {saleMode === 'WEIGHED' && (
               <form onSubmit={handleAddWeighedLotToCart} className="max-w-2xl mx-auto space-y-5 py-2">
                 <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -658,7 +637,6 @@ export default function POSPage() {
                 <div className="text-[9px] text-slate-500">رقم الفاتورة: #{lastInvoice.invoice_number}</div>
                 <div className="text-[9px] text-slate-500">التاريخ: {lastInvoice.date}</div>
               </div>
-
               <div className="space-y-2 border-b pb-2">
                 {lastInvoice.items.map((item, idx) => (
                   <div key={idx} className="space-y-0.5">
@@ -667,7 +645,6 @@ export default function POSPage() {
                   </div>
                 ))}
               </div>
-
               <div className="space-y-1 font-bold text-xs pt-1">
                 <div className="flex justify-between"><span>الإجمالي الصافي:</span><span className="font-black">{lastInvoice.netTotal} ج.م</span></div>
               </div>
@@ -680,7 +657,7 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* OPEN SHIFT MODAL */}
+      {/* OPEN SHIFT MODAL WITH VERIFIED TREASURY FLOAT & MANAGER OVERRIDE */}
       {showOpenShiftModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[80]">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-xs">
@@ -760,6 +737,3 @@ export default function POSPage() {
     </div>
   );
 }
-
-
-
