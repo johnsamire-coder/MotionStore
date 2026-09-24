@@ -296,14 +296,14 @@ export default function POSPage() {
       paidInstaPay: paidInstaPay,
       paidWallet: paidWallet,
       cashier: user?.username || 'admin',
-      status: 'PAID'
+      status: 'COMPLETED'
     };
 
     try {
       // إرسال الفاتورة لـ API المبيعات بالسيرفر
       await axiosClient.post('/sales/', {
         invoice_number: generatedNumber,
-        status: 'PAID',
+        status: 'COMPLETED',
         total_amount: netTotal.toFixed(2),
         total_cost: netTotal.toFixed(2),
         notes: `بيع كاشير - ${cart.length} أصناف`
@@ -760,4 +760,5 @@ export default function POSPage() {
     </div>
   );
 }
+
 

@@ -151,7 +151,7 @@ export default function SalesPage() {
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
                       inv.status === 'RETURNED' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
                     }`}>
-                      {inv.status === 'RETURNED' ? 'مرتجع بالكامل ❌' : 'فاتورة محصلة ✅'}
+                      {inv.status === 'REFUNDED' || inv.status === 'RETURNED' || inv.status === 'CANCELLED' ? 'مرتجع بالكامل ❌' : 'فاتورة محصلة ✅'}
                     </span>
                   </td>
                   <td className="py-4 px-5">
@@ -221,3 +221,4 @@ export default function SalesPage() {
     </div>
   );
 }
+
