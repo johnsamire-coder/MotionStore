@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -45,8 +45,8 @@ export default function AppLayout() {
             چ
           </div>
           <div>
-            <h1 className="font-bold text-white tracking-wide text-sm">{t('nav.brand')}</h1>
-            <p className="text-[11px] text-slate-400 truncate max-w-[140px]">{tenant?.name || t('nav.brandSub')}</p>
+            <h1 className="font-bold text-white tracking-wide text-sm">Jacky Store - چاكي</h1>
+            <p className="text-[11px] text-slate-400 truncate max-w-[140px]">ستور مدينة نصر</p>
           </div>
         </div>
 
@@ -96,9 +96,9 @@ export default function AppLayout() {
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
           <div className="flex items-center gap-2 text-sm text-slate-500">
             <Store size={16} className="text-emerald-600" />
-            <span className="font-bold text-slate-800">{tenant?.name || t('nav.brand')}</span>
+            <span className="font-bold text-slate-800">Jacky Store - چاكي</span>
             <span>/</span>
-            <span className="text-slate-600 text-xs">{t('nav.workspace')}</span>
+            <span className="text-slate-600 text-xs">ستور مدينة نصر</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -123,5 +123,3 @@ export default function AppLayout() {
     </div>
   );
 }
-
-

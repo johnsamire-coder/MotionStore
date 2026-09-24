@@ -1,57 +1,154 @@
-﻿export const translations = {
+export const translations = {
   ar: {
-    common: { currency: "ط¬.ظ…", kg: "ظƒط¬ظ…", lot: "ط¨ط§ظ„ط©", pcs: "ظ‚ط·ط¹ط©", refresh: "طھط­ط¯ظٹط«", print: "ط·ط¨ط§ط¹ط©", close: "ط¥ط؛ظ„ط§ظ‚", clear: "طھظپط±ظٹط؛", save: "ط­ظپط¸", cancel: "ط¥ظ„ط؛ط§ط،", all: "ط§ظ„ظƒظ„", search: "ط¨ط­ط«..." },
-    nav: { brand: "ظ…ظˆط´ظ† ط³طھظˆط±", brandSub: "ط¥ط¯ط§ط±ط© ط§ظ„ط¨ط§ظ„ط§طھ ظˆط§ظ„ظ…ط®ط§ط²ظ†", dashboard: "ظ„ظˆط­ط© ط§ظ„ظ…ط¤ط´ط±ط§طھ", pos: "ظ†ظ‚ط·ط© ط§ظ„ط¨ظٹط¹ (ط§ظ„ظƒط§ط´ظٹط±)", sorting: "ط³ط§ط­ط© ظپط±ط² ط§ظ„ط¨ط§ظ„ط§طھ", inventory: "ط§ظ„ظ…ط®ط²ظˆظ† ط§ظ„طھط§ظ… ظˆط§ظ„ط­ط±ظƒط§طھ", purchasing: "ط§ظ„ظ…ط´طھط±ظٹط§طھ ظˆط§ظ„ط¨ط§ظ„ط§طھ ط§ظ„ط®ط§ظ…", shifts: "ط§ظ„ظˆط±ط¯ظٹط§طھ ظˆطھط³ظ„ظٹظ… ط§ظ„ط¹ظ‡ط¯ط©", treasury: "ط§ظ„ط®ط²ط§ط¦ظ† ظˆط§ظ„طµظ†ط§ط¯ظٹظ‚", reports: "ط§ظ„طھظ‚ط§ط±ظٹط± ظˆظ‚ط§ط¦ظ…ط© ط§ظ„ط¯ط®ظ„", settings: "ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ظ†ط¸ط§ظ… ظˆط§ظ„ط³ظٹط§ط³ط§طھ", logout: "طھط³ط¬ظٹظ„ ط§ظ„ط®ط±ظˆط¬", workspace: "ظ…ط³ط§ط­ط© ط§ظ„ط¹ظ…ظ„ ط§ظ„طھط´ط؛ظٹظ„ظٹط©", onlineEngine: "ط§ظ„ظ†ط¸ط§ظ… ظ…طھطµظ„ ظˆظٹط¹ظ…ظ„" },
-    login: {
-      title: "ظ†ط¸ط§ظ… ط¥ط¯ط§ط±ط© ط§ظ„ط´ط±ظƒط©",
-      subtitle: "ط£ط¯ط®ظ„ ط¨ظٹط§ظ†ط§طھ ط§ظ„ط§ط¹طھظ…ط§ط¯ ظ„ظ„ظˆطµظˆظ„ ظ„ظ…ط³ط§ط­ط© ط§ظ„ط¹ظ…ظ„",
-      username: "ط§ط³ظ… ط§ظ„ظ…ط³طھط®ط¯ظ…",
-      password: "ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±",
-      rememberMe: "طھط°ظƒط± ط¨ظٹط§ظ†ط§طھظٹ",
-      button: "طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„",
-      loading: "ط¬ط§ط±ظٹ ط§ظ„طھط­ظ‚ظ‚...",
-      userPlaceholder: "ط£ط¯ط®ظ„ ط§ط³ظ… ط§ظ„ظ…ط³طھط®ط¯ظ…",
-      passPlaceholder: "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢",
-      errorMsg: "ط§ط³ظ… ط§ظ„ظ…ط³طھط®ط¯ظ… ط£ظˆ ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط± ط؛ظٹط± طµط­ظٹط­ط©.",
-      footer: "ظ…ط´ط؛ظ„ ط¨ظˆط§ط³ط·ط© ظ…ط­ط±ظƒ",
-      langBtn: "English (EN)"
+    common: {
+      currency: 'ج.م',
+      kg: 'كجم',
+      lot: 'بالة',
+      loading: 'جاري التحميل...',
+      status: 'الحالة',
+      search: 'بحث...'
     },
-    dashboard: { title: "ظ„ظˆط­ط© ط§ظ„ظ…ط¤ط´ط±ط§طھ ط§ظ„طھظ†ظپظٹط°ظٹط©", subtitle: "ظ…طھط§ط¨ط¹ط© ط­ظٹط© ظ„ظ…ط±ط¯ظˆط¯ ط§ظ„ط¨ط§ظ„ط§طھ ظˆظ…ط¨ظٹط¹ط§طھ ط§ظ„ظƒط§ط´ظٹط± ظˆط¯ظپطھط± ط£ط³طھط§ط° ط§ظ„ظ…ط®ط²ظˆظ†", grossSales: "ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظ…ط¨ظٹط¹ط§طھ", grossProfit: "ظ…ط¬ظ…ظ„ ط§ظ„ط±ط¨ط­", activeInventory: "ط§ظ„ظ…ط®ط²ظˆظ† ط§ظ„ظ…طھط§ط­", processedBales: "ط§ظ„ط¨ط§ظ„ط§طھ ط§ظ„ظ…ظپط±ظˆط²ط©", margin: "ظ‡ط§ظ…ط´ ط§ظ„ط±ط¨ط­", reconciledShift: "ظˆط±ط¯ظٹط© ظƒط§ط´ظٹط± ظ…ط·ط§ط¨ظ‚ط©", ledgerVerified: "ط±طµظٹط¯ ظ…ظˆط«ظ‚ ط¨ط§ظ„ط¯ظپط§طھط±", weightReconciled: "ظ…ط·ط§ط¨ظ‚ط© ط§ظ„ط£ظˆط²ط§ظ† 100ظھ", statusTitle: "ط­ط§ظ„ط© ط§ظ„طھط´ط؛ظٹظ„ ظˆط§ظ„ط³ظٹط§ط³ط§طھ ط§ظ„ظ…ط¹طھظ…ط¯ط©", costingPolicy: "ط³ظٹط§ط³ط© طھظƒظ„ظپط© ط§ظ„ط¨ط§ظ„ط§طھ ط§ظ„ظ†ط´ط·ط©", accountingLedger: "ط¯ظپطھط± ط§ظ„ظ‚ظٹظˆط¯ ط§ظ„ظ…ط­ط§ط³ط¨ظٹط©", policyDesc: "ط§ظ„ط·ط±ظٹظ‚ط© B (ط§ظ„ظ…ط¹ط§ظ…ظ„ط§طھ) / ط§ظ„ط­ط§ظ„ط© 2 (ظپطµظ„ ط§ظ„ظ‡ط§ظ„ظƒ ظƒط®ط³ط§ط±ط©)", ledgerDesc: "ظ‚ظٹط¯ ظ…ط²ط¯ظˆط¬ ظ…طھظˆط§ط²ظ† ط¥ط¬ط¨ط§ط±ظٹط§ظ‹ (ظ…ط¯ظٹظ† = ط¯ط§ط¦ظ†)" },
-    pos: { title: "ظ†ظ‚ط·ط© ط§ظ„ط¨ظٹط¹ ط§ظ„ظƒط§ط´ظٹط±", terminal: "ظ…ط­ط·ط© ط§ظ„ط¨ظٹط¹", shift: "ط§ظ„ظˆط±ط¯ظٹط©", searchPlaceholder: "ط§ط¨ط­ط« ط¨ط§ط³ظ… ط§ظ„طµظ†ظپ ط£ظˆ ط§ظ„ظ‚ط³ظ…...", allGrades: "ط¬ظ…ظٹط¹ ط§ظ„ط¯ط±ط¬ط§طھ", newCollection: "âœ¨ ظƒط±ظٹظ…ط© / ط³ظˆط¨ط± ظ„ظˆظƒط³ (300 ط¬.ظ…)", middleGrade: "ًں“¦ ظˆط³ط· / ط¯ط±ط¬ط© ط«ط§ظ†ظٹط© (150 ط¬.ظ…)", clearanceGrade: "ًںڈ·ï¸ڈ طھطµظپظٹط§طھ / ط´ط¹ط¨ظٹ (50 ط¬.ظ…)", inStock: "ظƒط¬ظ… ظ…طھط§ط­ ط¨ط§ظ„ظ…ط®ط²ظ†", perKg: "ط¬.ظ…/ظƒط¬ظ…", cartTitle: "ط³ظ„ط© ط§ظ„ظ…ط¨ظٹط¹ط§طھ ط§ظ„ط­ط§ظ„ظٹط©", clearCart: "طھظپط±ظٹط؛ ط§ظ„ط³ظ„ط©", emptyCart: "ط§ظ„ط³ظ„ط© ظپط§ط±ط؛ط©. ط§ط®طھط± ط§ظ„ط£طµظ†ط§ظپ ظ…ظ† ط§ظ„ظ‚ط§ط¦ظ…ط©.", subtotal: "ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظپط±ط¹ظٹ:", discount: "ط§ظ„ط®طµظ…:", netTotal: "ط§ظ„طµط§ظپظٹ ط§ظ„ظ†ظ‡ط§ط¦ظٹ:", payButton: "ط§ط¯ظپط¹ ظˆط£ظƒظ…ظ„ ط§ظ„ط¨ظٹط¹", selectPayment: "ط§ط®طھط± ط·ط±ظٹظ‚ط© ط§ظ„ط³ط¯ط§ط¯", totalDue: "ط§ظ„ظ…ط¨ظ„ط؛ ط§ظ„ظ…ط·ظ„ظˆط¨ ط³ط¯ط§ط¯ظ‡", confirmReceipt: "طھط£ظƒظٹط¯ ط§ظ„طھط­طµظٹظ„ ظˆط¥طµط¯ط§ط± ط§ظ„ظپط§طھظˆط±ط©", submitting: "ط¬ط§ط±ظٹ طھط³ط¬ظٹظ„ ط§ظ„ظپط§طھظˆط±ط©...", openShiftRequired: "ظٹظ„ط²ظ… ظپطھط­ ظˆط±ط¯ظٹط© ظƒط§ط´ظٹط±", openShiftDesc: "ظ„ط§ طھظˆط¬ط¯ ظˆط±ط¯ظٹط© ظ…ظپطھظˆط­ط© ط¹ظ„ظ‰ ظ‡ط°ط§ ط§ظ„ط¬ظ‡ط§ط². ط£ط¯ط®ظ„ ط±طµظٹط¯ ط§ظ„ط§ظپطھطھط§ط­ ظ„ط¨ط¯ط، ط§ظ„ط¨ظٹط¹.", openingFloat: "ط±طµظٹط¯ ظ†ظ‚ط¯ظٹط© ط§ظ„ط§ظپطھطھط§ط­ (ط¬.ظ…)", openShiftBtn: "ظپطھط­ ظˆط±ط¯ظٹط© ط§ظ„ط®ط²ظٹظ†ط©", receiptTitle: "طھظ…طھ ط¹ظ…ظ„ظٹط© ط§ظ„ط¨ظٹط¹ ط¨ظ†ط¬ط§ط­!", printReceipt: "ط·ط¨ط§ط¹ط© ط§ظ„ظپط§طھظˆط±ط© (80mm)", newSale: "ظپط§طھظˆط±ط© ط¬ط¯ظٹط¯ط©", noStock: "ظ„ط§ طھظˆط¬ط¯ ط£طµظ†ط§ظپ ظ…طھط§ط­ط© طھط·ط§ط¨ظ‚ ط§ظ„ط¨ط­ط«." },
-    sorting: { title: "ط³ط§ط­ط© ظپط±ط² ط§ظ„ط¨ط§ظ„ط§طھ ظˆظ…ط·ط§ط¨ظ‚ط© ط§ظ„ط£ظˆط²ط§ظ†", subtitle: "ط·ط±ط­ ط£ظˆط²ط§ظ† ط§ظ„ط¨ط§ظ„ط© ط§ظ„ط®ط§ظ…طŒ ظ…ط·ط§ط¨ظ‚ط© ط§ظ„ظ‡ط§ظ„ظƒطŒ ظˆطھظˆط²ظٹط¹ ط§ظ„طھظƒط§ظ„ظٹظپ ط§ظ„ظ…ط§ظ„ظٹط© ط¨ظ€ 3 ظ†ظ‚ط±ط§طھ", pendingBales: "ط§ظ„ط¨ط§ظ„ط§طھ ط§ظ„ط®ط§ظ… ط¨ط§ظ†طھط¸ط§ط± ط§ظ„ظپط±ط²", startSorting: "ط¨ط¯ط، ظپط±ط² ط§ظ„ط¨ط§ظ„ط©", activeWorkspace: "ط³ط§ط­ط© ط§ظ„ظپط±ط² ط§ظ„ظ†ط´ط·ط©", targetWeight: "ظˆط²ظ† ط§ظ„ط¨ط§ظ„ط© ط§ظ„ط£طµظ„ظٹ", newCollection: "âœ¨ ظƒط±ظٹظ…ط© / ط³ظˆط¨ط± ظ„ظˆظƒط³", middle: "ًں“¦ ظˆط³ط· / ط¯ط±ط¬ط© ط«ط§ظ†ظٹط©", clearance: "ًںڈ·ï¸ڈ طھطµظپظٹط§طھ / ط´ط¹ط¨ظٹ", waste: "ًں—‘ï¸ڈ ظ‡ط§ظ„ظƒ ط§ظ„ظپط±ط² / طھط§ظ„ظپ", weightKg: "ط§ظ„ظˆط²ظ† (ظƒط¬ظ…)", countPcs: "ط¹ط¯ط¯ ط§ظ„ظ‚ط·ط¹", wasteClass: "طھطµظ†ظٹظپ ط§ظ„ظ‡ط§ظ„ظƒ", normalWaste: "ط·ط¨ظٹط¹ظٹ / ظ…طھظˆظ‚ط¹", abnormalWaste: "ط§ط³طھط«ظ†ط§ط¦ظٹ / ط²ط§ط¦ط¯", moistureAdj: "ظˆط²ظ† طھط³ظˆظٹط© ط§ظ„ط±ط·ظˆط¨ط© ظˆط§ظ„طھط¨ط®ط± (ظƒط¬ظ…)", adjReason: "ط³ط¨ط¨ ط§ظ„طھط³ظˆظٹط© ط§ظ„ط¥ظ„ط²ط§ظ…ظٹ", statusTitle: "ظ…ط¤ط´ط± ظ…ط·ط§ط¨ظ‚ط© ط§ظ„ط£ظˆط²ط§ظ†", balanced: "ظ…طھط·ط§ط¨ظ‚ 100%", unbalanced: "ط؛ظٹط± ظ…طھط·ط§ط¨ظ‚", step1: "1. ط­ظپط¸ ظˆظ…ط·ط§ط¨ظ‚ط© ط§ظ„ط£ظˆط²ط§ظ†", step2: "2. ط§ط­طھط³ط§ط¨ طھظˆط²ظٹط¹ ط§ظ„طھظƒظ„ظپط©", step3: "3. طھط±ط­ظٹظ„ ظ„ظ„ظ…ط®ط²ظˆظ† ط§ظ„طھط§ظ…", costingPreview: "ظ…ط¹ط§ظٹظ†ط© ط§ظ„طھظƒط§ظ„ظٹظپ ط§ظ„ظ…ظˆط²ط¹ط©", noPending: "ظ„ط§ طھظˆط¬ط¯ ط¨ط§ظ„ط§طھ ط®ط§ظ… ط¨ط§ظ†طھط¸ط§ط± ط§ظ„ظپط±ط²" },
-    inventory: { title: "ط§ظ„ظ…ط®ط²ظˆظ† ط§ظ„طھط§ظ… ظˆط¯ظپطھط± ط§ظ„ط­ط±ظƒط§طھ", subtitle: "ط§ظ„ط£ط±طµط¯ط© ط§ظ„ط­ط§ظ„ظٹط© ط¨ط§ظ„ظ…ط®ط§ط²ظ† ظˆط³ط¬ظ„ ط­ط±ظƒط§طھ ط§ظ„ط£ط³طھط§ط° ط§ظ„ظ…ط®ط²ظ†ظٹ ط؛ظٹط± ط§ظ„ظ‚ط§ط¨ظ„ ظ„ظ„طھط¹ط¯ظٹظ„", stockBalances: "ط£ط±طµط¯ط© ط§ظ„ظ…ط®ط²ظˆظ†", auditLedger: "ط¯ظپطھط± ط£ط³طھط§ط° ط§ظ„ط­ط±ظƒط§طھ", totalStock: "ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظ…ط®ط²ظˆظ† ط§ظ„ظ…طھط§ط­", totalValuation: "ط§ظ„طھظ‚ظٹظٹظ… ط§ظ„ظ…ط§ظ„ظٹ ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ", allWarehouses: "ط¬ظ…ظٹط¹ ط§ظ„ظ…ط®ط§ط²ظ†", allGrades: "ط¬ظ…ظٹط¹ ط§ظ„ط¯ط±ط¬ط§طھ", searchPlaceholderBalances: "ط§ط¨ط­ط« ط¨ط§ط³ظ… ط§ظ„طµظ†ظپ...", searchPlaceholderLedger: "ط§ط¨ط­ط« ط¨ط±ظ‚ظ… ط§ظ„ظ…ط³طھظ†ط¯ ط£ظˆ ط§ظ„ظ…ظ„ط§ط­ط¸ط§طھ...", costBasisSub: "ط¹ظ„ظ‰ ط£ط³ط§ط³ ط§ظ„طھظƒظ„ظپط© ط§ظ„ظ…ظˆط²ط¹ط©", acrossWhSub: "ط¹ط¨ط± ط¬ظ…ظٹط¹ ط§ظ„ظ…ط®ط§ط²ظ† ط§ظ„ظپط¹ط§ظ„ط©", avgCostSub: "ظ…طھظˆط³ط· ط§ظ„طھظƒظ„ظپط©:", midAndClear: "ظˆط³ط· ظˆطھطµظپظٹط§طھ", midLabel: "ظˆط³ط·", clearLabel: "طھطµظپظٹط§طھ", colProduct: "ط§ظ„طµظ†ظپ ظˆط§ظ„ط¯ط±ط¬ط©", colWarehouse: "ط§ظ„ظ…ط®ط²ظ†", colWeight: "ط§ظ„ظˆط²ظ† ط§ظ„ظ…طھط§ط­", colPieces: "ط¹ط¯ط¯ ط§ظ„ظ‚ط·ط¹", colCost: "طھظƒظ„ظپط© ط§ظ„ظƒظٹظ„ظˆ (COGS)", colTotal: "ط§ظ„ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظ…ط§ظ„ظٹ", colDate: "ط§ظ„طھط§ط±ظٹط® ظˆط§ظ„ظ†ظˆط¹", colDoc: "ط§ظ„ظ…ط³طھظ†ط¯ ط§ظ„ظ…طµط¯ط±ظٹ", colChange: "ط§ظ„طھط؛ظٹظٹط± ظپظٹ ط§ظ„ظˆط²ظ†", colRunning: "ط§ظ„ط±طµظٹط¯ ط§ظ„طھط±ط§ظƒظ…ظٹ", noStockFound: "ظ„ط§ طھظˆط¬ط¯ ط¹ظ†ط§طµط± ظ…ط®ط²ظˆظ† طھط·ط§ط¨ظ‚ ط®ظٹط§ط±ط§طھ ط§ظ„ط¨ط­ط«.", noLedgerFound: "ظ„ط§ طھظˆط¬ط¯ ط­ط±ظƒط§طھ ظ…ط®ط²ظ†ظٹط© ظ…ط³ط¬ظ„ط© ط¨ط§ظ„ظ…ط­ط±ظƒ.", gradeNew: "âœ¨ ظƒط±ظٹظ…ط© / ط³ظˆط¨ط± ظ„ظˆظƒط³", gradeMid: "ًں“¦ ظˆط³ط· / ط¯ط±ط¬ط© ط«ط§ظ†ظٹط©", gradeClr: "ًںڈ·ï¸ڈ طھطµظپظٹط§طھ / ط´ط¹ط¨ظٹ", txnSortIn: "ط¥ط¯ط®ط§ظ„ ظپط±ط²", txnSale: "ط¨ظٹط¹ ظƒط§ط´ظٹط±", txnReturnIn: "ظ…ط±طھط¬ط¹ ظ…ط¨ظٹط¹ط§طھ", txnTrfOut: "طھط­ظˆظٹظ„ طµط§ط¯ط±", txnTrfIn: "طھط­ظˆظٹظ„ ظˆط§ط±ط¯" },
-    purchasing: { title: "ط§ظ„ظ…ط´طھط±ظٹط§طھ ظˆط´ط­ظ†ط§طھ ط§ظ„ط¨ط§ظ„ط§طھ ط§ظ„ط®ط§ظ…", subtitle: "طھط³ط¬ظٹظ„ ظپظˆط§طھظٹط± ط§ظ„ط´ط±ط§ط، ط¨ط£ظˆط²ط§ظ† ط§ظ„ط¬ط±ط§ظ…ط§طھطŒ طھط­ظ…ظٹظ„ ظ…طµط§ط±ظٹظپ ط§ظ„ط´ط­ظ†طŒ ظˆط¯ظ„ظٹظ„ ط§ظ„ظ…ظˆط±ط¯ظٹظ†", newSupplier: "ظ…ظˆط±ط¯ ط¬ط¯ظٹط¯", newInvoice: "ظپط§طھظˆط±ط© ط´ط±ط§ط، ط¨ط§ظ„ط©", totalProcurement: "ط¥ط¬ظ…ط§ظ„ظٹ ط§ظ„ظ…ط´طھط±ظٹط§طھ", registeredSuppliers: "ط§ظ„ظ…ظˆط±ط¯ظٹظ† ط§ظ„ظ…ط³ط¬ظ„ظٹظ†", colInvNumber: "ط±ظ‚ظ… ط§ظ„ظپط§طھظˆط±ط© ظˆط§ظ„طھط§ط±ظٹط®", colSupplier: "ط§ظ„ظ…ظˆط±ط¯", colHub: "ظ…ط®ط²ظ† ط§ظ„ط§ط³طھظ„ط§ظ…", colFreight: "ظ…طµط§ط±ظٹظپ ط§ظ„ط´ط­ظ†", colTotalCost: "ط§ظ„طھظƒظ„ظپط© ط§ظ„ظƒظ„ظٹط©", modalInvTitle: "ظپط§طھظˆط±ط© ط´ط±ط§ط، ط¨ط§ظ„ط© ط®ط§ظ… ط¬ط¯ظٹط¯ط©", modalSupTitle: "ط¥ط¶ط§ظپط© ظ…ظˆط±ط¯ ط¬ط¯ظٹط¯" },
-    shifts: { title: "ط§ظ„ظˆط±ط¯ظٹط§طھ ظˆطھط³ظ„ظٹظ… ط§ظ„ط¹ظ‡ط¯ ط§ظ„ظ†ظ‚ط¯ظٹط©", subtitle: "ظ…طھط§ط¨ط¹ط© ط§ظ„ط®ط²ظٹظ†ط© ط§ظ„ظپط±ط¹ظٹط©طŒ ظ…ط·ط§ط¨ظ‚ط© ط¹ط¯ ط§ظ„ظ†ظ‚ط¯ظٹط©طŒ ظˆط§ط­طھط³ط§ط¨ ط§ظ„ط¹ط¬ط² ظˆط§ظ„ط²ظٹط§ط¯ط©", closeShift: "ط¥ط؛ظ„ط§ظ‚ ظˆظ…ط·ط§ط¨ظ‚ط© ط§ظ„ظˆط±ط¯ظٹط©", activeBanner: "ظˆط±ط¯ظٹط© ط§ظ„ظƒط§ط´ظٹط± ط§ظ„ظ†ط´ط·ط©", openingFloat: "ط±طµظٹط¯ ط§ظ„ط§ظپطھطھط§ط­", cashSales: "ظ…ط¨ظٹط¹ط§طھ ط§ظ„ظ†ظ‚ط¯ظٹط©", expectedCash: "ط§ظ„ظ†ظ‚ط¯ظٹط© ط§ظ„ظ…طھظˆظ‚ط¹ط© ط¨ط§ظ„ط¯ط±ط¬", shiftRecords: "ط³ط¬ظ„ ط§ظ„ظˆط±ط¯ظٹط§طھ ظˆط§ظ„ظ…ط·ط§ط¨ظ‚ط§طھ", colCode: "ط±ظ‚ظ… ط§ظ„ظˆط±ط¯ظٹط© ظˆط§ظ„طھط§ط±ظٹط®", colCashier: "ط§ظ„ظƒط§ط´ظٹط±", colActual: "ط§ظ„ظ†ظ‚ط¯ظٹط© ط§ظ„ظپط¹ظ„ظٹط©", colDiff: "ط§ظ„ظپط§ط±ظ‚ (ط¹ط¬ط²/ط²ظٹط§ط¯ط©)", discrepancyShortage: "ط¹ط¬ط² ظپظٹ ط§ظ„ط®ط²ظٹظ†ط©", discrepancySurplus: "ط²ظٹط§ط¯ط© ظپظٹ ط§ظ„ط®ط²ظٹظ†ط©", discrepancyExact: "ظ…ط·ط§ط¨ظ‚ طھظ…ط§ظ…ط§ظ‹" },
-    treasury: { title: "ط§ظ„ط®ط²ط§ط¦ظ† ط§ظ„ط±ط¦ظٹط³ظٹط© ظˆط§ظ„طµظ†ط§ط¯ظٹظ‚ ظˆط§ظ„ط³ظٹظˆظ„ط©", subtitle: "ط£ط±طµط¯ط© ط§ظ„ط®ط²ط§ط¦ظ†طŒ ط§ظ„طھط­ظˆظٹظ„ط§طھ ط§ظ„ظ†ظ‚ط¯ظٹط© ط¨ظٹظ† ط§ظ„طµظ†ط§ط¯ظٹظ‚طŒ ظˆط¯ظپطھط± ط­ط±ظƒط§طھ ط§ظ„ط®ط²ظٹظ†ط©", transferBtn: "طھط­ظˆظٹظ„ ظ†ظ‚ط¯ظٹ ط¨ظٹظ† ط§ظ„ط®ط²ط§ط¦ظ†", currentBalance: "ط§ظ„ط±طµظٹط¯ ط§ظ„ط­ط§ظ„ظٹ:", ledgerHeader: "ط¯ظپطھط± ط­ط±ظƒط§طھ ط§ظ„ط®ط²ظٹظ†ط© ط§ظ„ظ…ط§ظ„ظٹ", colVault: "ط§ظ„ط®ط²ظٹظ†ط© / ط§ظ„طµظ†ط¯ظˆظ‚", colAmount: "ط§ظ„ظ…ط¨ظ„ط؛ (ط¬.ظ…)", colRunning: "ط§ظ„ط±طµظٹط¯ ط§ظ„طھط±ط§ظƒظ…ظٹ", modalTransferTitle: "طھط­ظˆظٹظ„ ظ†ظ‚ط¯ظٹ ط¯ط§ط®ظ„ظٹ ط¨ظٹظ† ط§ظ„ط®ط²ط§ط¦ظ†" },
-    reports: { title: "ط§ظ„طھظ‚ط§ط±ظٹط± ط§ظ„طھظ†ظپظٹط°ظٹط© ظˆظ‚ط§ط¦ظ…ط© ط§ظ„ط¯ط®ظ„", subtitle: "ظ‚ط§ط¦ظ…ط© ط§ظ„ط¯ط®ظ„ P&LطŒ ظ…طµظپظˆظپط© ط±ط¨ط­ظٹط© ط§ظ„ط¨ط§ظ„ط§طھطŒ ظˆطھظˆط²ط¹ ظ‚ظٹظ… ط§ظ„ظ…ط®ط²ظˆظ†", pnlTitle: "ظ‚ط§ط¦ظ…ط© ط§ظ„ط¯ط®ظ„ ط§ظ„ظ…ط§ظ„ظٹ ط§ظ„ظ…ط¹طھظ…ط¯ط© (P&L)", baleYieldTitle: "ظ…طµظپظˆظپط© ط±ط¨ط­ظٹط© ظˆظ…ط±ط¯ظˆط¯ ط§ظ„ط¨ط§ظ„ط§طھ ط§ظ„ط®ط§ظ…", revenue: "ط¥ط¬ظ…ط§ظ„ظٹ ط¥ظٹط±ط§ط¯ط§طھ ط§ظ„ظ…ط¨ظٹط¹ط§طھ", cogs: "(-) طھظƒظ„ظپط© ط§ظ„ط¨ط¶ط§ط¹ط© ط§ظ„ظ…ط¨ط§ط¹ط© (COGS)", grossProfit: "(=) ظ…ط¬ظ…ظ„ ط§ظ„ط±ط¨ط­", wasteLoss: "(-) ط®ط³ط§ط¦ط± ظ‡ط§ظ„ظƒ ط§ظ„ظپط±ط² ط§ظ„ظ…ط³طھظ‚ظ„ط©", netProfit: "(=) طµط§ظپظٹ ط§ظ„ط±ط¨ط­ ط§ظ„طھط´ط؛ظٹظ„ظٹ" },
-    settings: { title: "ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„ظ†ط¸ط§ظ… ظˆط§ظ„ط³ظٹط§ط³ط§طھ ط§ظ„طھط´ط؛ظٹظ„ظٹط©", subtitle: "طھط®طµظٹطµ ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ظ†ط´ط£ط©طŒ ط³ظٹط§ط³ط§طھ طھط³ط¹ظٹط± ط§ظ„ط¨ط§ظ„ط§طھطŒ ط§ظ„ط·ط§ط¨ط¹ط§طھ ط§ظ„ط­ط±ط§ط±ظٹط©طŒ ظˆط§ظ„ط®طµظˆظ…ط§طھ", tabCompany: "ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ظ†ط´ط£ط© ظˆط§ظ„ظپط±ط¹", tabCosting: "ط³ظٹط§ط³ط© طھظƒظ„ظپط© ط§ظ„ط¨ط§ظ„ط§طھ", tabPrinting: "ط§ظ„ط·ط§ط¨ط¹ط§طھ ظˆظپط§طھظˆط±ط© ط§ظ„ظƒط§ط´ظٹط±", tabSecurity: "ط§ظ„ط®طµظˆظ…ط§طھ ظˆط§ظ„طµظ„ط§ط­ظٹط§طھ", tabUsers: "ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ† ظˆط§ظ„ط£ط¯ظˆط§ط±", saveBtn: "ط­ظپط¸ ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ ظˆط§ظ„ط³ظٹط§ط³ط§طھ", savedAlert: "طھظ… ط­ظپط¸ ظˆطھظپط¹ظٹظ„ ط§ظ„ط¥ط¹ط¯ط§ط¯ط§طھ ط¨ظ†ط¬ط§ط­!" }
+    nav: {
+      brand: 'Jacky Store - چاكي',
+      brandSub: 'ستور مدينة نصر',
+      workspace: 'مساحة العمل التشغيلية',
+      dashboard: 'لوحة المؤشرات',
+      pos: 'نقطة البيع (الكاشير)',
+      sorting: 'ساحة فرز البالات',
+      inventory: 'المخزون التام والحركات',
+      purchasing: 'المشتريات والبالات الخام',
+      shifts: 'الورديات وتسليم العهدة',
+      treasury: 'الخزائن والصناديق',
+      reports: 'التقارير وقائمة الدخل',
+      settings: 'إعدادات النظام والسياسات',
+      onlineEngine: 'النظام متصل ويعمل',
+      logout: 'تسجيل الخروج'
+    },
+    dashboard: {
+      title: 'لوحة المؤشرات والتحليلات',
+      subtitle: 'متابعة حية لجميع المبيعات والأرباح والمخزون وحركة البالات',
+      grossSales: 'إجمالي المبيعات الصافية',
+      reconciledShift: 'مبيعات حية ومطابقة',
+      grossProfit: 'مجمل الأرباح',
+      margin: 'هامش الربح',
+      activeInventory: 'المخزون التام المتاح',
+      ledgerVerified: 'موثق بالدفتر المحاسبي',
+      processedBales: 'البالات المفرزة',
+      weightReconciled: 'مطابق الأوزان بالفرز',
+      statusTitle: 'حالة محرك التكلفة ودفتر الأستاذ',
+      costingPolicy: 'سياسة توزيع التكلفة الفعالة',
+      policyDesc: 'المعاملات (Method B)',
+      accountingLedger: 'دفتر الأستاذ المحاسبي',
+      ledgerDesc: 'القيد المزدوج نشط'
+    },
+    purchasing: {
+      title: 'المشتريات وشحنات البالات الخام',
+      subtitle: 'تسجيل فواتير الشراء بأوزان الجرامات تحميل مصاريف الشحن ودليل الموردين',
+      newSupplier: 'مورد جديد',
+      newInvoice: 'فاتورة شراء بالة',
+      totalProcurement: 'إجمالي المشتريات',
+      registeredSuppliers: 'الموردين المسجلين',
+      colInvNumber: 'رقم الفاتورة والتاريخ',
+      colSupplier: 'المورد',
+      colHub: 'مخزن الاستلام',
+      colFreight: 'مصاريف الشحن',
+      colTotalCost: 'التكلفة الكلية',
+      modalInvTitle: 'فاتورة شراء بالة خام جديدة'
+    },
+    sorting: {
+      title: 'ساحة فرز البالات ومطابقة الأوزان',
+      subtitle: 'تفكيك البالات الخام وتوزيع أوزانها على درجات الفرز ومطابقة الهالك'
+    },
+    inventory: {
+      title: 'المخزون التام ودفتر الحركات',
+      subtitle: 'الأرصدة الحالية بالمخازن وسجل حركات الأستاذ المخزني غير القابل للتعديل',
+      totalWeight: 'إجمالي الوزن المتاح',
+      totalPieces: 'إجمالي القطع المتاحة',
+      totalValuation: 'التقييم المالي الإجمالي'
+    },
+    shifts: {
+      title: 'الورديات وتسليم العهد النقدية',
+      subtitle: 'متابعة الخزينة الفرعية مطابقة عد النقدية واحتساب العجز والزيادة'
+    },
+    settings: {
+      title: 'إعدادات النظام والسياسات التشغيلية',
+      subtitle: 'تخصيص بيانات المنشأة سياسات تسعير البالات الطابعات الحرارية والخصومات'
+    }
   },
   en: {
-    common: { currency: "EGP", kg: "KG", lot: "Lot", pcs: "pc", refresh: "Refresh", print: "Print", close: "Close", clear: "Clear", save: "Save", cancel: "Cancel", all: "All", search: "Search..." },
-    nav: { brand: "MOTION STORE", brandSub: "Thrift & Bale Enterprise OS", dashboard: "Dashboard", pos: "Point of Sale (POS)", sorting: "Bale Sorting Hub", inventory: "Finished Inventory", purchasing: "Purchasing & Bales", shifts: "Shifts & Registers", treasury: "Treasuries & Vaults", reports: "Executive Reports & P&L", settings: "System Settings & Policies", logout: "Logout", workspace: "Enterprise Workspace", onlineEngine: "Online Core Engine" },
-    login: {
-      title: "Company Workspace",
-      subtitle: "Enter your credentials to access the system",
-      username: "Username",
-      password: "Password",
-      rememberMe: "Remember Me",
-      button: "Sign In to Workspace",
-      loading: "Authenticating...",
-      userPlaceholder: "Enter username",
-      passPlaceholder: "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢",
-      errorMsg: "Invalid username or password.",
-      footer: "Powered by",
-      langBtn: "ط§ظ„ط¹ط±ط¨ظٹط© (AR)"
+    common: {
+      currency: 'EGP',
+      kg: 'KG',
+      lot: 'Lot',
+      loading: 'Loading...',
+      status: 'Status',
+      search: 'Search...'
     },
-    dashboard: { title: "Executive Dashboard", subtitle: "Real-time Bale Yield, POS Sales, and Inventory Ledger Metrics", grossSales: "Gross Sales", grossProfit: "Gross Profit", activeInventory: "Active Inventory", processedBales: "Processed Bales", margin: "Margin", reconciledShift: "Reconciled POS Shift", ledgerVerified: "Ledger-Verified Balance", weightReconciled: "Weight Reconciled 100%", statusTitle: "Core Operating Status", costingPolicy: "Configurable Costing Policy", accountingLedger: "Accounting Ledger", policyDesc: "Method B (Coefficients) / Case 2 (Separate Waste Loss)", ledgerDesc: "Double-Entry Balanced (Dr = Cr)" },
-    pos: { title: "POS Cashier Terminal", terminal: "Terminal", shift: "Shift", searchPlaceholder: "Search garments or categories...", allGrades: "All Grades", newCollection: "âœ¨ New Collection (300 EGP)", middleGrade: "ًں“¦ Middle Grade (150 EGP)", clearanceGrade: "ًںڈ·ï¸ڈ Clearance (50 EGP)", inStock: "KG in stock", perKg: "EGP/KG", cartTitle: "Current Sales Cart", clearCart: "Clear Cart", emptyCart: "Cart is empty. Select items from the catalog.", subtotal: "Subtotal:", discount: "Discount:", netTotal: "NET TOTAL:", payButton: "Pay & Complete Sale", selectPayment: "Select Payment Method", totalDue: "Total Amount Due", confirmReceipt: "Confirm Payment & Issue Invoice", submitting: "Recording Transaction...", openShiftRequired: "Open Shift Required", openShiftDesc: "No active shift on this terminal. Enter opening float cash to begin selling.", openingFloat: "Opening Float Cash (EGP)", openShiftBtn: "Open Register Shift", receiptTitle: "Sale Completed Successfully!", printReceipt: "Print Receipt (ESC/POS)", newSale: "New Sale", noStock: "No active stock available matching criteria." },
-    sorting: { title: "Bale Sorting & Weight Reconciliation", subtitle: "Dual-unit Physical Weight Matching, Costing Apportionment, and Finished Stock Ledger Posting", pendingBales: "Pending Raw Bales in Storage", startSorting: "Start Sorting Bale", activeWorkspace: "Active Workspace", targetWeight: "Target Bale Weight", newCollection: "âœ¨ New Collection", middle: "ًں“¦ Middle Grade", clearance: "ًںڈ·ï¸ڈ Clearance / Low", waste: "ًں—‘ï¸ڈ Waste / Damages", weightKg: "Weight (KG)", countPcs: "Piece Count", wasteClass: "Waste Classification", normalWaste: "Normal / Expected", abnormalWaste: "Abnormal / Excess", moistureAdj: "Humidity / Moisture Adjustment (KG)", adjReason: "Mandatory Adjustment Reason", statusTitle: "Weight Reconciliation Status", balanced: "BALANCED 100%", unbalanced: "UNBALANCED", step1: "1. Reconcile & Save Weights", step2: "2. Run Costing Allocation", step3: "3. Post Finished Stock Ledger", costingPreview: "Allocated Costs Preview", noPending: "No pending bales in raw storage" },
-    inventory: { title: "Finished Inventory & Immutable Ledger", subtitle: "Live Multi-Warehouse Balances, Dual-Unit Tracking, and Immutable Audit Journal", stockBalances: "Stock Balances", auditLedger: "Audit Ledger Log", totalStock: "Total Available Stock", totalValuation: "Total Valuation", allWarehouses: "All Warehouses", allGrades: "All Grades", searchPlaceholderBalances: "Search product name...", searchPlaceholderLedger: "Search document ref or notes...", costBasisSub: "Cost Basis Apportioned", acrossWhSub: "Across all active locations", avgCostSub: "Avg Cost:", midAndClear: "Middle & Clearance", midLabel: "Mid", clearLabel: "Clear", colProduct: "Product & Grade", colWarehouse: "Warehouse", colWeight: "Available Weight", colPieces: "Piece Count", colCost: "Unit Cost (COGS)", colTotal: "Total Valuation", colDate: "Date & Type", colDoc: "Source Document", colChange: "Weight Change", colRunning: "Running Balance", noStockFound: "No stock items found matching your criteria.", noLedgerFound: "No ledger transactions recorded.", gradeNew: "âœ¨ New Collection", gradeMid: "ًں“¦ Middle Grade", gradeClr: "ًںڈ·ï¸ڈ Clearance", txnSortIn: "SORT IN", txnSale: "POS SALE", txnReturnIn: "RETURN IN", txnTrfOut: "TRF OUT", txnTrfIn: "TRF IN" },
-    purchasing: { title: "Purchasing & Raw Bale Procurement", subtitle: "Raw Bale Intake, Precision Weight Invoicing, Freight Absorption, and Supplier Registry", newSupplier: "New Supplier", newInvoice: "New Bale Purchase", totalProcurement: "Total Procurement Cost", registeredSuppliers: "Registered Suppliers", colInvNumber: "Invoice # & Date", colSupplier: "Supplier", colHub: "Receiving Hub", colFreight: "Freight Costs", colTotalCost: "Total Purchase Cost", modalInvTitle: "New Raw Bale Purchase Invoice", modalSupTitle: "Add New Supplier" },
-    shifts: { title: "POS Shifts & Register Handovers", subtitle: "Cashier Float Management, Drawer Count Reconciliation, and Variance Audit", closeShift: "Close & Reconcile Active Shift", activeBanner: "Active Register Shift", openingFloat: "Opening Float", cashSales: "Cash Sales", expectedCash: "Expected Cash", shiftRecords: "Shift Records & Audits", colCode: "Shift # & Date", colCashier: "Cashier", colActual: "Actual Count", colDiff: "Discrepancy", discrepancyShortage: "Cash Shortage", discrepancySurplus: "Cash Surplus", discrepancyExact: "Exact Match" },
-    treasury: { title: "Treasury Vaults & Liquidity Management", subtitle: "Multi-Drawer Cash Balancing, Safe Vault Transfers, and Financial Ledger Audit", transferBtn: "Inter-Treasury Transfer", currentBalance: "Current Balance:", ledgerHeader: "Treasury Transactions Ledger", colVault: "Treasury Vault", colAmount: "Amount (EGP)", colRunning: "Running Balance", modalTransferTitle: "Internal Treasury Transfer" },
-    reports: { title: "Executive Financial & Bale Analytics", subtitle: "Real-time Income Statement, Bale Yield Matrix, and Grade-based Stock Valuation", pnlTitle: "Standard Income Statement (P&L)", baleYieldTitle: "Bale Yield & Profitability Matrix", revenue: "Gross Sales Revenue", cogs: "(-) Cost of Goods Sold (COGS)", grossProfit: "(=) Gross Profit", wasteLoss: "(-) Sorting Waste Losses", netProfit: "(=) Net Operating Profit" },
-    settings: { title: "System Settings & Operational Policies", subtitle: "Configure Store Profile, Bale Costing Engines, Thermal Printers, and Security", tabCompany: "Store & Branch Profile", tabCosting: "Bale Costing Policy", tabPrinting: "Thermal Printers & Receipts", tabSecurity: "Discounts & Shift Rules", tabUsers: "Users & Roles Directory", saveBtn: "Save Settings & Policies", savedAlert: "Settings saved successfully!" }
+    nav: {
+      brand: 'Jacky Store - چاكي',
+      brandSub: 'Nasr City Store',
+      workspace: 'Workspace',
+      dashboard: 'Dashboard',
+      pos: 'POS Cashier',
+      sorting: 'Sorting Hub',
+      inventory: 'Finished Inventory',
+      purchasing: 'Purchasing',
+      shifts: 'Shifts & Cash',
+      treasury: 'Treasury',
+      reports: 'Executive Reports',
+      settings: 'Settings',
+      onlineEngine: 'System Online',
+      logout: 'Logout'
+    },
+    dashboard: {
+      title: 'Executive Dashboard',
+      subtitle: 'Real-time overview of sales, gross profit, inventory, and processed bales',
+      grossSales: 'Gross Revenue',
+      reconciledShift: 'Live reconciled sales',
+      grossProfit: 'Gross Profit',
+      margin: 'Profit Margin',
+      activeInventory: 'Finished Inventory',
+      ledgerVerified: 'Ledger Verified',
+      processedBales: 'Processed Bales',
+      weightReconciled: 'Weight Reconciled',
+      statusTitle: 'Costing Policy & Ledger Status',
+      costingPolicy: 'Active Costing Policy',
+      policyDesc: 'Weighted Coefficients (Method B)',
+      accountingLedger: 'Accounting Ledger',
+      ledgerDesc: 'Double-Entry Active'
+    },
+    purchasing: {
+      title: 'Raw Bales Procurement',
+      subtitle: 'Log purchase invoices, freight costs, and manage supplier profiles',
+      newSupplier: 'New Vendor',
+      newInvoice: 'New Bale Invoice',
+      totalProcurement: 'Total Procurement',
+      registeredSuppliers: 'Suppliers',
+      colInvNumber: 'Invoice # / Date',
+      colSupplier: 'Supplier',
+      colHub: 'Receiving Warehouse',
+      colFreight: 'Freight Cost',
+      colTotalCost: 'Total Cost',
+      modalInvTitle: 'New Raw Bale Purchase Invoice'
+    },
+    sorting: {
+      title: 'Bale Sorting & Weight Reconciliation',
+      subtitle: 'Unpack raw bales, reconcile weights across quality grades, and isolate waste'
+    },
+    inventory: {
+      title: 'Finished Inventory & Ledger',
+      subtitle: 'Current stock balances and immutable inventory ledger audit trail',
+      totalWeight: 'Total Weight Available',
+      totalPieces: 'Total Available Pieces',
+      totalValuation: 'Total Inventory Valuation'
+    },
+    shifts: {
+      title: 'Shifts & Treasury Reconciliation',
+      subtitle: 'Monitor cash drawer floats, count physical cash, and track variances'
+    },
+    settings: {
+      title: 'System Settings & Business Policies',
+      subtitle: 'Configure organization details, bale costing rules, printers, and permissions'
+    }
   }
 };
-
