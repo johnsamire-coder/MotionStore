@@ -42,7 +42,7 @@ export default function AppLayout() {
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col border-x border-slate-800">
         <div className="h-16 flex items-center gap-3 px-6 bg-slate-950 border-b border-slate-800">
           <div className="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-base">
-            {isRTL ? 'م' : 'M'}
+            چ
           </div>
           <div>
             <h1 className="font-bold text-white tracking-wide text-sm">{t('nav.brand')}</h1>
@@ -123,4 +123,5 @@ export default function AppLayout() {
     </div>
   );
 }
+
 

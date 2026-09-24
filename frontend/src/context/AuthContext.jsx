@@ -1,10 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+﻿import React, { createContext, useContext, useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  // 1. قراءة بيانات المستخدم فوراً عند فتح الصفحة لمنع الطرد
+  // 1. ظ‚ط±ط§ط،ط© ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ط³طھط®ط¯ظ… ظپظˆط±ط§ظ‹ ط¹ظ†ط¯ ظپطھط­ ط§ظ„طµظپط­ط© ظ„ظ…ظ†ط¹ ط§ظ„ط·ط±ط¯
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('user_data');
     if (savedUser) {
@@ -17,7 +17,7 @@ export const AuthProvider = ({ children }) => {
     return null;
   });
 
-  // 2. قراءة بيانات الشركة التابع لها المستخدم
+  // 2. ظ‚ط±ط§ط،ط© ط¨ظٹط§ظ†ط§طھ ط§ظ„ط´ط±ظƒط© ط§ظ„طھط§ط¨ط¹ ظ„ظ‡ط§ ط§ظ„ظ…ط³طھط®ط¯ظ…
   const [tenant, setTenant] = useState(() => {
     const savedUser = localStorage.getItem('user_data');
     if (savedUser) {
@@ -35,7 +35,7 @@ export const AuthProvider = ({ children }) => {
 
   const [loading, setLoading] = useState(false);
 
-  // 3. كود بسيط جداً للتأكد من وجود البيانات وتثبيتها
+  // 3. ظƒظˆط¯ ط¨ط³ظٹط· ط¬ط¯ط§ظ‹ ظ„ظ„طھط£ظƒط¯ ظ…ظ† ظˆط¬ظˆط¯ ط§ظ„ط¨ظٹط§ظ†ط§طھ ظˆطھط«ط¨ظٹطھظ‡ط§
   useEffect(() => {
     const token = localStorage.getItem('access_token');
     const savedUser = localStorage.getItem('user_data');
@@ -55,7 +55,7 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  // دالة تسجيل الدخول
+  // ط¯ط§ظ„ط© طھط³ط¬ظٹظ„ ط§ظ„ط¯ط®ظˆظ„
   const login = async (username, password) => {
     const res = await axiosClient.post('/auth/login/', { username, password });
     const { access, refresh, user: userData } = res.data;
@@ -67,14 +67,15 @@ export const AuthProvider = ({ children }) => {
     if (userData.tenant) {
       const tId = typeof userData.tenant === 'object' ? userData.tenant.id : userData.tenant;
       localStorage.setItem('tenant_id', tId);
-      setTenant(userData.tenant);
+      const tData = typeof userData.tenant === 'object' ? { ...userData.tenant, name: 'Jacky Store - چاكي' } : userData.tenant;
+      setTenant(tData);
     }
 
     setUser(userData);
     return userData;
   };
 
-  // دالة تسجيل الخروج
+  // ط¯ط§ظ„ط© طھط³ط¬ظٹظ„ ط§ظ„ط®ط±ظˆط¬
   const logout = () => {
     localStorage.clear();
     setUser(null);
@@ -90,3 +91,4 @@ export const AuthProvider = ({ children }) => {
 };
 
 export const useAuth = () => useContext(AuthContext);
+
