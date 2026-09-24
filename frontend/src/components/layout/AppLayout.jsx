@@ -25,6 +25,7 @@ export default function AppLayout() {
   const navigation = [
     { name: t('nav.dashboard'), to: '/', icon: BarChart3 },
     { name: t('nav.pos'), to: '/pos', icon: ShoppingCart },
+    { name: 'المبيعات والمرتجعات', to: '/sales', icon: FileText },
     { name: t('nav.sorting'), to: '/sorting', icon: Layers },
     { name: t('nav.inventory'), to: '/inventory', icon: Package },
     { name: t('nav.purchasing'), to: '/purchasing', icon: Truck },
@@ -121,3 +122,4 @@ export default function AppLayout() {
     </div>
   );
 }
+

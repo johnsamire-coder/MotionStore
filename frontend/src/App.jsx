@@ -13,6 +13,7 @@ import ShiftsPage from './pages/ShiftsPage';
 import TreasuryPage from './pages/TreasuryPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import SalesPage from './pages/SalesPage';
 import PricingPage from './pages/PricingPage';
 
 const ProtectedRoute = ({ children }) => {
@@ -30,7 +31,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route index element={<DashboardPage />} />
-              <Route path="pos" element={<POSPage />} />
+              <Route path="pos" element={<POSPage />} />`n              <Route path="sales" element={<SalesPage />} />
               <Route path="sorting" element={<SortingPage />} />
               <Route path="inventory" element={<InventoryPage />} />
               <Route path="purchasing" element={<PurchasingPage />} />
@@ -45,4 +46,5 @@ export default function App() {
     </LanguageProvider>
   );
 }
+
 
