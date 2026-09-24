@@ -37,9 +37,9 @@ export default function SortingPage() {
 
   // Shared Categories & Brands List
   const [categoriesList, setCategoriesList] = useState([
+    'بنطلون',
     'بلوزة',
     'قميص',
-    'بنطلون',
     'فستان',
     'جاكيت ومعاطف',
     'تيشيرت',
@@ -62,11 +62,22 @@ export default function SortingPage() {
     'براندات متنوعة'
   ]);
 
-  // Detailed Grade Inputs
-  const [gradeNew, setGradeNew] = useState({ weight: '0.000', pieces: '', category: 'بلوزة', brand: 'Zara' });
-  const [gradeMid, setGradeMid] = useState({ weight: '0.000', pieces: '', category: 'قميص', brand: 'H&M' });
-  const [gradeClr, setGradeClr] = useState({ weight: '0.000', pieces: '', category: 'بنطلون', brand: 'براندات متنوعة' });
-  const [gradeWaste, setGradeWaste] = useState({ weight: '0.000', notes: 'هالك ومقاطع فرز' });
+  // Dynamic Multi-Line Grade Inputs (إمكانية إضافة أسطر متعددة لكل درجة)
+  const [creamLines, setCreamLines] = useState([
+    { id: 1, category: 'بنطلون', brand: 'Zara', weight: '15.000', pieces: '30' },
+    { id: 2, category: 'بلوزة', brand: 'H&M', weight: '10.000', pieces: '20' }
+  ]);
+
+  const [midLines, setMidLines] = useState([
+    { id: 1, category: 'قميص', brand: 'براندات متنوعة', weight: '15.000', pieces: '25' }
+  ]);
+
+  const [clrLines, setClrLines] = useState([
+    { id: 1, category: 'تصفيات وتدشين', brand: 'بدون براند', weight: '4.000', pieces: '10' }
+  ]);
+
+  const [wasteWeight, setWasteWeight] = useState('1.000');
+  const [wasteNotes, setWasteNotes] = useState('قطع تالفة ومقاطع فرز');
 
   // Reconciliation & Costing Status
   const [reconciled, setReconciled] = useState(false);
@@ -102,15 +113,38 @@ export default function SortingPage() {
     setLoading(false);
   };
 
+  // Helper functions for dynamic lines
+  const addLine = (gradeType) => {
+    setReconciled(false);
+    const newId = Date.now();
+    const defaultObj = { id: newId, category: categoriesList[0] || 'بنطلون', brand: brandsList[0] || 'Zara', weight: '0.000', pieces: '' };
+    
+    if (gradeType === 'CREAM') setCreamLines(prev => [...prev, defaultObj]);
+    if (gradeType === 'MID') setMidLines(prev => [...prev, defaultObj]);
+    if (gradeType === 'CLR') setClrLines(prev => [...prev, defaultObj]);
+  };
+
+  const removeLine = (gradeType, id) => {
+    setReconciled(false);
+    if (gradeType === 'CREAM' && creamLines.length > 1) setCreamLines(prev => prev.filter(item => item.id !== id));
+    if (gradeType === 'MID' && midLines.length > 1) setMidLines(prev => prev.filter(item => item.id !== id));
+    if (gradeType === 'CLR' && clrLines.length > 1) setClrLines(prev => prev.filter(item => item.id !== id));
+  };
+
+  const updateLine = (gradeType, id, field, value) => {
+    setReconciled(false);
+    const updater = (prev) => prev.map(item => item.id === id ? { ...item, [field]: value } : item);
+    
+    if (gradeType === 'CREAM') setCreamLines(updater);
+    if (gradeType === 'MID') setMidLines(updater);
+    if (gradeType === 'CLR') setClrLines(updater);
+  };
+
   const handleResetSelection = () => {
     setSelectedLot(null);
     setReconciled(false);
     setCostingCalculated(false);
     setCostResults(null);
-    setGradeNew({ weight: '0.000', pieces: '', category: categoriesList[0] || 'بلوزة', brand: brandsList[0] || 'Zara' });
-    setGradeMid({ weight: '0.000', pieces: '', category: categoriesList[1] || 'قميص', brand: brandsList[1] || 'H&M' });
-    setGradeClr({ weight: '0.000', pieces: '', category: categoriesList[2] || 'بنطلون', brand: 'براندات متنوعة' });
-    setGradeWaste({ weight: '0.000', notes: 'هالك ومقاطع فرز' });
   };
 
   const handleAddNewCategory = async (e) => {
@@ -123,7 +157,6 @@ export default function SortingPage() {
     } catch (e) { console.warn("Category saved locally"); }
 
     setCategoriesList(prev => [catName, ...prev]);
-    setGradeNew(prev => ({ ...prev, category: catName }));
     setNewCustomCategory('');
     setShowNewCategoryModal(false);
     alert(`تم إضافة الصنف الجديد [${catName}] بنجاح!`);
@@ -135,18 +168,22 @@ export default function SortingPage() {
     const brandName = newCustomBrand.trim();
 
     setBrandsList(prev => [brandName, ...prev]);
-    setGradeNew(prev => ({ ...prev, brand: brandName }));
     setNewCustomBrand('');
     setShowNewBrandModal(false);
     alert(`تم إضافة البراند الجديد [${brandName}] بنجاح!`);
   };
 
+  // أوزان الإجمالي لكل درجة
+  const totalCreamWeight = creamLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
+  const totalMidWeight = midLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
+  const totalClrWeight = clrLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
+  const wasteWeightNum = parseFloat(wasteWeight || 0);
+
   const originalWeight = parseFloat(selectedLot?.original_weight_kg || 0);
-  const sumSortedWeight = parseFloat(gradeNew.weight || 0) + parseFloat(gradeMid.weight || 0) + parseFloat(gradeClr.weight || 0) + parseFloat(gradeWaste.weight || 0);
+  const sumSortedWeight = totalCreamWeight + totalMidWeight + totalClrWeight + wasteWeightNum;
   const isWeightBalanced = Math.abs(originalWeight - sumSortedWeight) < 0.001 && originalWeight > 0;
 
   // نسبة الهالك الحالية
-  const wasteWeightNum = parseFloat(gradeWaste.weight || 0);
   const wastePercentage = originalWeight > 0 ? ((wasteWeightNum / originalWeight) * 100).toFixed(2) : '0.00';
 
   const handleReconcile = () => {
@@ -156,7 +193,7 @@ export default function SortingPage() {
       return;
     }
     setReconciled(true);
-    alert("✅ تم مطابقة الأوزان بنجاح 100%! جاهز لاحتساب توزيع التكلفة.");
+    alert("✅ تم مطابقة أوزان جميع الأصناف والدرجات بنجاح 100%! جاهز لاحتساب التكلفة.");
   };
 
   const handleCalculateCosting = () => {
@@ -166,11 +203,7 @@ export default function SortingPage() {
     }
 
     const totalPurchaseCost = parseFloat(selectedLot.purchase_cost || 0);
-    const wNew = parseFloat(gradeNew.weight || 0);
-    const wMid = parseFloat(gradeMid.weight || 0);
-    const wClr = parseFloat(gradeClr.weight || 0);
-
-    const weightedTotal = (wNew * 3.0) + (wMid * 1.5) + (wClr * 0.5);
+    const weightedTotal = (totalCreamWeight * 3.0) + (totalMidWeight * 1.5) + (totalClrWeight * 0.5);
 
     let costPerKgNew = 0, costPerKgMid = 0, costPerKgClr = 0;
 
@@ -183,16 +216,16 @@ export default function SortingPage() {
 
     setCostResults({
       newCostKg: costPerKgNew.toFixed(2),
-      newCostTotal: (costPerKgNew * wNew).toFixed(2),
+      newCostTotal: (costPerKgNew * totalCreamWeight).toFixed(2),
       midCostKg: costPerKgMid.toFixed(2),
-      midCostTotal: (costPerKgMid * wMid).toFixed(2),
+      midCostTotal: (costPerKgMid * totalMidWeight).toFixed(2),
       clrCostKg: costPerKgClr.toFixed(2),
-      clrCostTotal: (costPerKgClr * wClr).toFixed(2),
+      clrCostTotal: (costPerKgClr * totalClrWeight).toFixed(2),
       wasteLoss: (wasteWeightNum > 0) ? "1000.00" : "0.00"
     });
 
     setCostingCalculated(true);
-    alert("⚡ تم احتساب توزيع التكلفة العادل بنجاح بمحرك المعاملات (Weighted Coefficients)!");
+    alert("⚡ تم احتساب توزيع التكلفة العادل بنجاح لكل أصناف ودرجات الفرز!");
   };
 
   const handlePostToInventory = async () => {
@@ -208,7 +241,7 @@ export default function SortingPage() {
         status: 'POSTED'
       }).catch(() => console.log("Handled posting flow"));
 
-      alert(`🎉 تم ترحيل المنتجات المفروزة وتحديث كروت المخزون التام بنجاح!\n\nجاهزة الآن للبيع بنقطة البيع (POS).`);
+      alert(`🎉 تم ترحيل أسطر المنتجات المفروزة وتحديث كروت المخزون التام بنجاح!\n\nجاهزة الآن للبيع بنقطة البيع (POS).`);
       handleResetSelection();
       loadSortingData();
     } catch (err) {
@@ -293,7 +326,7 @@ export default function SortingPage() {
           </div>
         </div>
 
-        {/* Panel 2 & 3: Detailed Sorting Inputs */}
+        {/* Panel 2 & 3: Multi-Line Dynamic Sorting Inputs */}
         <div className="lg:col-span-2 space-y-6">
           
           {selectedLot ? (
@@ -322,13 +355,13 @@ export default function SortingPage() {
 
               {/* Top Quick Actions for Categories and Brands */}
               <div className="flex justify-between items-center p-3 bg-slate-100 rounded-xl border border-slate-200 text-xs">
-                <span className="font-bold text-slate-700">إضافة خيارات سريعة:</span>
+                <span className="font-bold text-slate-700">تعريف خيارات جديدة:</span>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowNewCategoryModal(true)}
                     className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
                   >
-                    <FolderPlus size={14} /> + إضافة صنف جديد (بلوزة/قميص...)
+                    <FolderPlus size={14} /> + إضافة صنف جديد (بنطلون/فستان...)
                   </button>
                   <button
                     onClick={() => setShowNewBrandModal(true)}
@@ -339,244 +372,290 @@ export default function SortingPage() {
                 </div>
               </div>
 
-              {/* 2. Detailed Inputs for Grades */}
-              <div className="space-y-4">
+              {/* Dynamic Grades Sections */}
+              <div className="space-y-6">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <Scale size={18} className="text-emerald-600" /> 2. تفاصيل أوزان وقطع ودرجات الفرز
+                  <Scale size={18} className="text-emerald-600" /> 2. إدخال أصناف وأوزان وقطع الفرز
                 </h3>
 
-                <div className="space-y-4 text-xs">
-                  
-                  {/* GRADE 1: NEW COLLECTION */}
-                  <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3">
-                    <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
-                      <span className="font-bold text-emerald-900 text-xs flex items-center gap-1.5">
-                        <Sparkles size={15} className="text-emerald-600" /> ✨ درجة أولى / كريمة (Super Lux)
-                      </span>
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">معامل × 3.0</span>
-                    </div>
+                {/* GRADE 1: CREAM (✨ الكريمة) - DYNAMIC MULTI-LINE */}
+                <div className="p-4 bg-emerald-50/40 rounded-2xl border border-emerald-200/80 space-y-3 text-xs">
+                  <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
+                    <span className="font-bold text-emerald-900 text-xs flex items-center gap-1.5">
+                      <Sparkles size={15} className="text-emerald-600" /> ✨ درجة أولى / كريمة (Super Lux) — إجمالي: {totalCreamWeight.toFixed(3)} كجم
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => addLine('CREAM')}
+                      className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
+                    >
+                      <Plus size={13} /> + إضافة صنف مفروز
+                    </button>
+                  </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">الوزن (كجم) *</label>
+                  {creamLines.map((line, index) => (
+                    <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-emerald-100">
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
+                        <select
+                          value={line.category}
+                          onChange={(e) => updateLine('CREAM', line.id, 'category', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        >
+                          {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">البراند *</label>
+                        <select
+                          value={line.brand}
+                          onChange={(e) => updateLine('CREAM', line.id, 'brand', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                        >
+                          {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
                         <input
                           type="number"
                           step="0.001"
                           required
-                          value={gradeNew.weight}
-                          onChange={(e) => { setGradeNew({...gradeNew, weight: e.target.value}); setReconciled(false); }}
-                          className="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+                          value={line.weight}
+                          onChange={(e) => updateLine('CREAM', line.id, 'weight', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">عدد القطع</label>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
                         <input
                           type="number"
-                          placeholder="مثال: 50 قطعة"
-                          value={gradeNew.pieces}
-                          onChange={(e) => setGradeNew({...gradeNew, pieces: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                          placeholder="مثال: 30"
+                          value={line.pieces}
+                          onChange={(e) => updateLine('CREAM', line.id, 'pieces', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (قائمة)</label>
-                        <select
-                          value={gradeNew.category}
-                          onChange={(e) => setGradeNew({...gradeNew, category: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
-                          {categoriesList.map((cat, idx) => (
-                            <option key={idx} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">البراند (قائمة)</label>
-                        <select
-                          value={gradeNew.brand}
-                          onChange={(e) => setGradeNew({...gradeNew, brand: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
-                          {brandsList.map((b, idx) => (
-                            <option key={idx} value={b}>{b}</option>
-                          ))}
-                        </select>
+                      <div className="md:col-span-1 flex justify-center pt-3">
+                        {creamLines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLine('CREAM', line.id)}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="حذف هذا السطر"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
+                  ))}
+                </div>
+
+                {/* GRADE 2: MIDDLE (📦 الوسط) - DYNAMIC MULTI-LINE */}
+                <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3 text-xs">
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
+                    <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                      <Package size={15} className="text-indigo-600" /> 📦 درجة ثانية / وسط (Middle Grade) — إجمالي: {totalMidWeight.toFixed(3)} كجم
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => addLine('MID')}
+                      className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
+                    >
+                      <Plus size={13} /> + إضافة صنف مفروز
+                    </button>
                   </div>
 
-                  {/* GRADE 2: MIDDLE GRADE */}
-                  <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                      <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
-                        <Package size={15} className="text-indigo-600" /> 📦 درجة ثانية / وسط (Middle Grade)
-                      </span>
-                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded">معامل × 1.5</span>
-                    </div>
+                  {midLines.map((line, index) => (
+                    <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
+                        <select
+                          value={line.category}
+                          onChange={(e) => updateLine('MID', line.id, 'category', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                        >
+                          {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                        </select>
+                      </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">الوزن (كجم) *</label>
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">البراند *</label>
+                        <select
+                          value={line.brand}
+                          onChange={(e) => updateLine('MID', line.id, 'brand', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
+                        >
+                          {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
                         <input
                           type="number"
                           step="0.001"
                           required
-                          value={gradeMid.weight}
-                          onChange={(e) => { setGradeMid({...gradeMid, weight: e.target.value}); setReconciled(false); }}
-                          className="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+                          value={line.weight}
+                          onChange={(e) => updateLine('MID', line.id, 'weight', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-indigo-500"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">عدد القطع</label>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
                         <input
                           type="number"
-                          placeholder="مثال: 40 قطعة"
-                          value={gradeMid.pieces}
-                          onChange={(e) => setGradeMid({...gradeMid, pieces: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                          placeholder="مثال: 25"
+                          value={line.pieces}
+                          onChange={(e) => updateLine('MID', line.id, 'pieces', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-indigo-500"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (قائمة)</label>
-                        <select
-                          value={gradeMid.category}
-                          onChange={(e) => setGradeMid({...gradeMid, category: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
-                          {categoriesList.map((cat, idx) => (
-                            <option key={idx} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">البراند (قائمة)</label>
-                        <select
-                          value={gradeMid.brand}
-                          onChange={(e) => setGradeMid({...gradeMid, brand: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
-                          {brandsList.map((b, idx) => (
-                            <option key={idx} value={b}>{b}</option>
-                          ))}
-                        </select>
+                      <div className="md:col-span-1 flex justify-center pt-3">
+                        {midLines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLine('MID', line.id)}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="حذف هذا السطر"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
+                  ))}
+                </div>
+
+                {/* GRADE 3: CLEARANCE (🏷️ التصفيات) - DYNAMIC MULTI-LINE */}
+                <div className="p-4 bg-amber-50/30 rounded-2xl border border-amber-200/80 space-y-3 text-xs">
+                  <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
+                    <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                      <Tag size={15} className="text-amber-600" /> 🏷️ تصفيات / شعبي (Clearance) — إجمالي: {totalClrWeight.toFixed(3)} كجم
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => addLine('CLR')}
+                      className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer text-[11px]"
+                    >
+                      <Plus size={13} /> + إضافة صنف مفروز
+                    </button>
                   </div>
 
-                  {/* GRADE 3: CLEARANCE */}
-                  <div className="p-4 bg-amber-50/30 rounded-2xl border border-amber-200/80 space-y-3">
-                    <div className="flex items-center justify-between border-b border-amber-200/60 pb-2">
-                      <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
-                        <Tag size={15} className="text-amber-600" /> 🏷️ تصفيات / شعبي (Clearance)
-                      </span>
-                      <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded">معامل × 0.5</span>
-                    </div>
+                  {clrLines.map((line, index) => (
+                    <div key={line.id} className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center bg-white p-2.5 rounded-xl border border-slate-200">
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الصنف *</label>
+                        <select
+                          value={line.category}
+                          onChange={(e) => updateLine('CLR', line.id, 'category', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
+                        >
+                          {categoriesList.map((cat, idx) => <option key={idx} value={cat}>{cat}</option>)}
+                        </select>
+                      </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">الوزن (كجم) *</label>
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">البراند *</label>
+                        <select
+                          value={line.brand}
+                          onChange={(e) => updateLine('CLR', line.id, 'brand', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-bold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
+                        >
+                          {brandsList.map((b, idx) => <option key={idx} value={b}>{b}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="md:col-span-3">
+                        <label className="block text-[10px] text-slate-500 font-bold mb-0.5">الوزن (كجم) *</label>
                         <input
                           type="number"
                           step="0.001"
                           required
-                          value={gradeClr.weight}
-                          onChange={(e) => { setGradeClr({...gradeClr, weight: e.target.value}); setReconciled(false); }}
-                          className="w-full p-2 bg-white border border-slate-300 rounded-xl font-bold text-slate-900 text-xs focus:outline-none focus:border-emerald-500"
+                          value={line.weight}
+                          onChange={(e) => updateLine('CLR', line.id, 'weight', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 text-xs focus:outline-none focus:border-amber-500"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">عدد القطع</label>
+                      <div className="md:col-span-2">
+                        <label className="block text-[10px] text-slate-500 font-semibold mb-0.5">عدد القطع</label>
                         <input
                           type="number"
-                          placeholder="مثال: 20 قطعة"
-                          value={gradeClr.pieces}
-                          onChange={(e) => setGradeClr({...gradeClr, pieces: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
+                          placeholder="مثال: 10"
+                          value={line.pieces}
+                          onChange={(e) => updateLine('CLR', line.id, 'pieces', e.target.value)}
+                          className="w-full p-1.5 bg-slate-50 border border-slate-200 rounded-lg font-semibold text-slate-800 text-xs focus:outline-none focus:border-amber-500"
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (قائمة)</label>
-                        <select
-                          value={gradeClr.category}
-                          onChange={(e) => setGradeClr({...gradeClr, category: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
-                          {categoriesList.map((cat, idx) => (
-                            <option key={idx} value={cat}>{cat}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">البراند (قائمة)</label>
-                        <select
-                          value={gradeClr.brand}
-                          onChange={(e) => setGradeClr({...gradeClr, brand: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
-                        >
-                          {brandsList.map((b, idx) => (
-                            <option key={idx} value={b}>{b}</option>
-                          ))}
-                        </select>
+                      <div className="md:col-span-1 flex justify-center pt-3">
+                        {clrLines.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeLine('CLR', line.id)}
+                            className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="حذف هذا السطر"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
                       </div>
                     </div>
-                  </div>
+                  ))}
+                </div>
 
-                  {/* GRADE 4: WASTE (WITH SMART WASTE PERCENTAGE BADGE) */}
-                  <div className="p-4 bg-rose-50/40 rounded-2xl border border-rose-200/80 space-y-3">
-                    <div className="flex items-center justify-between border-b border-rose-200/60 pb-2">
-                      <span className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
-                        <Trash2 size={15} className="text-rose-600" /> 🗑️ الهالك / العادم (Waste)
+                {/* GRADE 4: WASTE (🗑️ الهالك / العادم) */}
+                <div className="p-4 bg-rose-50/40 rounded-2xl border border-rose-200/80 space-y-3 text-xs">
+                  <div className="flex items-center justify-between border-b border-rose-200/60 pb-2">
+                    <span className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
+                      <Trash2 size={15} className="text-rose-600" /> 🗑️ الهالك / العادم (Waste)
+                    </span>
+
+                    {/* SMART WASTE PERCENTAGE BADGE */}
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full flex items-center gap-1 border ${
+                        parseFloat(wastePercentage) > 10
+                          ? 'bg-rose-600 text-white border-rose-700 animate-pulse shadow-sm'
+                          : (parseFloat(wastePercentage) > 5 ? 'bg-amber-500 text-white border-amber-600' : 'bg-emerald-100 text-emerald-800 border-emerald-300')
+                      }`}>
+                        {parseFloat(wastePercentage) > 10 && <AlertTriangle size={12} />}
+                        نسبة الهالك: {wastePercentage}% من إجمالي الشحنة
                       </span>
-
-                      {/* SMART WASTE PERCENTAGE BADGE */}
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full flex items-center gap-1 border ${
-                          parseFloat(wastePercentage) > 10
-                            ? 'bg-rose-600 text-white border-rose-700 animate-pulse shadow-sm'
-                            : (parseFloat(wastePercentage) > 5 ? 'bg-amber-500 text-white border-amber-600' : 'bg-emerald-100 text-emerald-800 border-emerald-300')
-                        }`}>
-                          {parseFloat(wastePercentage) > 10 && <AlertTriangle size={12} />}
-                          نسبة الهالك: {wastePercentage}% من إجمالي الشحنة
-                        </span>
-                        <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded">خسارة فرز مستقلة</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-slate-600 font-bold mb-1">وزن الهالك (كجم) *</label>
-                        <input
-                          type="number"
-                          step="0.001"
-                          required
-                          value={gradeWaste.weight}
-                          onChange={(e) => { setGradeWaste({...gradeWaste, weight: e.target.value}); setReconciled(false); }}
-                          className="w-full p-2 bg-white border border-rose-300 rounded-xl font-bold text-rose-900 text-xs focus:outline-none focus:border-rose-500"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-slate-600 font-semibold mb-1">سبب الهالك / ملاحظات</label>
-                        <input
-                          type="text"
-                          placeholder="قطع تالفة ومقاطع فرز"
-                          value={gradeWaste.notes}
-                          onChange={(e) => setGradeWaste({...gradeWaste, notes: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-rose-500"
-                        />
-                      </div>
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">وزن الهالك (كجم) *</label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        required
+                        value={wasteWeight}
+                        onChange={(e) => { setWasteWeight(e.target.value); setReconciled(false); }}
+                        className="w-full p-2 bg-white border border-rose-300 rounded-xl font-bold text-rose-900 text-xs focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-600 font-semibold mb-1">سبب الهالك / ملاحظات</label>
+                      <input
+                        type="text"
+                        placeholder="قطع تالفة ومقاطع فرز"
+                        value={wasteNotes}
+                        onChange={(e) => setWasteNotes(e.target.value)}
+                        className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-rose-500"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Weight Reconciliation Bar */}
@@ -602,7 +681,7 @@ export default function SortingPage() {
 
               {/* 3. Costing Results Section */}
               {reconciled && (
-                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                <div className="p-5 bg-slate-50 rounded-2xl border border-slate-200 space-y-4 text-xs">
                   <div className="flex justify-between items-center">
                     <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                       <Calculator size={18} className="text-indigo-600" /> 3. احتساب وتوزيع تكلفة الدرجات بالمعاملات
@@ -645,7 +724,7 @@ export default function SortingPage() {
                     disabled={submitting}
                     className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl transition shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer text-xs"
                   >
-                    <Send size={16} /> ترحيل النتائج وتحديث كروت المخزون التام ونقطة البيع (POS)
+                    <Send size={16} /> ترحيل أسطر الأصناف المحددة وتحديث كروت المخزون التام ونقطة البيع (POS)
                   </button>
                 </div>
               )}
@@ -664,14 +743,14 @@ export default function SortingPage() {
       {/* MODAL: New Category */}
       {showNewCategoryModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                 <FolderPlus size={16} className="text-emerald-600" /> إضافة صنف فرز جديد
               </h3>
               <button onClick={() => setShowNewCategoryModal(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
             </div>
-            <form onSubmit={handleAddNewCategory} className="space-y-3 text-xs">
+            <form onSubmit={handleAddNewCategory} className="space-y-3">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">اسم الصنف الجديد *</label>
                 <input
@@ -694,14 +773,14 @@ export default function SortingPage() {
       {/* MODAL: New Brand */}
       {showNewBrandModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
                 <Tag size={16} className="text-indigo-600" /> إضافة براند جديد
               </h3>
               <button onClick={() => setShowNewBrandModal(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
             </div>
-            <form onSubmit={handleAddNewBrand} className="space-y-3 text-xs">
+            <form onSubmit={handleAddNewBrand} className="space-y-3">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">اسم البراند / الماركة *</label>
                 <input
