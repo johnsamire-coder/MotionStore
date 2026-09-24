@@ -5,7 +5,8 @@ import { useLanguage } from '../context/LanguageContext';
 import {
   ShoppingCart, Search, Trash2, Plus, Minus, CreditCard, Banknote,
   Printer, Clock, CheckCircle2, X, Scale, Tag, Sparkles, Gift, Layers,
-  Receipt, ArrowRight, User, Package, Vault, Lock, ShieldCheck
+  Receipt, ArrowRight, User, Package, Vault, Lock, ShieldCheck,
+  Smartphone, QrCode
 } from 'lucide-react';
 
 export default function POSPage() {
@@ -33,7 +34,7 @@ export default function POSPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [discountAmount, setDiscountAmount] = useState('0.00');
 
-  // --- التعديل الأول: الميزان (السعر المنفصل وقفل المدير + قائمة الأصناف) ---
+  // Weighed Lot States
   const [weighedGrade, setWeighedGrade] = useState('NEW_COLLECTION');
   const [weighedWeightKg, setWeighedWeightKg] = useState('2.500');
   const [weighedPrice, setWeighedPrice] = useState(gradePrices['NEW_COLLECTION']);
@@ -46,14 +47,18 @@ export default function POSPage() {
   const [newSubItemCount, setNewSubItemCount] = useState('1');
   const categoriesList = ['بنطلون', 'قميص', 'بلوزة', 'فستان', 'جاكيت', 'تيشيرت', 'ملابس أطفال'];
 
-  // --- التعديل الثاني: الميكس (أسطر ديناميكية + إضافة قطع) ---
+  // Mixed Lot States
   const [mixedLines, setMixedLines] = useState([
     { id: 1, grade: 'NEW_COLLECTION', weight: '1.500', pieces: '10' },
     { id: 2, grade: 'CLEARANCE', weight: '1.000', pieces: '5' }
   ]);
 
+  // 4 Payment Methods (كاش - فيزا - إنستا باي - محفظة إلكترونية)
   const [paidCash, setPaidCash] = useState('0.00');
   const [paidCard, setPaidCard] = useState('0.00');
+  const [paidInstaPay, setPaidInstaPay] = useState('0.00');
+  const [paidWallet, setPaidWallet] = useState('0.00');
+
   const [lastInvoice, setLastInvoice] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -112,7 +117,6 @@ export default function POSPage() {
     } catch (err) {} finally { setSubmitting(false); }
   };
 
-  // تغيير درجة الميزان وتحديث السعر الافتراضي
   const handleGradeChange = (grade) => {
     setWeighedGrade(grade);
     setWeighedPrice(gradePrices[grade]);
@@ -137,7 +141,7 @@ export default function POSPage() {
 
     const rate = parseFloat(weighedPrice || 0);
     const lineTotal = (w * rate).toFixed(2);
-    const gradeTitle = weighedGrade === 'NEW_COLLECTION' ? '✨ كريمة' : (weighedGrade === 'MIDDLE' ? '📦 وسط' : '🏷️ تصفيات');
+    const gradeTitle = weighedGrade === 'NEW_COLLECTION' ? '✨ وزنة كريمة' : (weighedGrade === 'MIDDLE' ? '📦 وزنة وسط' : '🏷️ وزنة تصفيات');
 
     const newItem = {
       id: Date.now(),
@@ -161,7 +165,6 @@ export default function POSPage() {
     setNewSubItemCount('1');
   };
 
-  // إضافة سطر ميكس جديد
   const addMixLine = () => {
     setMixedLines(prev => [...prev, { id: Date.now(), grade: 'MIDDLE', weight: '1.000', pieces: '0' }]);
   };
@@ -204,7 +207,6 @@ export default function POSPage() {
     alert("✅ تم إضافة الميكس المجمع للسلة!");
   };
 
-  // --- التعديل الثالث: إحضار سعر القطعة المظبوط ---
   const handleAddStockItemToCart = (item) => {
     const existing = cart.find(c => c.id === item.id);
     if (existing) {
@@ -212,7 +214,7 @@ export default function POSPage() {
     } else {
       const pPrices = JSON.parse(localStorage.getItem('motion_piece_prices') || '[]');
       const foundPriceObj = pPrices.find(p => item.product_name?.includes(p.name) || p.name?.includes(item.product_name));
-      let unitPrice = 150.00; // Fallback
+      let unitPrice = 150.00;
       if (foundPriceObj) {
         unitPrice = parseFloat(foundPriceObj.defaultPrice);
       } else if (parseFloat(item.avg_cost_per_kg || 0) > 0) {
@@ -239,6 +241,8 @@ export default function POSPage() {
     if (cart.length === 0) return;
     setPaidCash(netTotal.toFixed(2));
     setPaidCard('0.00');
+    setPaidInstaPay('0.00');
+    setPaidWallet('0.00');
     setShowCheckoutModal(true);
   };
 
@@ -255,6 +259,8 @@ export default function POSPage() {
       netTotal: netTotal.toFixed(2),
       paidCash: paidCash,
       paidCard: paidCard,
+      paidInstaPay: paidInstaPay,
+      paidWallet: paidWallet,
       cashier: user?.username || 'الكاشير'
     };
     setLastInvoice(inv);
@@ -300,7 +306,6 @@ export default function POSPage() {
                   </select>
                 </div>
 
-                {/* السعر المنفصل والمحمي */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="block font-bold text-slate-700">سعر الكيلو *</label>
@@ -325,7 +330,6 @@ export default function POSPage() {
                 </div>
               </div>
 
-              {/* الأصناف كقائمة منسدلة */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                 <span className="font-bold text-slate-700 block text-xs">الأصناف داخل وزنة الميزان (تطبع بالفاتورة):</span>
                 <div className="flex flex-wrap gap-2">
@@ -380,7 +384,7 @@ export default function POSPage() {
             </div>
           )}
 
-          {/* MODE 3: MIXED LOT (أسطر ديناميكية وعدد قطع) */}
+          {/* MODE 3: MIXED LOT */}
           {saleMode === 'MIXED' && (
             <form onSubmit={handleAddMixedLotToCart} className="max-w-2xl mx-auto space-y-5 py-2">
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -418,7 +422,7 @@ export default function POSPage() {
               </div>
 
               <div className="p-4 bg-amber-100 border border-amber-300 rounded-2xl flex justify-between items-center text-amber-900 font-bold">
-                <span>إجمالي قيمة המيكس المجمع:</span>
+                <span>إجمالي قيمة الميكس المجمع:</span>
                 <span className="text-base font-black font-mono">
                   {mixedLines.reduce((sum, line) => sum + (parseFloat(line.weight||0) * parseFloat(gradePrices[line.grade]||0)), 0).toFixed(2)} ج.م
                 </span>
@@ -505,53 +509,138 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* CHECKOUT & OPEN SHIFT & RECEIPT MODALS KEPT INTACT (No Changes) */}
+      {/* CHECKOUT MODAL: WITH 4 PAYMENT METHODS (كاش - فيزا - إنستا باي - محفظة إلكترونية) */}
       {showCheckoutModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 text-xs">
             <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2"><Banknote size={18} className="text-emerald-600" /> إتمام تحصيل الفاتورة</h3>
-              <button onClick={() => setShowCheckoutModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
+              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2"><Banknote size={18} className="text-emerald-600" /> اختيار طرق تحصيل الفاتورة الـ 4</h3>
+              <button onClick={() => setShowCheckoutModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
             </div>
-            <form onSubmit={handleFinalCheckout} className="space-y-4">
-              <div className="p-4 bg-slate-900 text-white rounded-xl flex justify-between items-center"><span className="font-bold text-xs">صافي المستحق:</span><span className="font-black text-emerald-400 text-lg">{netTotal.toFixed(2)} ج.م</span></div>
-              <div className="space-y-3">
-                <div><label className="block font-bold mb-1">مدفوع كاش *</label><input type="number" step="1" value={paidCash} onChange={(e) => { setPaidCash(e.target.value); setPaidCard(Math.max(0, netTotal - parseFloat(e.target.value||0)).toFixed(2)); }} className="w-full p-2.5 bg-slate-50 border rounded-xl font-bold" /></div>
-                <div><label className="block font-bold mb-1">مدفوع فيزا *</label><input type="number" step="1" value={paidCard} onChange={(e) => setPaidCard(e.target.value)} className="w-full p-2.5 bg-slate-50 border rounded-xl font-bold" /></div>
+
+            <form onSubmit={handleFinalCheckout} className="space-y-3">
+              <div className="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center">
+                <span className="font-bold">المبلغ الصافي المستحق:</span>
+                <span className="font-black text-emerald-400 text-base font-mono">{netTotal.toFixed(2)} ج.م</span>
               </div>
-              <button type="submit" className="w-full bg-emerald-600 text-white font-extrabold py-3.5 rounded-xl shadow-lg">تأكيد وطباعة الإيصال</button>
+
+              {/* 4 Payment Inputs */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                  <label className="font-bold text-slate-700 flex items-center gap-1 text-[11px]">
+                    <Banknote size={14} className="text-emerald-600" /> 💵 كاش (نقدي)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={paidCash}
+                    onChange={(e) => setPaidCash(e.target.value)}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-slate-900"
+                  />
+                </div>
+
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                  <label className="font-bold text-slate-700 flex items-center gap-1 text-[11px]">
+                    <CreditCard size={14} className="text-indigo-600" /> 💳 فيزا / كارت
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={paidCard}
+                    onChange={(e) => setPaidCard(e.target.value)}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-indigo-900"
+                  />
+                </div>
+
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                  <label className="font-bold text-slate-700 flex items-center gap-1 text-[11px]">
+                    <QrCode size={14} className="text-amber-600" /> 📱 إنستا باي (InstaPay)
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={paidInstaPay}
+                    onChange={(e) => setPaidInstaPay(e.target.value)}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-amber-900"
+                  />
+                </div>
+
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                  <label className="font-bold text-slate-700 flex items-center gap-1 text-[11px]">
+                    <Smartphone size={14} className="text-rose-600" /> 📲 محفظة إلكترونية
+                  </label>
+                  <input
+                    type="number"
+                    step="1"
+                    value={paidWallet}
+                    onChange={(e) => setPaidWallet(e.target.value)}
+                    className="w-full p-2 bg-white border border-slate-300 rounded-lg font-bold text-rose-900"
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl shadow-lg transition cursor-pointer">
+                تأكيد التحصيل وطباعة الإيصال 🖨️
+              </button>
             </form>
           </div>
         </div>
       )}
 
+      {/* RECEIPT MODAL WITH MULTI PAYMENT DETAILS */}
       {showReceiptModal && lastInvoice && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[70]">
           <div className="bg-white rounded-2xl p-6 max-w-xs w-full shadow-2xl space-y-4">
             <div id="receipt-print-area" className="p-4 bg-slate-50 border rounded-xl text-slate-900 font-mono text-[11px] space-y-3">
               <div className="text-center space-y-1 border-b pb-2">
                 <div className="font-black text-sm">موشن ستور — Motion Store</div>
+                <div>فرع سموحة الرئيسي - الإسكندرية</div>
                 <div className="text-[9px] text-slate-500">رقم الفاتورة: #{lastInvoice.invoice_number}</div>
               </div>
               <div className="space-y-2 border-b pb-2">
                 {lastInvoice.items.map((item, idx) => (
                   <div key={idx} className="space-y-0.5">
                     <div className="flex justify-between font-bold"><span>{item.name}</span><span>{item.totalPrice} ج.م</span></div>
-                    {item.isWeighedLot ? <div className="text-[9px] text-slate-600">الوزن: {item.weightKg} كجم | {item.subItems.map(s => `${s.count} ${s.name}`).join(' ')}</div> : <div className="text-[9px] text-slate-600">الكمية: {item.qty}</div>}
+                    {item.isWeighedLot ? <div className="text-[9px] text-slate-600">الوزن: {item.weightKg} كجم | الأصناف: {item.subItems.map(s => `${s.count} ${s.name}`).join(' ')}</div> : <div className="text-[9px] text-slate-600">الكمية: {item.qty}</div>}
                   </div>
                 ))}
               </div>
               <div className="space-y-1 font-bold text-xs pt-1">
                 <div className="flex justify-between"><span>الإجمالي الصافي:</span><span className="font-black">{lastInvoice.netTotal} ج.م</span></div>
+                {parseFloat(lastInvoice.paidCash) > 0 && <div className="flex justify-between text-[10px] text-slate-600"><span>كاش:</span><span>{lastInvoice.paidCash} ج.م</span></div>}
+                {parseFloat(lastInvoice.paidCard) > 0 && <div className="flex justify-between text-[10px] text-slate-600"><span>فيزا:</span><span>{lastInvoice.paidCard} ج.م</span></div>}
+                {parseFloat(lastInvoice.paidInstaPay) > 0 && <div className="flex justify-between text-[10px] text-slate-600"><span>إنستا باي:</span><span>{lastInvoice.paidInstaPay} ج.م</span></div>}
+                {parseFloat(lastInvoice.paidWallet) > 0 && <div className="flex justify-between text-[10px] text-slate-600"><span>محفظة:</span><span>{lastInvoice.paidWallet} ج.م</span></div>}
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => window.print()} className="flex-1 bg-slate-900 text-white font-bold py-2.5 rounded-xl"><Printer size={15} className="inline mr-1"/> طباعة</button>
+              <button onClick={() => window.print()} className="flex-1 bg-slate-900 text-white font-bold py-2.5 rounded-xl"><Printer size={15} className="inline mr-1"/> طباعة 80mm</button>
               <button onClick={() => setShowReceiptModal(false)} className="px-3 bg-slate-100 font-bold rounded-xl">إغلاق</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* OPEN SHIFT MODAL */}
+      {showOpenShiftModal && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[80]">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-xs">
+            <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2 border-b pb-2"><Clock size={18} className="text-emerald-600" /> فتح وردية كاشير جديدة</h3>
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-1">
+              <div className="flex items-center gap-1.5 text-emerald-900 font-bold"><Vault size={16} /><span>العهدة المعتمدة من الخزينة</span></div>
+              <div className="text-xl font-black font-mono">{mainTreasuryBalance} <span className="text-xs font-normal">ج.م فكة</span></div>
+            </div>
+            <form onSubmit={handleOpenShift} className="space-y-4">
+              <div>
+                <label className="block font-bold mb-1">العهدة الافتتاحية *</label>
+                <input type="number" readOnly={!isFloatCustom} value={openingFloat} onChange={(e) => setOpeningFloat(e.target.value)} className="w-full p-2.5 bg-slate-100 border rounded-xl font-black" />
+              </div>
+              <button type="submit" disabled={submitting} className="w-full bg-emerald-600 text-white font-extrabold py-3.5 rounded-xl shadow-lg">تأكيد وفتح الوردية</button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
