@@ -1,9 +1,54 @@
 ==========================================
---- 1. «·„ÊœÌ·«  «·Õ«·Ì… ›Ì  ÿ»Ìﬁ «· ”⁄Ì— (pricing) ---
+--- 1. Pricing App Models ---
 ==========================================
-Œÿ√ √À‰«¡ ›Õ’ «· ”⁄Ì—: 'charmap' codec can't encode character '\U0001f4e6' in position 2: character maps to <undefined>
+
+Model: PriceList
+   - id (UUIDField)
+   - tenant (ForeignKey)
+   - created_at (DateTimeField)
+   - updated_at (DateTimeField)
+   - name (CharField)
+   - code (CharField)
+   - branch (ForeignKey)
+   - is_default (BooleanField)
+   - is_active (BooleanField)
+
+Model: PriceListItem
+   - id (UUIDField)
+   - tenant (ForeignKey)
+   - created_at (DateTimeField)
+   - updated_at (DateTimeField)
+   - price_list (ForeignKey)
+   - product (ForeignKey)
+   - grade (CharField)
+   - price_per_kg (DecimalField)
+   - price_per_piece (DecimalField)
+   - is_active (BooleanField)
 
 ==========================================
---- 2. «·ÕﬁÊ· Ê«·œ—Ã«  ›Ì  ÿ»Ìﬁ «·„‰ Ã«  (products) ---
+--- 2. Products App Models ---
 ==========================================
-Œÿ√ √À‰«¡ ›Õ’ «·„‰ Ã« : 'charmap' codec can't encode character '\U0001f4e6' in position 2: character maps to <undefined>
+
+Model: Category
+   - id (UUIDField)
+   - tenant (ForeignKey)
+   - created_at (DateTimeField)
+   - updated_at (DateTimeField)
+   - name (CharField)
+   - code (CharField)
+   - description (TextField)
+   - is_active (BooleanField)
+
+Model: Product
+   - id (UUIDField)
+   - tenant (ForeignKey)
+   - created_at (DateTimeField)
+   - updated_at (DateTimeField)
+   - category (ForeignKey)
+   - name (CharField)
+   - code (CharField)
+   - barcode (CharField)
+   - unit_of_measure (CharField)
+   - attributes (JSONField)
+   - description (TextField)
+   - is_active (BooleanField)
