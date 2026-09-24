@@ -13,6 +13,7 @@ import ShiftsPage from './pages/ShiftsPage';
 import TreasuryPage from './pages/TreasuryPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
+import PricingPage from './pages/PricingPage';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -36,7 +37,7 @@ export default function App() {
               <Route path="shifts" element={<ShiftsPage />} />
               <Route path="treasury" element={<TreasuryPage />} />
               <Route path="reports" element={<ReportsPage />} />
-              <Route path="settings" element={<SettingsPage />} />
+              <Route path="pricing" element={<PricingPage />} />`n              <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Routes>
         </BrowserRouter>
@@ -44,3 +45,4 @@ export default function App() {
     </LanguageProvider>
   );
 }
+

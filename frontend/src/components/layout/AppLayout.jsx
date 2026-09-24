@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -29,6 +29,7 @@ export default function AppLayout() {
     { name: t('nav.purchasing'), to: '/purchasing', icon: Truck },
     { name: t('nav.shifts'), to: '/shifts', icon: Clock },
     { name: t('nav.treasury'), to: '/treasury', icon: Vault },
+    { name: 'التسعير والعروض', to: '/pricing', icon: Tag },
     { name: t('nav.reports'), to: '/reports', icon: FileSpreadsheet },
     { name: t('nav.settings'), to: '/settings', icon: Settings },
   ];
@@ -38,7 +39,7 @@ export default function AppLayout() {
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col border-x border-slate-800">
         <div className="h-16 flex items-center gap-3 px-6 bg-slate-950 border-b border-slate-800">
           <div className="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-base">
-            {isRTL ? 'م' : 'M'}
+            {isRTL ? 'ظ…' : 'M'}
           </div>
           <div>
             <h1 className="font-bold text-white tracking-wide text-sm">{t('nav.brand')}</h1>
@@ -103,11 +104,11 @@ export default function AppLayout() {
               className="flex items-center gap-2 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 rounded-xl text-xs font-black transition cursor-pointer shadow-md"
             >
               <Globe size={16} />
-              <span>{lang === 'ar' ? 'English (EN)' : 'العربية (AR)'}</span>
+              <span>{lang === 'ar' ? 'English (EN)' : 'ط§ظ„ط¹ط±ط¨ظٹط© (AR)'}</span>
             </button>
 
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-              ● {t('nav.onlineEngine')}
+              â—ڈ {t('nav.onlineEngine')}
             </span>
           </div>
         </header>
@@ -119,3 +120,4 @@ export default function AppLayout() {
     </div>
   );
 }
+
