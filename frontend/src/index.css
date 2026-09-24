@@ -6,3 +6,57 @@ body {
   margin: 0;
   min-height: 100vh;
 }
+
+/* ==========================================
+   OFFICIAL PRINT STYLES (A4 REPORT & INVOICE)
+   ========================================== */
+@media print {
+  /* إخفاء القوائم الجانبية والأزرار والهيدر */
+  aside, 
+  header, 
+  button, 
+  .no-print {
+    display: none !important;
+  }
+
+  /* جعل خلفية الصفحة بيضاء بالكامل وتمديد المحتوى */
+  body, main, div {
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border-color: #e2e8f0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  /* ضبط اتجاه الصفحة والحدود */
+  main {
+    padding: 15mm !important;
+    overflow: visible !important;
+  }
+
+  /* تحسين شكل الجداول عند الطباعة */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 15px !important;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 8px 12px !important;
+    font-size: 11pt !important;
+  }
+
+  th {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+
+  /* إجبار إظهار الألوان في الطباعة */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
