@@ -43,14 +43,24 @@ export default function SortingPage() {
     try {
       const res = await axiosClient.get('/raw-lots/');
       const list = res.data.results || res.data || [];
-      // الفلترة للبالات بانتظار الفرز
       setRawLots(list);
-      if (list.length > 0) setSelectedLot(list[0]);
+      if (list.length > 0 && !selectedLot) setSelectedLot(list[0]);
     } catch (err) {
       console.error("Failed to load raw lots:", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResetSelection = () => {
+    setSelectedLot(null);
+    setReconciled(false);
+    setCostingCalculated(false);
+    setCostResults(null);
+    setWeightNew('0.000');
+    setWeightMiddle('0.000');
+    setWeightClearance('0.000');
+    setWeightWaste('0.000');
   };
 
   const originalWeight = parseFloat(selectedLot?.original_weight_kg || 0);
@@ -80,7 +90,6 @@ export default function SortingPage() {
     const wMid = parseFloat(weightMiddle || 0);
     const wClr = parseFloat(weightClearance || 0);
 
-    // المعاملات: سوبر لوكس (3.0) وسط (1.5) تصفيات (0.5)
     const weightedTotal = (wNew * 3.0) + (wMid * 1.5) + (wClr * 0.5);
 
     let costPerKgNew = 0, costPerKgMid = 0, costPerKgClr = 0;
@@ -115,16 +124,13 @@ export default function SortingPage() {
 
     setSubmitting(true);
     try {
-      // محاكاة أو استدعاء الترحيل للمخزون
       await axiosClient.post(`/sorting-orders/`, {
         raw_lot: selectedLot.id,
         status: 'POSTED'
       }).catch(() => console.log("Handled posting flow"));
 
       alert(`🎉 تم ترحيل المنتجات المفروزة بنجاح لجدول المخزون التام!\n\nجاهزة الآن للبيع بنقطة البيع (POS).`);
-      setReconciled(false);
-      setCostingCalculated(false);
-      setCostResults(null);
+      handleResetSelection();
       loadRawLots();
     } catch (err) {
       alert("تم ترحيل الفرز للمخزون التام بنجاح!");
@@ -143,12 +149,23 @@ export default function SortingPage() {
           <p className="text-sm text-slate-500">{t('sorting.subtitle')}</p>
         </div>
 
-        <button
-          onClick={loadRawLots}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
-        >
-          <RefreshCw size={15} /> تحديث قائمة البالات
-        </button>
+        <div className="flex items-center gap-3">
+          {selectedLot && (
+            <button
+              onClick={handleResetSelection}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+            >
+              <ArrowRight size={16} /> رجوع لاختيار بالة أخرى
+            </button>
+          )}
+
+          <button
+            onClick={loadRawLots}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+          >
+            <RefreshCw size={15} /> تحديث قائمة البالات
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -209,9 +226,18 @@ export default function SortingPage() {
                   <span className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">البالة المختارة</span>
                   <h4 className="font-extrabold text-slate-900 text-base font-mono">{selectedLot.lot_code}</h4>
                 </div>
-                <div className="text-left">
-                  <span className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">الوزن التكليفي الأصلي</span>
-                  <span className="font-black text-emerald-700 text-lg">{selectedLot.original_weight_kg} كجم</span>
+                <div className="flex items-center gap-4">
+                  <div className="text-left">
+                    <span className="text-[11px] text-slate-400 font-bold uppercase block mb-0.5">الوزن التكليفي الأصلي</span>
+                    <span className="font-black text-emerald-700 text-lg">{selectedLot.original_weight_kg} كجم</span>
+                  </div>
+                  <button
+                    onClick={handleResetSelection}
+                    className="p-2 bg-white hover:bg-slate-200 border border-slate-300 rounded-xl text-slate-600 transition cursor-pointer"
+                    title="رجوع / إلغاء الاختيار"
+                  >
+                    <ArrowRight size={18} />
+                  </button>
                 </div>
               </div>
 
@@ -340,8 +366,9 @@ export default function SortingPage() {
 
             </div>
           ) : (
-            <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs font-bold">
-              اختر بالة من القائمة الجانبية للبدء في الفرز ومطابقة الأوزان.
+            <div className="bg-white p-12 rounded-2xl border border-slate-200 text-center text-slate-400 text-xs font-bold space-y-3">
+              <Package size={32} className="mx-auto text-slate-300" />
+              <div>اختر بالة من القائمة الجانبية للبدء في الفرز ومطابقة الأوزان.</div>
             </div>
           )}
 
