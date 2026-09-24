@@ -17,7 +17,8 @@ import {
   Hash,
   FolderPlus,
   Plus,
-  X
+  X,
+  AlertTriangle
 } from 'lucide-react';
 
 export default function SortingPage() {
@@ -112,7 +113,6 @@ export default function SortingPage() {
     setGradeWaste({ weight: '0.000', notes: 'هالك ومقاطع فرز' });
   };
 
-  // إضافة صنف جديد
   const handleAddNewCategory = async (e) => {
     e.preventDefault();
     if (!newCustomCategory.trim()) return;
@@ -129,7 +129,6 @@ export default function SortingPage() {
     alert(`تم إضافة الصنف الجديد [${catName}] بنجاح!`);
   };
 
-  // إضافة براند جديد
   const handleAddNewBrand = (e) => {
     e.preventDefault();
     if (!newCustomBrand.trim()) return;
@@ -145,6 +144,10 @@ export default function SortingPage() {
   const originalWeight = parseFloat(selectedLot?.original_weight_kg || 0);
   const sumSortedWeight = parseFloat(gradeNew.weight || 0) + parseFloat(gradeMid.weight || 0) + parseFloat(gradeClr.weight || 0) + parseFloat(gradeWaste.weight || 0);
   const isWeightBalanced = Math.abs(originalWeight - sumSortedWeight) < 0.001 && originalWeight > 0;
+
+  // نسبة الهالك الحالية
+  const wasteWeightNum = parseFloat(gradeWaste.weight || 0);
+  const wastePercentage = originalWeight > 0 ? ((wasteWeightNum / originalWeight) * 100).toFixed(2) : '0.00';
 
   const handleReconcile = () => {
     if (!selectedLot) return;
@@ -185,7 +188,7 @@ export default function SortingPage() {
       midCostTotal: (costPerKgMid * wMid).toFixed(2),
       clrCostKg: costPerKgClr.toFixed(2),
       clrCostTotal: (costPerKgClr * wClr).toFixed(2),
-      wasteLoss: (parseFloat(gradeWaste.weight || 0) > 0) ? "1000.00" : "0.00"
+      wasteLoss: (wasteWeightNum > 0) ? "1000.00" : "0.00"
     });
 
     setCostingCalculated(true);
@@ -527,13 +530,25 @@ export default function SortingPage() {
                     </div>
                   </div>
 
-                  {/* GRADE 4: WASTE */}
+                  {/* GRADE 4: WASTE (WITH SMART WASTE PERCENTAGE BADGE) */}
                   <div className="p-4 bg-rose-50/40 rounded-2xl border border-rose-200/80 space-y-3">
                     <div className="flex items-center justify-between border-b border-rose-200/60 pb-2">
                       <span className="font-bold text-rose-900 text-xs flex items-center gap-1.5">
                         <Trash2 size={15} className="text-rose-600" /> 🗑️ الهالك / العادم (Waste)
                       </span>
-                      <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded">خسارة فرز مستقلة</span>
+
+                      {/* SMART WASTE PERCENTAGE BADGE */}
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] font-extrabold px-3 py-1 rounded-full flex items-center gap-1 border ${
+                          parseFloat(wastePercentage) > 10
+                            ? 'bg-rose-600 text-white border-rose-700 animate-pulse shadow-sm'
+                            : (parseFloat(wastePercentage) > 5 ? 'bg-amber-500 text-white border-amber-600' : 'bg-emerald-100 text-emerald-800 border-emerald-300')
+                        }`}>
+                          {parseFloat(wastePercentage) > 10 && <AlertTriangle size={12} />}
+                          نسبة الهالك: {wastePercentage}% من إجمالي الشحنة
+                        </span>
+                        <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded">خسارة فرز مستقلة</span>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
