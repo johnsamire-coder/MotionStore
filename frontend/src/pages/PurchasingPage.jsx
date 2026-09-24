@@ -213,7 +213,6 @@ export default function PurchasingPage() {
     }
   };
 
-  // إلغاء الفاتورة بموافقة المدير
   const handleCancelInvoiceWithManagerApproval = async (e) => {
     e.preventDefault();
     setCancelError('');
@@ -239,7 +238,6 @@ export default function PurchasingPage() {
     }
   };
 
-  // مشاركة الفاتورة عبر واتساب
   const handleShareWhatsApp = (inv) => {
     const text = `📄 *فاتورة شراء - موشن ستور*\n\n` +
       `🔢 *رقم الفاتورة:* ${inv.invoice_number}\n` +
@@ -254,137 +252,164 @@ export default function PurchasingPage() {
     window.open(`https://api.whatsapp.com/send?text=${encodedText}`, '_blank');
   };
 
-  // 1️⃣ تصدير التقرير إلى شيت إكسل (Excel / CSV)
-  const handleExportExcel = () => {
-    let csv = '\uFEFF'; // دعم اللغة العربية في إكسل
-    csv += 'رقم الفاتورة,تاريخ الشراء,اسم المورد,مخزن الاستلام,التكلفة الإجمالية (ج.م),حالة الفاتورة\n';
-    filteredInvoices.forEach(inv => {
-      csv += `"${inv.invoice_number}","${inv.invoice_date}","${inv.supplier_name || 'غير محدد'}","${inv.warehouse_name || 'مخزن الفرز'}","${inv.total_cost || 0}","${inv.status}"\n`;
-    });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `تقرير_مشتريات_موشن_ستور_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // 2️⃣ إنتاج تقرير PDF رسمي متنسق بلوجو الشركة
-  const handleExportPDFReport = () => {
-    const printWindow = window.open('', '_blank', 'width=1000,height=800');
-    const dateStr = new Date().toLocaleDateString('ar-EG');
+  // 1️⃣ تصدير شيت إكسل فاخر ومصمم بالألوان والحدود العريضة (Excel .xls)
+  const handleExportStyledExcel = () => {
     const totalCostSum = invoices.reduce((acc, i) => acc + (i.status !== 'CANCELLED' ? parseFloat(i.total_cost || 0) : 0), 0);
+    const dateStr = new Date().toLocaleDateString('ar-EG');
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
+    const excelTemplate = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
       <head>
-        <meta charset="UTF-8">
-        <title>تقرير المشتريات الشامل — موشن ستور</title>
+        <meta charset="utf-8">
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; color: #0f172a; background: #fff; }
-          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #10b981; padding-bottom: 20px; margin-bottom: 25px; }
-          .brand { display: flex; align-items: center; gap: 12px; }
-          .logo { background: #10b981; color: #fff; width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 24px; }
-          .title { font-size: 22px; font-weight: 800; color: #0f172a; margin: 0; }
-          .sub { font-size: 13px; color: #64748b; margin-top: 4px; }
-          .meta { text-align: left; font-size: 12px; color: #334155; line-height: 1.6; }
-          .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 30px; }
-          .stat-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 15px; background: #f8fafc; }
-          .stat-label { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; }
-          .stat-val { font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 5px; }
-          table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 15px; }
-          th, td { border: 1px solid #cbd5e1; padding: 10px 14px; text-align: right; }
-          th { background-color: #10b981; color: #ffffff; font-weight: 800; font-size: 12px; }
-          tr:nth-child(even) { background-color: #f8fafc; }
-          .status-badge { font-weight: bold; padding: 3px 8px; border-radius: 6px; font-size: 10px; }
-          .status-ok { background: #d1fae5; color: #065f46; }
-          .status-cancel { background: #ffe4e6; color: #991b1b; }
-          .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; display: flex; justify-content: space-between; font-size: 11px; color: #64748b; }
-          @media print {
-            body { padding: 0; }
-            @page { size: A4; margin: 15mm; }
-          }
+          body { font-family: 'Segoe UI', Arial, sans-serif; }
+          .header-title { background-color: #065f46; color: #ffffff; font-size: 16pt; font-weight: bold; text-align: center; height: 45px; vertical-align: middle; }
+          .header-sub { background-color: #ecfdf5; color: #047857; font-size: 11pt; font-weight: bold; text-align: center; height: 30px; vertical-align: middle; }
+          .th-head { background-color: #10b981; color: #ffffff; font-size: 11pt; font-weight: bold; text-align: center; border: 1px solid #059669; height: 35px; vertical-align: middle; }
+          .td-cell { border: 1px solid #cbd5e1; font-size: 10pt; text-align: center; height: 28px; vertical-align: middle; }
+          .td-number { border: 1px solid #cbd5e1; font-size: 10pt; font-weight: bold; text-align: right; color: #0f172a; height: 28px; vertical-align: middle; }
+          .total-row { background-color: #f1f5f9; font-weight: bold; font-size: 11pt; height: 35px; vertical-align: middle; }
         </style>
       </head>
-      <body>
-        <div class="header">
-          <div class="brand">
-            <div class="logo">M</div>
-            <div>
-              <h1 class="title">موشن ستور — Motion Store</h1>
-              <div class="sub">تقرير إجمالي المشتريات والشحنات | فرع سموحة الرئيسي</div>
-            </div>
-          </div>
-          <div class="meta">
-            <div><strong>تاريخ التقرير:</strong> ${dateStr}</div>
-            <div><strong>اسم المستخدم:</strong> admin</div>
-            <div><strong>حالة النظام:</strong> موثق بالدفتر المحاسبي</div>
-          </div>
-        </div>
-
-        <div class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-label">إجمالي المشتريات المعتمدة</div>
-            <div class="stat-val">${totalCostSum.toFixed(2)} ج.م</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">عدد الفواتير النشطة</div>
-            <div class="stat-val">${invoices.filter(i => i.status !== 'CANCELLED').length} فواتير</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">عدد الموردين المعتمدين</div>
-            <div class="stat-val">${suppliers.length} مورد</div>
-          </div>
-        </div>
-
-        <h3 style="margin-bottom: 10px; font-size: 15px;">سجل تفاصيل فواتير الشراء</h3>
+      <body dir="rtl">
         <table>
+          <tr><td colspan="6" class="header-title">موشن ستور — Motion Store Enterprise SaaS</td></tr>
+          <tr><td colspan="6" class="header-sub">تقرير المشتريات وفواتير الشحنات المعتمدة | تاريخ الاستخراج: ${dateStr}</td></tr>
+          <tr><td colspan="6"></td></tr>
           <thead>
             <tr>
-              <th>رقم الفاتورة</th>
-              <th>تاريخ الشراء</th>
-              <th>اسم المورد</th>
-              <th>مخزن الاستلام</th>
-              <th>الإجمالي (ج.م)</th>
-              <th>حالة الفاتورة</th>
+              <th class="th-head">رقم الفاتورة</th>
+              <th class="th-head">تاريخ الشراء</th>
+              <th class="th-head">اسم المورد</th>
+              <th class="th-head">مخزن الاستلام</th>
+              <th class="th-head">الإجمالي (ج.م)</th>
+              <th class="th-head">حالة الفاتورة</th>
             </tr>
           </thead>
           <tbody>
             ${filteredInvoices.map(inv => `
               <tr>
-                <td><strong>${inv.invoice_number}</strong></td>
-                <td>${inv.invoice_date}</td>
-                <td>${inv.supplier_name || 'غير محدد'}</td>
-                <td>${inv.warehouse_name || 'مخزن الفرز'}</td>
-                <td><strong>${parseFloat(inv.total_cost || 0).toFixed(2)}</strong></td>
-                <td>
-                  <span class="status-badge ${inv.status === 'CANCELLED' ? 'status-cancel' : 'status-ok'}">
-                    ${inv.status === 'CANCELLED' ? 'ملغاة' : 'معتمدة'}
-                  </span>
+                <td class="td-number">${inv.invoice_number}</td>
+                <td class="td-cell">${inv.invoice_date}</td>
+                <td class="td-cell">${inv.supplier_name || 'غير محدد'}</td>
+                <td class="td-cell">${inv.warehouse_name || 'مخزن الفرز'}</td>
+                <td class="td-number">${parseFloat(inv.total_cost || 0).toFixed(2)}</td>
+                <td class="td-cell" style="color: ${inv.status === 'CANCELLED' ? '#991b1b' : '#065f46'}; font-weight: bold;">
+                  ${inv.status === 'CANCELLED' ? 'ملغاة' : 'معتمدة'}
                 </td>
+              </tr>
+            `).join('')}
+            <tr class="total-row">
+              <td colspan="4" style="text-align: left; font-weight: bold; padding-left: 15px;">إجمالي المشتريات المعتمدة:</td>
+              <td style="color: #047857; font-weight: bold; text-align: right;">${totalCostSum.toFixed(2)} ج.م</td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const blob = new Blob([excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `تقرير_المشتريات_المصمم_موشن_ستور_${new Date().toISOString().slice(0,10)}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 2️⃣ تنزيل التقرير كملف PDF مباشر في التحميلات (Direct PDF Download)
+  const handleDownloadDirectPDF = () => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    
+    script.onload = () => {
+      const totalCostSum = invoices.reduce((acc, i) => acc + (i.status !== 'CANCELLED' ? parseFloat(i.total_cost || 0) : 0), 0);
+      const dateStr = new Date().toLocaleDateString('ar-EG');
+
+      const element = document.createElement('div');
+      element.dir = 'rtl';
+      element.style.padding = '25px';
+      element.style.fontFamily = 'Segoe UI, Tahoma, sans-serif';
+      element.style.color = '#0f172a';
+      element.style.backgroundColor = '#ffffff';
+
+      element.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #10b981; padding-bottom: 15px; margin-bottom: 20px;">
+          <div>
+            <h1 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 800;">موشن ستور — Motion Store</h1>
+            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 11px;">تقرير فواتير الشراء والشحنات المعتمدة</p>
+          </div>
+          <div style="text-align: left; font-size: 11px; color: #334155; line-height: 1.5;">
+            <div><b>التاريخ:</b> ${dateStr}</div>
+            <div><b>الفرع:</b> فرع سموحة الرئيسي</div>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px;">
+            <div style="font-size: 10px; color: #64748b;">إجمالي المشتريات</div>
+            <div style="font-size: 16px; font-weight: bold; color: #0f172a;">${totalCostSum.toFixed(2)} ج.م</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px;">
+            <div style="font-size: 10px; color: #64748b;">عدد الفواتير النشطة</div>
+            <div style="font-size: 16px; font-weight: bold; color: #0f172a;">${invoices.filter(i => i.status !== 'CANCELLED').length}</div>
+          </div>
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; border-radius: 8px;">
+            <div style="font-size: 10px; color: #64748b;">عدد الموردين</div>
+            <div style="font-size: 16px; font-weight: bold; color: #0f172a;">${suppliers.length}</div>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px;">
+          <thead>
+            <tr style="background-color: #10b981; color: #ffffff;">
+              <th style="padding: 8px; border: 1px solid #059669; text-align: right;">رقم الفاتورة</th>
+              <th style="padding: 8px; border: 1px solid #059669; text-align: right;">التاريخ</th>
+              <th style="padding: 8px; border: 1px solid #059669; text-align: right;">المورد</th>
+              <th style="padding: 8px; border: 1px solid #059669; text-align: right;">المخزن</th>
+              <th style="padding: 8px; border: 1px solid #059669; text-align: right;">الإجمالي (ج.م)</th>
+              <th style="padding: 8px; border: 1px solid #059669; text-align: center;">الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredInvoices.map(inv => `
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 8px; border: 1px solid #cbd5e1;"><b>${inv.invoice_number}</b></td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1;">${inv.invoice_date}</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1;">${inv.supplier_name || 'غير محدد'}</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1;">${inv.warehouse_name || 'مخزن الفرز'}</td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1;"><b>${parseFloat(inv.total_cost || 0).toFixed(2)}</b></td>
+                <td style="padding: 8px; border: 1px solid #cbd5e1; text-align: center;">${inv.status === 'CANCELLED' ? 'ملغاة' : 'معتمدة'}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
 
-        <div class="footer">
-          <div>نظام إدارة التجارة والبالات — Motion Store Enterprise SaaS</div>
-          <div>اعتماد الإدارة: ________________________</div>
+        <div style="margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 15px; display: flex; justify-content: space-between; font-size: 10px; color: #64748b;">
+          <span>تم استخراج هذا التقرير آليا بواسطة نظام Motion Store SaaS</span>
+          <span>اعتماد الإدارة: ________________________</span>
         </div>
+      `;
 
-        <script>
-          window.onload = function() {
-            window.print();
-          }
-        </script>
-      </body>
-      </html>
-    `;
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+      const opt = {
+        margin:       8,
+        filename:     `تقرير_مشتريات_موشن_ستور_${new Date().toISOString().slice(0,10)}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2 },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+
+      window.html2pdf().set(opt).from(element).save();
+    };
+
+    if (window.html2pdf) {
+      script.onload();
+    } else {
+      document.body.appendChild(script);
+    }
   };
 
   const totalPurchasesCost = invoices.reduce((acc, i) => acc + (i.status !== 'CANCELLED' ? parseFloat(i.total_cost || 0) : 0), 0);
@@ -407,19 +432,19 @@ export default function PurchasingPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={handleExportExcel}
-            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition cursor-pointer"
-            title="تصدير إلى شيت إكسل"
+            onClick={handleExportStyledExcel}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm"
+            title="تحميل شيت إكسل فاخر بالهيدر والألوان"
           >
-            <FileSpreadsheet size={16} /> تصدير إكسل (Excel)
+            <FileSpreadsheet size={16} /> تحميل إكسل مصمم (.xls)
           </button>
 
           <button
-            onClick={handleExportPDFReport}
+            onClick={handleDownloadDirectPDF}
             className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm"
-            title="طباعة / تحويل لـ PDF"
+            title="تحميل تقرير PDF مباشر في التحميلات"
           >
-            <Printer size={16} /> طباعة تقرير PDF رسمى
+            <Download size={16} /> تحميل تقرير PDF مباشر
           </button>
 
           <button
@@ -600,10 +625,10 @@ export default function PurchasingPage() {
 
             <div className="flex gap-3 pt-2">
               <button
-                onClick={handleExportPDFReport}
+                onClick={handleDownloadDirectPDF}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-2"
               >
-                <Printer size={16} /> طباعة الفاتورة الرسمية PDF
+                <Download size={16} /> تنزيل الفاتورة كـ PDF
               </button>
               <button
                 onClick={() => setSelectedInvoiceForView(null)}
