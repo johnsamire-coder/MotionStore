@@ -15,7 +15,9 @@ import {
   RefreshCw,
   Tag,
   Hash,
-  FolderPlus
+  FolderPlus,
+  Plus,
+  X
 } from 'lucide-react';
 
 export default function SortingPage() {
@@ -26,10 +28,43 @@ export default function SortingPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Detailed Grade Inputs (Weight, Pieces, Category, Brand)
-  const [gradeNew, setGradeNew] = useState({ weight: '0.000', pieces: '', category: 'ملابس سوبر لوكس', brand: 'براندات أوروبية متعددة' });
-  const [gradeMid, setGradeMid] = useState({ weight: '0.000', pieces: '', category: 'ملابس وسط', brand: 'براندات متنوعة' });
-  const [gradeClr, setGradeClr] = useState({ weight: '0.000', pieces: '', category: 'تصفيات وتدشين', brand: 'بدون براند / شعبي' });
+  // Modals for Quick Category / Brand Add
+  const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
+  const [showNewBrandModal, setShowNewBrandModal] = useState(false);
+  const [newCustomCategory, setNewCustomCategory] = useState('');
+  const [newCustomBrand, setNewCustomBrand] = useState('');
+
+  // Shared Categories & Brands List
+  const [categoriesList, setCategoriesList] = useState([
+    'بلوزة',
+    'قميص',
+    'بنطلون',
+    'فستان',
+    'جاكيت ومعاطف',
+    'تيشيرت',
+    'سويت شيرت',
+    'ملابس أطفال',
+    'أحذية فاخرة',
+    'مفروشات وبياضات'
+  ]);
+
+  const [brandsList, setBrandsList] = useState([
+    'Zara',
+    'H&M',
+    'Bershka',
+    'Pull & Bear',
+    'Nike',
+    'Adidas',
+    'Max',
+    'LC Waikiki',
+    'Massimo Dutti',
+    'براندات متنوعة'
+  ]);
+
+  // Detailed Grade Inputs
+  const [gradeNew, setGradeNew] = useState({ weight: '0.000', pieces: '', category: 'بلوزة', brand: 'Zara' });
+  const [gradeMid, setGradeMid] = useState({ weight: '0.000', pieces: '', category: 'قميص', brand: 'H&M' });
+  const [gradeClr, setGradeClr] = useState({ weight: '0.000', pieces: '', category: 'بنطلون', brand: 'براندات متنوعة' });
   const [gradeWaste, setGradeWaste] = useState({ weight: '0.000', notes: 'هالك ومقاطع فرز' });
 
   // Reconciliation & Costing Status
@@ -38,10 +73,10 @@ export default function SortingPage() {
   const [costResults, setCostResults] = useState(null);
 
   useEffect(() => {
-    loadRawLots();
+    loadSortingData();
   }, []);
 
-  const loadRawLots = async () => {
+  const loadSortingData = async () => {
     setLoading(true);
     try {
       const res = await axiosClient.get('/raw-lots/');
@@ -50,9 +85,20 @@ export default function SortingPage() {
       if (list.length > 0 && !selectedLot) setSelectedLot(list[0]);
     } catch (err) {
       console.error("Failed to load raw lots:", err);
-    } finally {
-      setLoading(false);
     }
+
+    try {
+      const catRes = await axiosClient.get('/categories/?is_active=true');
+      const catList = catRes.data.results || catRes.data || [];
+      if (catList.length > 0) {
+        const catNames = catList.map(c => c.name);
+        setCategoriesList(prev => Array.from(new Set([...catNames, ...prev])));
+      }
+    } catch (e) {
+      console.error("Failed to load categories:", e);
+    }
+
+    setLoading(false);
   };
 
   const handleResetSelection = () => {
@@ -60,17 +106,46 @@ export default function SortingPage() {
     setReconciled(false);
     setCostingCalculated(false);
     setCostResults(null);
-    setGradeNew({ weight: '0.000', pieces: '', category: 'ملابس سوبر لوكس', brand: 'براندات أوروبية متعددة' });
-    setGradeMid({ weight: '0.000', pieces: '', category: 'ملابس وسط', brand: 'براندات متنوعة' });
-    setGradeClr({ weight: '0.000', pieces: '', category: 'تصفيات وتدشين', brand: 'بدون براند / شعبي' });
+    setGradeNew({ weight: '0.000', pieces: '', category: categoriesList[0] || 'بلوزة', brand: brandsList[0] || 'Zara' });
+    setGradeMid({ weight: '0.000', pieces: '', category: categoriesList[1] || 'قميص', brand: brandsList[1] || 'H&M' });
+    setGradeClr({ weight: '0.000', pieces: '', category: categoriesList[2] || 'بنطلون', brand: 'براندات متنوعة' });
     setGradeWaste({ weight: '0.000', notes: 'هالك ومقاطع فرز' });
+  };
+
+  // إضافة صنف جديد
+  const handleAddNewCategory = async (e) => {
+    e.preventDefault();
+    if (!newCustomCategory.trim()) return;
+    const catName = newCustomCategory.trim();
+
+    try {
+      await axiosClient.post('/categories/', { name: catName, description: 'صنف فرز جديد' });
+    } catch (e) { console.warn("Category saved locally"); }
+
+    setCategoriesList(prev => [catName, ...prev]);
+    setGradeNew(prev => ({ ...prev, category: catName }));
+    setNewCustomCategory('');
+    setShowNewCategoryModal(false);
+    alert(`تم إضافة الصنف الجديد [${catName}] بنجاح!`);
+  };
+
+  // إضافة براند جديد
+  const handleAddNewBrand = (e) => {
+    e.preventDefault();
+    if (!newCustomBrand.trim()) return;
+    const brandName = newCustomBrand.trim();
+
+    setBrandsList(prev => [brandName, ...prev]);
+    setGradeNew(prev => ({ ...prev, brand: brandName }));
+    setNewCustomBrand('');
+    setShowNewBrandModal(false);
+    alert(`تم إضافة البراند الجديد [${brandName}] بنجاح!`);
   };
 
   const originalWeight = parseFloat(selectedLot?.original_weight_kg || 0);
   const sumSortedWeight = parseFloat(gradeNew.weight || 0) + parseFloat(gradeMid.weight || 0) + parseFloat(gradeClr.weight || 0) + parseFloat(gradeWaste.weight || 0);
   const isWeightBalanced = Math.abs(originalWeight - sumSortedWeight) < 0.001 && originalWeight > 0;
 
-  // 1️⃣ مطابقة الأوزان
   const handleReconcile = () => {
     if (!selectedLot) return;
     if (!isWeightBalanced) {
@@ -81,7 +156,6 @@ export default function SortingPage() {
     alert("✅ تم مطابقة الأوزان بنجاح 100%! جاهز لاحتساب توزيع التكلفة.");
   };
 
-  // 2️⃣ احتساب التكلفة بمحرك المعاملات
   const handleCalculateCosting = () => {
     if (!reconciled) {
       alert("يرجى مطابقة الأوزان أولا.");
@@ -118,7 +192,6 @@ export default function SortingPage() {
     alert("⚡ تم احتساب توزيع التكلفة العادل بنجاح بمحرك المعاملات (Weighted Coefficients)!");
   };
 
-  // 3️⃣ ترحيل البضاعة إلى المخزون التام
   const handlePostToInventory = async () => {
     if (!costingCalculated) {
       alert("يرجى احتساب التكلفة أولا قبل الترحيل.");
@@ -134,7 +207,7 @@ export default function SortingPage() {
 
       alert(`🎉 تم ترحيل المنتجات المفروزة وتحديث كروت المخزون التام بنجاح!\n\nجاهزة الآن للبيع بنقطة البيع (POS).`);
       handleResetSelection();
-      loadRawLots();
+      loadSortingData();
     } catch (err) {
       alert("تم ترحيل الفرز للمخزون التام بنجاح!");
     } finally {
@@ -163,7 +236,7 @@ export default function SortingPage() {
           )}
 
           <button
-            onClick={loadRawLots}
+            onClick={loadSortingData}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
           >
             <RefreshCw size={15} /> تحديث قائمة البالات
@@ -244,6 +317,25 @@ export default function SortingPage() {
                 </div>
               </div>
 
+              {/* Top Quick Actions for Categories and Brands */}
+              <div className="flex justify-between items-center p-3 bg-slate-100 rounded-xl border border-slate-200 text-xs">
+                <span className="font-bold text-slate-700">إضافة خيارات سريعة:</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowNewCategoryModal(true)}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <FolderPlus size={14} /> + إضافة صنف جديد (بلوزة/قميص...)
+                  </button>
+                  <button
+                    onClick={() => setShowNewBrandModal(true)}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <Tag size={14} /> + إضافة براند جديد (Zara/Nike...)
+                  </button>
+                </div>
+              </div>
+
               {/* 2. Detailed Inputs for Grades */}
               <div className="space-y-4">
                 <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
@@ -286,25 +378,29 @@ export default function SortingPage() {
                       </div>
 
                       <div>
-                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (اختياري)</label>
-                        <input
-                          type="text"
-                          placeholder="مثال: ملابس حريمي شتوي"
+                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (قائمة)</label>
+                        <select
                           value={gradeNew.category}
                           onChange={(e) => setGradeNew({...gradeNew, category: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                        />
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          {categoriesList.map((cat, idx) => (
+                            <option key={idx} value={cat}>{cat}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
-                        <label className="block text-slate-600 font-semibold mb-1">البراند (اختياري)</label>
-                        <input
-                          type="text"
-                          placeholder="مثال: Zara / مشكل"
+                        <label className="block text-slate-600 font-semibold mb-1">البراند (قائمة)</label>
+                        <select
                           value={gradeNew.brand}
                           onChange={(e) => setGradeNew({...gradeNew, brand: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                        />
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          {brandsList.map((b, idx) => (
+                            <option key={idx} value={b}>{b}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -343,25 +439,29 @@ export default function SortingPage() {
                       </div>
 
                       <div>
-                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (اختياري)</label>
-                        <input
-                          type="text"
-                          placeholder="مثال: تيشيرت بناتي"
+                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (قائمة)</label>
+                        <select
                           value={gradeMid.category}
                           onChange={(e) => setGradeMid({...gradeMid, category: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                        />
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          {categoriesList.map((cat, idx) => (
+                            <option key={idx} value={cat}>{cat}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
-                        <label className="block text-slate-600 font-semibold mb-1">البراند (اختياري)</label>
-                        <input
-                          type="text"
-                          placeholder="مثال: H&M / مشكل"
+                        <label className="block text-slate-600 font-semibold mb-1">البراند (قائمة)</label>
+                        <select
                           value={gradeMid.brand}
                           onChange={(e) => setGradeMid({...gradeMid, brand: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                        />
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          {brandsList.map((b, idx) => (
+                            <option key={idx} value={b}>{b}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -400,25 +500,29 @@ export default function SortingPage() {
                       </div>
 
                       <div>
-                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (اختياري)</label>
-                        <input
-                          type="text"
-                          placeholder="تصفيات عامة"
+                        <label className="block text-slate-600 font-semibold mb-1">نوع الصنف (قائمة)</label>
+                        <select
                           value={gradeClr.category}
                           onChange={(e) => setGradeClr({...gradeClr, category: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                        />
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          {categoriesList.map((cat, idx) => (
+                            <option key={idx} value={cat}>{cat}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
-                        <label className="block text-slate-600 font-semibold mb-1">البراند (اختياري)</label>
-                        <input
-                          type="text"
-                          placeholder="بدون براند"
+                        <label className="block text-slate-600 font-semibold mb-1">البراند (قائمة)</label>
+                        <select
                           value={gradeClr.brand}
                           onChange={(e) => setGradeClr({...gradeClr, brand: e.target.value})}
-                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500"
-                        />
+                          className="w-full p-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 text-xs focus:outline-none focus:border-emerald-500 cursor-pointer"
+                        >
+                          {brandsList.map((b, idx) => (
+                            <option key={idx} value={b}>{b}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </div>
@@ -541,6 +645,66 @@ export default function SortingPage() {
 
         </div>
       </div>
+
+      {/* MODAL: New Category */}
+      {showNewCategoryModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <FolderPlus size={16} className="text-emerald-600" /> إضافة صنف فرز جديد
+              </h3>
+              <button onClick={() => setShowNewCategoryModal(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleAddNewCategory} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">اسم الصنف الجديد *</label>
+                <input
+                  type="text"
+                  required
+                  value={newCustomCategory}
+                  onChange={(e) => setNewCustomCategory(e.target.value)}
+                  placeholder="مثال: قميص رجالي / فستان"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl shadow-md transition cursor-pointer">
+                حفظ الصنف واختياره
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: New Brand */}
+      {showNewBrandModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <Tag size={16} className="text-indigo-600" /> إضافة براند جديد
+              </h3>
+              <button onClick={() => setShowNewBrandModal(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleAddNewBrand} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">اسم البراند / الماركة *</label>
+                <input
+                  type="text"
+                  required
+                  value={newCustomBrand}
+                  onChange={(e) => setNewCustomBrand(e.target.value)}
+                  placeholder="مثال: Massimo Dutti"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl shadow-md transition cursor-pointer">
+                حفظ البراند واختياره
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
