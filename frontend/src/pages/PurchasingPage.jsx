@@ -21,7 +21,8 @@ import {
   Download,
   Layers,
   Tag,
-  FolderPlus
+  FolderPlus,
+  ShoppingBag
 } from 'lucide-react';
 
 export default function PurchasingPage() {
@@ -53,7 +54,7 @@ export default function PurchasingPage() {
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
   const [additionalCosts, setAdditionalCosts] = useState('0.00');
 
-  // Dynamic Purchase Type: 'BALE' (بالة) vs 'STOCK' (استوك)
+  // Dynamic Purchase Type: 'BALE' (بالة) vs 'STOCK' (استوك) vs 'DIRECT' (شراء مباشر/بيعة)
   const [purchaseType, setPurchaseType] = useState('BALE');
 
   // Bale Options
@@ -76,13 +77,17 @@ export default function PurchasingPage() {
   const [stockBrandPresets, setStockBrandPresets] = useState(['Zara', 'H&M', 'Bershka', 'Pull & Bear', 'Nike', 'Adidas', 'Max', 'LC Waikiki']);
   const [stockBrand, setStockBrand] = useState('Zara');
 
+  // Direct Purchase Options (بيعة حرة)
+  const [directWeightKg, setDirectWeightKg] = useState('10.000');
+  const [directDescription, setDirectDescription] = useState('بيعة ملابس فرز أول مشكلة');
+
   // Quick Add States
   const [newCustomCategory, setNewCustomCategory] = useState('');
   const [newCustomBrand, setNewCustomBrand] = useState('');
 
   // Financials
   const [estimatedPieces, setEstimatedPieces] = useState('');
-  const [totalCost, setTotalCost] = useState('10000.00');
+  const [totalCost, setTotalCost] = useState('1000.00');
 
   // New Supplier Form States
   const [newSupplierName, setNewSupplierName] = useState('');
@@ -147,16 +152,15 @@ export default function PurchasingPage() {
     setShowNewInvoiceModal(true);
   };
 
-  // إضافة صنف جديد
   const handleAddNewCategory = async (e) => {
     e.preventDefault();
     if (!newCustomCategory.trim()) return;
     const catName = newCustomCategory.trim();
 
     try {
-      await axiosClient.post('/categories/', { name: catName, description: 'صنف بالات جديد' });
+      await axiosClient.post('/categories/', { name: catName, description: 'صنف جديد' });
     } catch (err) {
-      console.warn("Category saved locally for instant dropdown selection");
+      console.warn("Category saved locally");
     }
 
     setBaleItemPresets(prev => [...prev, catName]);
@@ -166,7 +170,6 @@ export default function PurchasingPage() {
     alert(`تم إضافة الصنف الجديد [${catName}] بنجاح!`);
   };
 
-  // إضافة براند جديد
   const handleAddNewBrand = (e) => {
     e.preventDefault();
     if (!newCustomBrand.trim()) return;
@@ -192,9 +195,12 @@ export default function PurchasingPage() {
     if (purchaseType === 'BALE') {
       finalWeight = baleWeightOption === 'CUSTOM' ? parseFloat(customBaleWeight || 0).toFixed(3) : parseFloat(baleWeightOption).toFixed(3);
       finalDescription = `بالة ${baleItemType} (وزن ${baleWeightOption === 'CUSTOM' ? customBaleWeight : baleWeightOption} كجم - براندات متعددة)`;
-    } else {
+    } else if (purchaseType === 'STOCK') {
       finalWeight = parseFloat(stockWeightKg || 0).toFixed(3);
       finalDescription = `استوك ماركة [${stockBrand}] (أصناف متعددة)`;
+    } else {
+      finalWeight = parseFloat(directWeightKg || 0).toFixed(3);
+      finalDescription = `شراء مباشر (بيعة حرة) - ${directDescription} (وزن ${finalWeight} كجم)`;
     }
 
     setSubmitting(true);
@@ -206,7 +212,7 @@ export default function PurchasingPage() {
         invoice_date: invoiceDate,
         status: 'CONFIRMED',
         additional_costs: parseFloat(additionalCosts || 0).toFixed(2),
-        notes: `شراء ${purchaseType === 'BALE' ? 'بالة' : 'استوك'} - ${finalDescription}`
+        notes: `شراء - ${finalDescription}`
       });
 
       const invoiceId = invRes.data.id;
@@ -216,7 +222,7 @@ export default function PurchasingPage() {
 
       await axiosClient.post('/purchase-line-items/', {
         invoice: invoiceId,
-        item_type: purchaseType === 'BALE' ? 'RAW_BALE' : 'STOCK_LOT',
+        item_type: purchaseType === 'BALE' ? 'RAW_BALE' : (purchaseType === 'STOCK' ? 'STOCK_LOT' : 'LOOSE_LOT'),
         description: finalDescription,
         category: null,
         weight_kg: parsedWeight.toFixed(3),
@@ -225,7 +231,9 @@ export default function PurchasingPage() {
         total_cost: parsedCost.toFixed(2)
       });
 
-      const lotCode = `${purchaseType === 'BALE' ? 'BALE' : 'STK'}-${invoiceNumber.replace('PINV-', '')}`;
+      const prefix = purchaseType === 'BALE' ? 'BALE' : (purchaseType === 'STOCK' ? 'STK' : 'DIR');
+      const lotCode = `${prefix}-${invoiceNumber.replace('PINV-', '')}`;
+
       await axiosClient.post('/raw-lots/', {
         lot_code: lotCode,
         purchase_invoice: invoiceId,
@@ -237,7 +245,7 @@ export default function PurchasingPage() {
         purchase_cost: parsedCost.toFixed(2),
         status: 'RECEIVED',
         received_date: invoiceDate,
-        notes: `${purchaseType === 'BALE' ? 'بالة' : 'شحنة استوك'} جديدة بانتظار الفرز`
+        notes: `شحنة جديدة بانتظار الفرز`
       });
 
       alert(`تم حفظ الفاتورة وإنشاء الشحنة رقم #${lotCode} بنجاح!`);
@@ -770,26 +778,36 @@ export default function PurchasingPage() {
 
             <form onSubmit={handleCreateInvoice} className="space-y-4 text-xs">
 
-              {/* Purchase Type Selector: Bale vs Stock */}
-              <div className="p-3 bg-slate-100 rounded-2xl border border-slate-200 flex gap-2">
+              {/* Purchase Type Selector: Bale vs Stock vs Direct */}
+              <div className="p-2.5 bg-slate-100 rounded-2xl border border-slate-200 flex gap-1.5">
                 <button
                   type="button"
                   onClick={() => setPurchaseType('BALE')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                  className={`flex-1 py-2 px-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer text-xs ${
                     purchaseType === 'BALE' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  <Layers size={16} /> 📦 شراء بالة (صنف واحد - براندات متعددة)
+                  <Layers size={14} /> 📦 شراء بالة
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setPurchaseType('STOCK')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                  className={`flex-1 py-2 px-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer text-xs ${
                     purchaseType === 'STOCK' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50'
                   }`}
                 >
-                  <Tag size={16} /> 🏷️ شراء استوك (براند واحد - أصناف متعددة)
+                  <Tag size={14} /> 🏷️ شراء استوك
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPurchaseType('DIRECT')}
+                  className={`flex-1 py-2 px-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 transition cursor-pointer text-xs ${
+                    purchaseType === 'DIRECT' ? 'bg-amber-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <ShoppingBag size={14} /> 🛍️ شراء مباشر (بيعة)
                 </button>
               </div>
 
@@ -852,7 +870,7 @@ export default function PurchasingPage() {
               {/* Dynamic Form Content Based on Purchase Type */}
               <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
                 <span className="font-bold text-slate-800 block text-xs uppercase tracking-wider flex items-center gap-1.5">
-                  {purchaseType === 'BALE' ? '📦 مواصفات وتكلفة البالة' : '🏷️ مواصفات وتكلفة شحنة الاستوك'}
+                  {purchaseType === 'BALE' ? '📦 مواصفات وتكلفة البالة' : (purchaseType === 'STOCK' ? '🏷️ مواصفات وتكلفة شحنة الاستوك' : '🛍️ مواصفات وتكلفة البيعة المباشرة')}
                 </span>
 
                 {/* CASE 1: BALE TYPE */}
@@ -968,6 +986,36 @@ export default function PurchasingPage() {
                   </div>
                 )}
 
+                {/* CASE 3: DIRECT LOOSE PURCHASE (بيعة حرة) */}
+                {purchaseType === 'DIRECT' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">وصف البيعة / البضاعة المباشرة *</label>
+                      <input
+                        type="text"
+                        required
+                        value={directDescription}
+                        onChange={(e) => setDirectDescription(e.target.value)}
+                        placeholder="مثال: بيعة ملابس مشكلة - 10 كجم"
+                        className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">الوزن الكلي للبيعة (كجم) *</label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        required
+                        value={directWeightKg}
+                        onChange={(e) => setDirectWeightKg(e.target.value)}
+                        className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                        placeholder="أدخل الوزن بالكيلو (مثال: 10.000)"
+                      />
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3 pt-2">
                   <div>
                     <label className="block text-slate-600 font-bold mb-1">عدد القطع التقريبي</label>
@@ -976,12 +1024,12 @@ export default function PurchasingPage() {
                       value={estimatedPieces}
                       onChange={(e) => setEstimatedPieces(e.target.value)}
                       className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                      placeholder="مثال: 100 قطعة"
+                      placeholder="مثال: 30 قطعة"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-600 font-bold mb-1">تكلفة الشراء (ج.م) *</label>
+                    <label className="block text-slate-600 font-bold mb-1">تكلفة الشراء الإجمالية (ج.م) *</label>
                     <input
                       type="number"
                       step="10"
@@ -1017,7 +1065,7 @@ export default function PurchasingPage() {
                 disabled={submitting}
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl transition duration-150 shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer text-xs"
               >
-                {submitting ? t('common.loading') : `حفظ الفاتورة وإنشاء شحنة ${purchaseType === 'BALE' ? 'البالة' : 'الاستوك'}`}
+                {submitting ? t('common.loading') : `حفظ الفاتورة وإنشاء شحنة ${purchaseType === 'BALE' ? 'البالة' : (purchaseType === 'STOCK' ? 'الاستوك' : 'البيعة المباشرة')}`}
               </button>
             </form>
           </div>
