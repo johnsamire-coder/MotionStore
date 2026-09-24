@@ -4,7 +4,7 @@ import { useLanguage } from '../context/LanguageContext';
 import axiosClient from '../api/axiosClient';
 import { 
   Printer, Plus, Save, Trash2, Search, 
-  CheckCircle2, AlertCircle, FileText, Keyboard, X, PlusCircle, Tag
+  CheckCircle2, AlertCircle, FileText, Keyboard, X
 } from 'lucide-react';
 
 export default function POSPage() {
@@ -30,25 +30,11 @@ export default function POSPage() {
   
   const [loading, setLoading] = useState(false);
   const [showHotkeysModal, setShowHotkeysModal] = useState(false);
-  const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [invoiceNumber, setInvoiceNumber] = useState(Math.floor(1000 + Math.random() * 9000));
 
-  // New Product Form State
-  const [newProdName, setNewProdName] = useState('');
-  const [newProdCode, setNewProdCode] = useState('');
-  const [newProdCat, setNewProdCat] = useState('');
-  const [newProdUom, setNewProdUom] = useState('PIECE');
-  const [newPriceKgNew, setNewPriceKgNew] = useState('300');
-  const [newPriceKgMid, setNewPriceKgMid] = useState('150');
-  const [newPriceKgClr, setNewPriceKgMidClr] = useState('50');
-  const [newPricePcNew, setNewPricePcNew] = useState('150');
-  const [newPricePcMid, setNewPricePcMid] = useState('75');
-  const [newPricePcClr, setNewPricePcClr] = useState('25');
-
   const searchInputRef = useRef(null);
 
-  // Fetch Initial Data
   useEffect(() => {
     fetchInitialData();
   }, []);
@@ -74,7 +60,6 @@ export default function POSPage() {
       setActiveShift(shiftRes.data);
       setCustomers(custData);
       setPriceListItems(priceData);
-      if (catData.length > 0) setNewProdCat(catData[0].id);
     } catch (err) {
       console.error("Error loading POS data", err);
     } finally {
@@ -82,46 +67,6 @@ export default function POSPage() {
     }
   };
 
-  // Create & Code New Product Handlers
-  const handleCodeNewProduct = async (e) => {
-    e.preventDefault();
-    if (!newProdName) {
-      alert("يرجى كتابة اسم الصنف على الأقل");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      // 1. Create Product
-      const prodPayload = {
-        name: newProdName,
-        code: newProdCode || `COD-${Math.floor(1000 + Math.random()*9000)}`,
-        category: newProdCat || null,
-        unit_of_measure: newProdUom,
-        is_active: true
-      };
-
-      const res = await axiosClient.post('/products/', prodPayload);
-      const createdProd = res.data;
-
-      setMessage({ type: 'success', text: `تم تكويد الصنف (${newProdName}) بنجاح!` });
-      setShowAddProductModal(false);
-      
-      // Reset Form
-      setNewProdName('');
-      setNewProdCode('');
-
-      // Reload list
-      fetchInitialData();
-    } catch (err) {
-      console.error(err);
-      setMessage({ type: 'error', text: 'حدث خطأ أثناء تكويد الصنف' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Helper: Get Resolved Dynamic Price from Pricing Engine
   const getResolvedPrice = (product, grade, uom) => {
     const matched = priceListItems.find(
       item => (item.product === product.id || item.product_id === product.id) && 
@@ -136,11 +81,9 @@ export default function POSPage() {
     return parseFloat(product.selling_price || product.price || 100);
   };
 
-  // Cart Calculations
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const netTotal = Math.max(0, subtotal + parseFloat(deliveryFee || 0) - parseFloat(discount || 0));
 
-  // Handlers
   const handleAddToCart = (product) => {
     const defaultGrade = 'MIDDLE';
     const defaultUom = product.unit_of_measure === 'KG' ? 'KG' : 'PIECE';
@@ -251,16 +194,13 @@ export default function POSPage() {
   };
 
   const toggleHotkeysModal = () => setShowHotkeysModal(prev => !prev);
-  const toggleAddProductModal = () => setShowAddProductModal(prev => !prev);
 
-  // Register Keyboard Hotkeys (F1, F3, F7, *)
   usePOSHotkeys({
     onSave: handleSaveInvoice,
     onNew: handleNewInvoice,
     onQuickSearch: handleFocusSearch
   });
 
-  // Filter Products
   const filteredProducts = products.filter(p => {
     const matchCat = !selectedCategory || p.category === selectedCategory || p.category_id === selectedCategory;
     const matchName = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -291,7 +231,6 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Action Buttons & Notifications */}
         <div className="flex items-center gap-2">
           {message.text && (
             <div className={`px-3 py-1 rounded text-xs font-bold ${
@@ -301,14 +240,6 @@ export default function POSPage() {
               {message.text}
             </div>
           )}
-
-          {/* Quick Code Product Button */}
-          <button 
-            onClick={toggleAddProductModal}
-            className="bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow"
-          >
-            <PlusCircle className="w-4 h-4 text-emerald-200" /> + تكويد صنف جديد
-          </button>
 
           <button 
             onClick={toggleHotkeysModal}
@@ -322,10 +253,8 @@ export default function POSPage() {
       {/* Main Split Body */}
       <div className="flex-1 grid grid-cols-12 gap-2 min-h-0">
         
-        {/* LEFT COLUMN: Products Catalog & Search (5 Columns) */}
+        {/* LEFT COLUMN: Products Catalog */}
         <div className="col-span-5 bg-white border border-slate-300 rounded shadow-sm flex flex-col min-h-0">
-          
-          {/* Search Header Filters */}
           <div className="p-2 bg-slate-50 border-b border-slate-200 grid grid-cols-12 gap-1.5 text-xs">
             <div className="col-span-4">
               <label className="block text-slate-600 mb-0.5 font-semibold">التصنيف</label>
@@ -364,21 +293,20 @@ export default function POSPage() {
             </div>
           </div>
 
-          {/* Products Table */}
           <div className="flex-1 overflow-auto p-1">
             <table className="w-full text-right text-xs border-collapse">
               <thead className="bg-slate-200 text-slate-700 sticky top-0 font-bold border-b">
                 <tr>
                   <th className="p-1.5 border-x">الكود</th>
                   <th className="p-1.5 border-x">الصنف / الاستوك</th>
-                  <th className="p-1.5 border-x text-center">الأساسي</th>
+                  <th className="p-1.5 border-x text-center">السعر</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredProducts.length === 0 ? (
                   <tr>
                     <td colSpan="3" className="text-center p-8 text-slate-400 font-medium">
-                      لا توجد أصناف مكودة حالياً. اضغط على <strong className="text-emerald-700 cursor-pointer underline" onClick={toggleAddProductModal}>"+ تكويد صنف جديد"</strong> بالأعلى لإضافة أول صنف!
+                      لا توجد أصناف مطابقة للبحث.
                     </td>
                   </tr>
                 ) : (
@@ -401,16 +329,14 @@ export default function POSPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Cart Order Table & Controls (7 Columns) */}
+        {/* RIGHT COLUMN: Cart Order Table */}
         <div className="col-span-7 flex flex-col gap-2 min-h-0">
-          
           <div className="bg-white border border-slate-300 rounded shadow-sm flex-1 flex flex-col min-h-0">
             <div className="bg-slate-800 text-white px-3 py-1.5 flex justify-between items-center text-xs font-bold">
               <span>الفاتورة الحالية ({cart.length} أصناف)</span>
-              <span className="text-slate-300">التسعير آلي من قائمة الأسعار</span>
+              <span className="text-slate-300">التسعير آلي ومحمي</span>
             </div>
 
-            {/* Cart Table with Dynamic Grade, UOM, and Auto Price */}
             <div className="flex-1 overflow-auto p-1">
               <table className="w-full text-right text-xs border-collapse">
                 <thead className="bg-slate-100 text-slate-700 sticky top-0 border-b font-bold">
@@ -429,7 +355,7 @@ export default function POSPage() {
                   {cart.length === 0 ? (
                     <tr>
                       <td colSpan="8" className="text-center p-12 text-slate-400 font-medium">
-                        الفاتورة فارغة. اضغط على أي صنف من قائمة الشمال لإضافته.
+                        الفاتورة فارغة. اضغط على أي صنف من الشمال لإضافته.
                       </td>
                     </tr>
                   ) : (
@@ -438,7 +364,6 @@ export default function POSPage() {
                         <td className="p-1 border-x text-center font-bold text-slate-400">{idx + 1}</td>
                         <td className="p-1 border-x font-bold text-blue-950">{item.name}</td>
                         
-                        {/* Dynamic Grade Selector */}
                         <td className="p-1 border-x text-center">
                           <select 
                             value={item.grade}
@@ -451,7 +376,6 @@ export default function POSPage() {
                           </select>
                         </td>
 
-                        {/* Dynamic UOM Selector */}
                         <td className="p-1 border-x text-center">
                           <select 
                             value={item.uom}
@@ -463,7 +387,6 @@ export default function POSPage() {
                           </select>
                         </td>
 
-                        {/* Qty Input */}
                         <td className="p-1 border-x text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button 
@@ -478,12 +401,10 @@ export default function POSPage() {
                           </div>
                         </td>
 
-                        {/* Read-Only Resolved Price */}
                         <td className="p-1 border-x text-center font-mono font-bold text-slate-700 bg-slate-100">
                           {item.price.toFixed(2)}
                         </td>
 
-                        {/* Line Total */}
                         <td className="p-1 border-x text-center font-mono font-black text-blue-900 bg-blue-50/40">
                           {(item.price * item.quantity).toFixed(2)}
                         </td>
@@ -504,9 +425,7 @@ export default function POSPage() {
             </div>
           </div>
 
-          {/* Totals Breakdown and Buttons */}
           <div className="bg-white border border-slate-300 rounded shadow-sm p-2 grid grid-cols-12 gap-2 text-xs">
-            
             <div className="col-span-7 grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded border border-slate-200">
               <div className="flex justify-between items-center bg-white p-1 rounded border">
                 <span className="text-slate-600">الإجمالي:</span>
@@ -537,9 +456,7 @@ export default function POSPage() {
               </div>
             </div>
 
-            {/* Action Hotkey Buttons */}
             <div className="col-span-5 grid grid-cols-2 gap-1.5">
-              
               <button 
                 onClick={handleSaveInvoice}
                 disabled={loading}
@@ -574,110 +491,12 @@ export default function POSPage() {
               >
                 <Search className="w-3.5 h-3.5" /> بحث (*)
               </button>
-
             </div>
-
           </div>
-
         </div>
 
       </div>
 
-      {/* Code New Product Modal */}
-      {showAddProductModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-2xl border border-slate-300 w-full max-w-md overflow-hidden">
-            <div className="bg-emerald-800 text-white p-3 flex justify-between items-center">
-              <span className="font-bold flex items-center gap-2 text-sm">
-                <PlusCircle className="w-5 h-5 text-emerald-300" /> تكويد صنف / استوك جديد
-              </span>
-              <button onClick={toggleAddProductModal} className="text-emerald-200 hover:text-white">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <form onSubmit={handleCodeNewProduct} className="p-4 space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">اسم الصنف / الاستوك *</label>
-                <input 
-                  type="text" 
-                  required
-                  value={newProdName}
-                  onChange={(e) => setNewProdName(e.target.value)}
-                  placeholder="مثال: بلوزة حريمي / استوك زارا"
-                  className="w-full border border-slate-300 rounded p-1.5 text-xs font-semibold focus:ring-1 focus:ring-emerald-600"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">الكود (اختياري)</label>
-                  <input 
-                    type="text" 
-                    value={newProdCode}
-                    onChange={(e) => setNewProdCode(e.target.value)}
-                    placeholder="مثال: 8776"
-                    className="w-full border border-slate-300 rounded p-1.5 text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">التصنيف</label>
-                  <select 
-                    value={newProdCat}
-                    onChange={(e) => setNewProdCat(e.target.value)}
-                    className="w-full border border-slate-300 rounded p-1.5 text-xs bg-white"
-                  >
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">وحدة البيع الافتراضية</label>
-                <div className="flex gap-4 border p-2 rounded bg-slate-50">
-                  <label className="flex items-center gap-1.5 cursor-pointer font-semibold">
-                    <input 
-                      type="radio" 
-                      name="uom" 
-                      value="PIECE" 
-                      checked={newProdUom === 'PIECE'} 
-                      onChange={() => setNewProdUom('PIECE')} 
-                    /> 🔢 بالقطعة
-                  </label>
-                  <label className="flex items-center gap-1.5 cursor-pointer font-semibold">
-                    <input 
-                      type="radio" 
-                      name="uom" 
-                      value="KG" 
-                      checked={newProdUom === 'KG'} 
-                      onChange={() => setNewProdUom('KG')} 
-                    /> ⚖️ بالوزن (كجم)
-                  </label>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t flex justify-end gap-2">
-                <button 
-                  type="button" 
-                  onClick={toggleAddProductModal}
-                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 font-semibold"
-                >
-                  إلغاء
-                </button>
-                <button 
-                  type="submit" 
-                  disabled={loading}
-                  className="px-4 py-1.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold flex items-center gap-1"
-                >
-                  <Save className="w-4 h-4" /> حفظ التكويد
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Hotkeys Help Modal */}
       {showHotkeysModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl border border-slate-300 w-full max-w-md overflow-hidden">
