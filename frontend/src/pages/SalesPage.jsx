@@ -2,8 +2,8 @@
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
 import {
-  FileText, Search, Calendar, Printer, Share2, CornerUpLeft, ShieldCheck, X,
-  ShoppingBag, Banknote, QrCode, Smartphone, CreditCard, Lock
+  FileText, Search, Calendar, Printer, CornerUpLeft, ShieldCheck, X,
+  ShoppingBag, Banknote, RefreshCw
 } from 'lucide-react';
 
 export default function SalesPage() {
@@ -31,7 +31,7 @@ export default function SalesPage() {
       const list = res.data.results || res.data || [];
       setInvoices(list);
     } catch (e) {
-      console.error("Error loading sales from server", e);
+      console.error("Error loading sales", e);
     } finally {
       setLoading(false);
     }
@@ -48,8 +48,8 @@ export default function SalesPage() {
 
     setSubmitting(true);
     try {
-      await axiosClient.patch(`/sales/${selectedInvoiceForReturn.id}/`, { status: 'RETURNED' });
-      alert(`✅ تم استرجاع الفاتورة رقم [${selectedInvoiceForReturn.invoice_number}] وعكس أرصدتها بنجاح بموافقة المدير!`);
+      await axiosClient.patch(`/sales/${selectedInvoiceForReturn.id}/`, { status: 'REFUNDED' });
+      alert(`✅ تم استرجاع الفاتورة رقم [${selectedInvoiceForReturn.invoice_number}] بنجاح!`);
       setShowReturnModal(false);
       setManagerPassword('');
       loadSalesData();
@@ -66,8 +66,8 @@ export default function SalesPage() {
     inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalSalesRevenue = invoices.filter(i => i.status !== 'RETURNED').reduce((s, i) => s + parseFloat(i.total_amount || i.total_cost || 0), 0);
-  const totalReturnsCount = invoices.filter(i => i.status === 'RETURNED').length;
+  const totalSalesRevenue = invoices.filter(i => i.status !== 'REFUNDED' && i.status !== 'CANCELLED').reduce((s, i) => s + parseFloat(i.total_amount || i.total_cost || 0), 0);
+  const totalReturnsCount = invoices.filter(i => i.status === 'REFUNDED' || i.status === 'CANCELLED').length;
 
   if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
 
@@ -78,6 +78,12 @@ export default function SalesPage() {
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">سجل المبيعات والمرتجعات</h2>
           <p className="text-sm text-slate-500">متابعة فواتير الكاشير اليومية المرتجعات وتفاصيل الدفع</p>
         </div>
+        <button
+          onClick={loadSalesData}
+          className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+        >
+          <RefreshCw size={15} /> تحديث قائمة المبيعات
+        </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -94,7 +100,7 @@ export default function SalesPage() {
             <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider">عدد الفواتير الناجحة</span>
             <ShoppingBag size={16} className="text-indigo-600" />
           </div>
-          <div className="text-2xl font-black text-slate-900">{invoices.filter(i => i.status !== 'RETURNED').length} <span className="text-xs font-normal text-slate-500">فاتورة</span></div>
+          <div className="text-2xl font-black text-slate-900">{invoices.filter(i => i.status !== 'REFUNDED' && i.status !== 'CANCELLED').length} <span className="text-xs font-normal text-slate-500">فاتورة</span></div>
         </div>
 
         <div className="bg-white p-5 rounded-2xl border border-rose-200 shadow-xs">
@@ -137,35 +143,38 @@ export default function SalesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-150 text-slate-800 font-medium">
-              {filteredInvoices.map((inv) => (
-                <tr key={inv.id} className={`hover:bg-slate-50/70 transition ${inv.status === 'RETURNED' ? 'bg-rose-50/30 opacity-70' : ''}`}>
-                  <td className="py-4 px-5 font-black text-slate-900 font-mono text-sm">{inv.invoice_number}</td>
-                  <td className="py-4 px-5">
-                    <div className="font-semibold text-slate-700">{inv.created_at?.slice(0,10) || 'اليوم'}</div>
-                    <div className="text-[10px] text-slate-400">بواسطة: {inv.cashier_username || 'admin'}</div>
-                  </td>
-                  <td className="py-4 px-5 font-bold text-emerald-700 text-sm font-mono">
-                    {parseFloat(inv.total_amount || inv.total_cost || 0).toFixed(2)} ج.م
-                  </td>
-                  <td className="py-4 px-5 text-center">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                      inv.status === 'RETURNED' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
-                    }`}>
-                      {inv.status === 'REFUNDED' || inv.status === 'RETURNED' || inv.status === 'CANCELLED' ? 'مرتجع بالكامل ❌' : 'فاتورة محصلة ✅'}
-                    </span>
-                  </td>
-                  <td className="py-4 px-5">
-                    <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => setSelectedInvoiceForView(inv)} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition" title="عرض الفاتورة"><FileText size={15} /></button>
-                      {inv.status !== 'RETURNED' && (
-                        <button onClick={() => { setSelectedInvoiceForReturn(inv); setShowReturnModal(true); }} className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition text-[10px] flex items-center gap-1" title="استرجاع الفاتورة">
-                          <CornerUpLeft size={13} /> استرجاع للمدير
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {filteredInvoices.map((inv) => {
+                const isRefunded = inv.status === 'REFUNDED' || inv.status === 'CANCELLED' || inv.status === 'RETURNED';
+                return (
+                  <tr key={inv.id} className={`hover:bg-slate-50/70 transition ${isRefunded ? 'bg-rose-50/30 opacity-70' : ''}`}>
+                    <td className="py-4 px-5 font-black text-slate-900 font-mono text-sm">{inv.invoice_number}</td>
+                    <td className="py-4 px-5">
+                      <div className="font-semibold text-slate-700">{inv.invoice_date_time?.slice(0,10) || inv.created_at?.slice(0,10) || 'اليوم'}</div>
+                      <div className="text-[10px] text-slate-400">بواسطة: {inv.cashier_username || 'admin'}</div>
+                    </td>
+                    <td className="py-4 px-5 font-bold text-emerald-700 text-sm font-mono">
+                      {parseFloat(inv.total_amount || inv.total_cost || 0).toFixed(2)} ج.م
+                    </td>
+                    <td className="py-4 px-5 text-center">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                        isRefunded ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {isRefunded ? 'مرتجع بالكامل ❌' : 'فاتورة محصلة ✅'}
+                      </span>
+                    </td>
+                    <td className="py-4 px-5">
+                      <div className="flex items-center justify-center gap-2">
+                        <button onClick={() => setSelectedInvoiceForView(inv)} className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition" title="عرض الفاتورة"><FileText size={15} /></button>
+                        {!isRefunded && (
+                          <button onClick={() => { setSelectedInvoiceForReturn(inv); setShowReturnModal(true); }} className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg transition text-[10px] flex items-center gap-1" title="استرجاع الفاتورة">
+                            <CornerUpLeft size={13} /> استرجاع للمدير
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredInvoices.length === 0 && <tr><td colSpan="5" className="py-16 text-center text-slate-400 text-xs font-bold">لا توجد فواتير مبيعات سابقة.</td></tr>}
             </tbody>
           </table>
@@ -184,6 +193,8 @@ export default function SalesPage() {
               </div>
               <div className="space-y-1 font-bold text-xs pt-1">
                 <div className="flex justify-between"><span>الإجمالي الصافي:</span><span className="font-black">{selectedInvoiceForView.total_amount || selectedInvoiceForView.total_cost} ج.م</span></div>
+                <div className="flex justify-between text-[10px] text-slate-600"><span>الفرع:</span><span>{selectedInvoiceForView.branch_name || 'سموحة'}</span></div>
+                <div className="flex justify-between text-[10px] text-slate-600"><span>الكاشير:</span><span>{selectedInvoiceForView.cashier_username || 'admin'}</span></div>
               </div>
             </div>
             <div className="flex gap-2">
@@ -221,4 +232,3 @@ export default function SalesPage() {
     </div>
   );
 }
-
