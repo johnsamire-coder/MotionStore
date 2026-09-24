@@ -5,21 +5,25 @@ import { useLanguage } from '../context/LanguageContext';
 import {
   ShoppingCart, Search, Trash2, Plus, Minus, CreditCard, Banknote,
   Printer, Clock, CheckCircle2, X, Scale, Tag, Sparkles, Gift, Layers,
-  Receipt, ArrowRight, User, Package, Vault, Lock, ShieldCheck
+  Receipt, ArrowRight, User, Package, Vault, Lock, ShieldCheck,
+  ArrowLeftRight, Percent
 } from 'lucide-react';
 
 export default function POSPage() {
   const { user } = useAuth();
   const { t, isRTL } = useLanguage();
 
+  // POS Sale Modes: 'WEIGHED' | 'PIECES' | 'MIXED' | 'OFFERS'
+  const [saleMode, setSaleMode] = useState('WEIGHED');
+
   // Data States
   const [terminal, setTerminal] = useState(null);
   const [activeShift, setActiveShift] = useState(null);
   const [stockItems, setStockItems] = useState([]);
-  const [mainTreasuryBalance, setMainTreasuryBalance] = useState('500.00'); // رصيد الخزينة الفعلي
+  const [mainTreasuryBalance, setMainTreasuryBalance] = useState('500.00');
   const [loading, setLoading] = useState(true);
 
-  // Grade Prices per KG (read from pricing engine)
+  // Grade Prices per KG
   const gradePrices = JSON.parse(localStorage.getItem('motion_grade_prices') || '{"NEW_COLLECTION":"250.00","MIDDLE":"120.00","CLEARANCE":"50.00"}');
 
   // Modals
@@ -27,16 +31,15 @@ export default function POSPage() {
   const [openingFloat, setOpeningFloat] = useState('500.00');
   const [isFloatCustom, setIsFloatCustom] = useState(false);
   const [managerPassword, setManagerPassword] = useState('');
-  const [showWeighedLotModal, setShowWeighedLotModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
 
-  // Cart & Weighed Lot States
+  // Cart States
   const [cart, setCart] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [discountAmount, setDiscountAmount] = useState('0.00');
 
-  // Weighed Lot Form State (وزنة مجمعة)
+  // Weighed Lot Form State (بيع ميزان)
   const [weighedGrade, setWeighedGrade] = useState('NEW_COLLECTION');
   const [weighedWeightKg, setWeighedWeightKg] = useState('2.500');
   const [selectedSubItems, setSelectedSubItems] = useState([
@@ -45,6 +48,12 @@ export default function POSPage() {
   ]);
   const [newSubItemName, setNewSubItemName] = useState('فستان');
   const [newSubItemCount, setNewSubItemCount] = useState('1');
+
+  // Mixed Lot Form State (ميكس ميزان + درجات مختلفة)
+  const [mixGrade1, setMixGrade1] = useState('NEW_COLLECTION');
+  const [mixWeight1, setMixWeight1] = useState('1.500');
+  const [mixGrade2, setMixGrade2] = useState('CLEARANCE');
+  const [mixWeight2, setMixWeight2] = useState('1.000');
 
   // Payment Split State
   const [paidCash, setPaidCash] = useState('0.00');
@@ -63,7 +72,6 @@ export default function POSPage() {
       const termData = termRes.data.results?.[0] || termRes.data?.[0];
       setTerminal(termData);
 
-      // جلب رصيد الخزينة الرئيسية المعتمد للفكة
       try {
         const tRes = await axiosClient.get('/treasuries/?is_active=true');
         const tList = tRes.data.results || tRes.data || [];
@@ -95,10 +103,8 @@ export default function POSPage() {
 
   const handleOpenShift = async (e) => {
     e.preventDefault();
-
-    // لو الكاشير حاول يغير العهدة من دماغه لازم كلمة سر المدير
     if (isFloatCustom && managerPassword !== '123456') {
-      alert("⚠️ عذرا! تعديل العهدة النقدية الافتتاحية يتطلب كلمة سر المدير الصحيحة (123456)!");
+      alert("⚠️ عذرا! تعديل العهدة النقدية يتطلب كلمة سر المدير الصحيحة!");
       return;
     }
 
@@ -107,7 +113,7 @@ export default function POSPage() {
       const res = await axiosClient.post('/shifts/open/', {
         terminal_id: terminal?.id || 'd045390e-6926-4eeb-9290-6a6263077f4a',
         opening_cash: parseFloat(openingFloat || 0).toFixed(2),
-        notes: `فتح وردية بعهدة موثقة من الخزينة الرئيسية (${openingFloat} ج.م)`
+        notes: `فتح وردية بعهدة موثقة (${openingFloat} ج.م)`
       }).catch(() => ({ data: { id: 'SHIFT-LOCAL-101', opening_cash: openingFloat } }));
 
       setActiveShift(res.data);
@@ -120,7 +126,7 @@ export default function POSPage() {
     }
   };
 
-  // إضافة وزنة مجمعة لسلة المبيعات
+  // 1️⃣ إضافة بيع ميزان للسلة
   const handleAddWeighedLotToCart = (e) => {
     e.preventDefault();
     const w = parseFloat(weighedWeightKg || 0);
@@ -128,12 +134,11 @@ export default function POSPage() {
 
     const rate = parseFloat(gradePrices[weighedGrade] || 100);
     const lineTotal = (w * rate).toFixed(2);
-    const gradeTitle = weighedGrade === 'NEW_COLLECTION' ? '✨ وزنة كريمة (Super Lux)' : (weighedGrade === 'MIDDLE' ? '📦 وزنة وسط' : '🏷️ وزنة تصفيات');
+    const gradeTitle = weighedGrade === 'NEW_COLLECTION' ? '✨ وزنة كريمة' : (weighedGrade === 'MIDDLE' ? '📦 وزنة وسط' : '🏷️ وزنة تصفيات');
 
     const newItem = {
       id: Date.now(),
       isWeighedLot: true,
-      grade: weighedGrade,
       name: `شراء ميزان (${gradeTitle})`,
       weightKg: w.toFixed(3),
       pricePerKg: rate.toFixed(2),
@@ -142,10 +147,35 @@ export default function POSPage() {
     };
 
     setCart(prev => [...prev, newItem]);
-    setShowWeighedLotModal(false);
+    alert("✅ تم إضافة وزنة الميزان بنجاح للسلة!");
   };
 
-  // إضافة قطعة مباشرة بسعر ثابت
+  // 2️⃣ إضافة ميكس درجات (ميزان كريمة + ميزان تصفيات في نفس البند)
+  const handleAddMixedLotToCart = (e) => {
+    e.preventDefault();
+    const w1 = parseFloat(mixWeight1 || 0);
+    const w2 = parseFloat(mixWeight2 || 0);
+
+    const r1 = parseFloat(gradePrices[mixGrade1] || 250);
+    const r2 = parseFloat(gradePrices[mixGrade2] || 50);
+
+    const total = (w1 * r1) + (w2 * r2);
+
+    const newItem = {
+      id: Date.now(),
+      isWeighedLot: true,
+      name: `ميكس ميزان درجات (${w1} كجم كريمة + ${w2} كجم تصفيات)`,
+      weightKg: (w1 + w2).toFixed(3),
+      pricePerKg: 'ميكس',
+      subItems: [{ name: 'قطع ميكس درجات', count: 1 }],
+      totalPrice: total.toFixed(2)
+    };
+
+    setCart(prev => [...prev, newItem]);
+    alert("✅ تم إضافة ميكس الدرجات بنجاح للسلة!");
+  };
+
+  // 3️⃣ إضافة بيع بالقطعة للسلة
   const handleAddStockItemToCart = (item) => {
     const existing = cart.find(c => c.id === item.id);
     if (existing) {
@@ -176,7 +206,7 @@ export default function POSPage() {
 
   const openCheckout = () => {
     if (cart.length === 0) {
-      alert("السلة فارغة! يرجى إضافة منتجات أو وزنة مجمعة أولا.");
+      alert("السلة فارغة! يرجى اختيار طريقة البيع وإضافة منتجات أولا.");
       return;
     }
     setPaidCash(netTotal.toFixed(2));
@@ -218,57 +248,233 @@ export default function POSPage() {
   return (
     <div className="h-[calc(100vh-6rem)] flex gap-6 text-xs font-sans" dir={isRTL ? 'rtl' : 'ltr'}>
       
-      {/* LEFT 2/3: PRODUCTS & WEIGHED LOT SELECTION */}
+      {/* LEFT 2/3: MAIN SALE MODES & WORKFLOW */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowWeighedLotModal(true)}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition shadow-md flex items-center gap-2 cursor-pointer"
-            >
-              <Scale size={18} /> ⚖️ إضافة وزنة مجمعة (شراء ميزان)
-            </button>
-          </div>
+        
+        {/* 4 MAIN SALE MODE TABS */}
+        <div className="bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs flex gap-2">
+          <button
+            onClick={() => setSaleMode('WEIGHED')}
+            className={`flex-1 py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer text-xs ${
+              saleMode === 'WEIGHED' ? 'bg-emerald-600 text-white shadow-md' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <Scale size={16} /> ⚖️ بيع ميزان (وزن)
+          </button>
 
-          <div className="relative max-w-xs flex-1">
-            <Search size={16} className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-2.5 text-slate-400`} />
-            <input
-              type="text"
-              placeholder="بحث في الأصناف والقطع الجاهزة..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full ${isRTL ? 'pr-9 pl-3' : 'pl-9 pr-3'} py-2 bg-slate-50 border border-slate-200 rounded-xl font-semibold focus:outline-none focus:border-emerald-500`}
-            />
-          </div>
+          <button
+            onClick={() => setSaleMode('PIECES')}
+            className={`flex-1 py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer text-xs ${
+              saleMode === 'PIECES' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <Tag size={16} /> 🏷️ بيع قطعة ثابتة
+          </button>
+
+          <button
+            onClick={() => setSaleMode('MIXED')}
+            className={`flex-1 py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer text-xs ${
+              saleMode === 'MIXED' ? 'bg-amber-600 text-white shadow-md' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <Layers size={16} /> 🔀 ميكس (ميزان + درجات)
+          </button>
+
+          <button
+            onClick={() => setSaleMode('OFFERS')}
+            className={`flex-1 py-3 px-3 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer text-xs ${
+              saleMode === 'OFFERS' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <Gift size={16} /> 🎁 العروض والخصومات
+          </button>
         </div>
 
-        {/* Products Grid */}
-        <div className="flex-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs overflow-y-auto">
-          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-1.5 text-xs">
-            <Package size={16} className="text-indigo-600" /> الأصناف والقطع المتاحة بالمحل (POS)
-          </h3>
+        {/* WORKFLOW CONTENT BASED ON SELECTED SALE MODE */}
+        <div className="flex-1 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs overflow-y-auto">
+          
+          {/* MODE 1: SALE BY SCALE (بيع ميزان) */}
+          {saleMode === 'WEIGHED' && (
+            <form onSubmit={handleAddWeighedLotToCart} className="max-w-xl mx-auto space-y-5 py-2">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <Scale size={20} className="text-emerald-600" />
+                <h3 className="font-bold text-slate-900 text-sm">إدخال بيع بالميزان (وزنة مجمعة)</h3>
+              </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {stockItems.map((item) => (
-              <div
-                key={item.id}
-                onClick={() => handleAddStockItemToCart(item)}
-                className="p-3.5 bg-slate-50 hover:bg-emerald-50/50 border border-slate-200 hover:border-emerald-300 rounded-xl transition cursor-pointer flex flex-col justify-between group"
-              >
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded inline-block mb-1.5">
-                    {item.grade === 'NEW_COLLECTION' ? '✨ كريمة' : (item.grade === 'MIDDLE' ? '📦 وسط' : '🏷️ تصفيات')}
-                  </span>
-                  <h4 className="font-bold text-slate-900 text-xs line-clamp-1 group-hover:text-emerald-700">{item.product_name || 'صنف بالة'}</h4>
+                  <label className="block font-bold text-slate-700 mb-1">اختر درجة الوزن *</label>
+                  <select
+                    value={weighedGrade}
+                    onChange={(e) => setWeighedGrade(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-pointer"
+                  >
+                    <option value="NEW_COLLECTION">✨ كريمة (سعر الكيلو: {gradePrices.NEW_COLLECTION} ج.م)</option>
+                    <option value="MIDDLE">📦 وسط (سعر الكيلو: {gradePrices.MIDDLE} ج.م)</option>
+                    <option value="CLEARANCE">🏷️ تصفيات (سعر الكيلو: {gradePrices.CLEARANCE} ج.م)</option>
+                  </select>
                 </div>
 
-                <div className="mt-3 pt-2 border-t border-slate-200/60 flex justify-between items-center text-[11px]">
-                  <span className="font-black text-slate-900">{parseFloat(item.total_weight_kg || 0).toFixed(1)} كجم</span>
-                  <span className="font-bold text-emerald-600 bg-emerald-100/60 px-2 py-0.5 rounded">+ إضافة</span>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">الوزن الإجمالي على الميزان (كجم) *</label>
+                  <input
+                    type="number"
+                    step="0.001"
+                    required
+                    value={weighedWeightKg}
+                    onChange={(e) => setWeighedWeightKg(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-900 text-sm focus:border-emerald-500"
+                    placeholder="مثال: 2.500"
+                  />
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+                <span className="font-bold text-slate-700 block text-xs">الأصناف داخل وزنة الميزان (تطبع بالفاتورة):</span>
+                <div className="flex flex-wrap gap-2">
+                  {selectedSubItems.map(s => (
+                    <span key={s.id} className="bg-white px-3 py-1.5 rounded-xl border border-slate-200 font-bold text-slate-800 shadow-2xs">
+                      {s.count} {s.name}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <input
+                    type="text"
+                    placeholder="اسم الصنف (مثال: فستان)"
+                    value={newSubItemName}
+                    onChange={(e) => setNewSubItemName(e.target.value)}
+                    className="flex-1 p-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold"
+                  />
+                  <input
+                    type="number"
+                    placeholder="العدد"
+                    value={newSubItemCount}
+                    onChange={(e) => setNewSubItemCount(e.target.value)}
+                    className="w-20 p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold"
+                  />
+                  <button type="button" onClick={addSubItemToModal} className="px-4 py-2 bg-slate-900 text-white font-bold rounded-xl cursor-pointer">
+                    + إدراج بالوزنة
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex justify-between items-center text-emerald-900 font-bold">
+                <span>إجمالي سعر الوزنة:</span>
+                <span className="text-base font-black font-mono">
+                  {(parseFloat(weighedWeightKg || 0) * parseFloat(gradePrices[weighedGrade] || 100)).toFixed(2)} ج.م
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl transition shadow-lg cursor-pointer text-xs"
+              >
+                + إضافة وزنة الميزان إلى سلة المبيعات
+              </button>
+            </form>
+          )}
+
+          {/* MODE 2: SALE BY PIECE (بيع قطعة) */}
+          {saleMode === 'PIECES' && (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                  <Tag size={16} className="text-indigo-600" /> اختار أصناف وقطع المحل المباشرة
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {stockItems.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => handleAddStockItemToCart(item)}
+                    className="p-3.5 bg-slate-50 hover:bg-indigo-50/50 border border-slate-200 hover:border-indigo-300 rounded-xl transition cursor-pointer flex flex-col justify-between group"
+                  >
+                    <div>
+                      <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded inline-block mb-1.5">
+                        {item.grade === 'NEW_COLLECTION' ? '✨ كريمة' : (item.grade === 'MIDDLE' ? '📦 وسط' : '🏷️ تصفيات')}
+                      </span>
+                      <h4 className="font-bold text-slate-900 text-xs line-clamp-1 group-hover:text-indigo-700">{item.product_name || 'صنف بالة'}</h4>
+                    </div>
+
+                    <div className="mt-3 pt-2 border-t border-slate-200/60 flex justify-between items-center text-[11px]">
+                      <span className="font-black text-slate-900">{parseFloat(item.total_weight_kg || 0).toFixed(1)} كجم</span>
+                      <span className="font-bold text-indigo-600 bg-indigo-100/60 px-2 py-0.5 rounded">+ إضافة قطعة</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* MODE 3: MIXED LOT (ميكس ميزان درجات مختلفة) */}
+          {saleMode === 'MIXED' && (
+            <form onSubmit={handleAddMixedLotToCart} className="max-w-xl mx-auto space-y-5 py-2">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <Layers size={20} className="text-amber-600" />
+                <h3 className="font-bold text-slate-900 text-sm">دمج وزنة ميكس (درجتين مختلفين في وزنة واحدة)</h3>
+              </div>
+
+              <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-200 space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">الدرجة الأولى *</label>
+                    <select value={mixGrade1} onChange={(e) => setMixGrade1(e.target.value)} className="w-full p-2 bg-white border rounded-xl font-bold">
+                      <option value="NEW_COLLECTION">✨ كريمة (250 ج.م/كجم)</option>
+                      <option value="MIDDLE">📦 وسط (120 ج.م/كجم)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">وزن الدرجة الأولى (كجم) *</label>
+                    <input type="number" step="0.001" value={mixWeight1} onChange={(e) => setMixWeight1(e.target.value)} className="w-full p-2 bg-white border rounded-xl font-bold" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-amber-200/80">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">الدرجة الثانية *</label>
+                    <select value={mixGrade2} onChange={(e) => setMixGrade2(e.target.value)} className="w-full p-2 bg-white border rounded-xl font-bold">
+                      <option value="CLEARANCE">🏷️ تصفيات (50 ج.م/كجم)</option>
+                      <option value="MIDDLE">📦 وسط (120 ج.م/كجم)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">وزن الدرجة الثانية (كجم) *</label>
+                    <input type="number" step="0.001" value={mixWeight2} onChange={(e) => setMixWeight2(e.target.value)} className="w-full p-2 bg-white border rounded-xl font-bold" />
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full bg-amber-600 hover:bg-amber-500 text-white font-extrabold py-3.5 rounded-xl shadow-lg cursor-pointer text-xs">
+                + إضافة الميكس المجمع إلى السلة
+              </button>
+            </form>
+          )}
+
+          {/* MODE 4: PROMOS & OFFERS (العروض) */}
+          {saleMode === 'OFFERS' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
+                <Gift size={20} className="text-slate-900" />
+                <h3 className="font-bold text-slate-900 text-sm">العروض والخصومات المعتمدة للنظام</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div onClick={() => { setDiscountAmount('50.00'); alert('✅ تم تطبيق خصم العرض (50 ج.م) على الفاتورة!'); }} className="p-4 bg-slate-50 hover:bg-emerald-50 border border-slate-200 rounded-2xl cursor-pointer transition">
+                  <div className="font-bold text-slate-900 text-sm">🎁 عرض الشراء المباشر (-50 ج.م)</div>
+                  <p className="text-xs text-slate-500 mt-1">خصم 50 ج.م فوري على الفاتورة الحالية</p>
+                </div>
+
+                <div onClick={() => { setDiscountAmount((cartSubtotal * 0.10).toFixed(2)); alert('✅ تم تطبيق خصم (10%) على الفاتورة!'); }} className="p-4 bg-slate-50 hover:bg-indigo-50 border border-slate-200 rounded-2xl cursor-pointer transition">
+                  <div className="font-bold text-slate-900 text-sm">٪ خصم العودة للمدارس (10%)</div>
+                  <p className="text-xs text-slate-500 mt-1">خصم 10% تلقائي من إجمالي السلة</p>
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
 
@@ -291,7 +497,7 @@ export default function POSPage() {
                 <div className="font-bold text-slate-900 text-xs">{item.name}</div>
                 {item.isWeighedLot ? (
                   <div className="text-[10px] text-slate-500 space-y-0.5">
-                    <div>الوزن: <strong>{item.weightKg} كجم</strong> @ {item.pricePerKg} ج.م/كجم</div>
+                    <div>الوزن: <strong>{item.weightKg} كجم</strong></div>
                     <div className="text-emerald-700 font-semibold">
                       المحتويات: {item.subItems.map(s => `${s.count} ${s.name}`).join(' ')}
                     </div>
@@ -354,93 +560,6 @@ export default function POSPage() {
           </button>
         </div>
       </div>
-
-      {/* MODAL 1: ADD WEIGHED LOT */}
-      {showWeighedLotModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
-            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
-                <Scale size={18} className="text-emerald-600" /> إضافة وزنة مجمعة (شراء ميزان)
-              </h3>
-              <button onClick={() => setShowWeighedLotModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
-            </div>
-
-            <form onSubmit={handleAddWeighedLotToCart} className="space-y-4">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">اختر درجة الوزن *</label>
-                <select
-                  value={weighedGrade}
-                  onChange={(e) => setWeighedGrade(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 cursor-pointer"
-                >
-                  <option value="NEW_COLLECTION">✨ كريمة (سعر الكيلو: {gradePrices.NEW_COLLECTION} ج.م)</option>
-                  <option value="MIDDLE">📦 وسط (سعر الكيلو: {gradePrices.MIDDLE} ج.م)</option>
-                  <option value="CLEARANCE">🏷️ تصفيات (سعر الكيلو: {gradePrices.CLEARANCE} ج.م)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">الوزن الإجمالي للوزنة (كجم) *</label>
-                <input
-                  type="number"
-                  step="0.001"
-                  required
-                  value={weighedWeightKg}
-                  onChange={(e) => setWeighedWeightKg(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-900 text-sm focus:border-emerald-500"
-                  placeholder="مثال: 2.500 كجم"
-                />
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                <span className="font-bold text-slate-700 block text-[11px]">محتويات وزنة الميزان (تظهر في الفاتورة):</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {selectedSubItems.map(s => (
-                    <span key={s.id} className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 font-bold text-slate-800">
-                      {s.count} {s.name}
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex gap-2 pt-1">
-                  <input
-                    type="text"
-                    placeholder="اسم الصنف"
-                    value={newSubItemName}
-                    onChange={(e) => setNewSubItemName(e.target.value)}
-                    className="flex-1 p-1.5 bg-white border border-slate-200 rounded-lg text-xs"
-                  />
-                  <input
-                    type="number"
-                    placeholder="العدد"
-                    value={newSubItemCount}
-                    onChange={(e) => setNewSubItemCount(e.target.value)}
-                    className="w-16 p-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
-                  />
-                  <button type="button" onClick={addSubItemToModal} className="px-3 py-1.5 bg-slate-900 text-white font-bold rounded-lg cursor-pointer">
-                    + إدراج
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex justify-between items-center text-emerald-900 font-bold">
-                <span>إجمالي قيمة وزنة الميزان:</span>
-                <span className="text-sm font-black font-mono">
-                  {(parseFloat(weighedWeightKg || 0) * parseFloat(gradePrices[weighedGrade] || 100)).toFixed(2)} ج.م
-                </span>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition shadow-md cursor-pointer text-xs"
-              >
-                إضافة وزنة الميزان إلى السلة
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* MODAL 2: CHECKOUT */}
       {showCheckoutModal && (
@@ -567,7 +686,7 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* MODAL 4: OPEN SHIFT (WITH VERIFIED TREASURY FLOAT & MANAGER OVERRIDE) */}
+      {/* MODAL 4: OPEN SHIFT */}
       {showOpenShiftModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[80]">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-xs">
@@ -577,7 +696,6 @@ export default function POSPage() {
               </h3>
             </div>
 
-            {/* Treasury Verified Float Box */}
             <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1.5">
               <div className="flex items-center gap-1.5 text-emerald-900 font-bold">
                 <Vault size={16} className="text-emerald-600" />
@@ -586,9 +704,6 @@ export default function POSPage() {
               <div className="text-xl font-black text-slate-900 font-mono">
                 {mainTreasuryBalance} <span className="text-xs font-normal text-slate-500">ج.م فكة</span>
               </div>
-              <p className="text-[10px] text-emerald-800">
-                ℹ️ هذه هي النقدية المعتمدة المستلمة بالدرج من الخزينة لافتتاح الوردية.
-              </p>
             </div>
 
             <form onSubmit={handleOpenShift} className="space-y-4">
@@ -620,7 +735,6 @@ export default function POSPage() {
                 </div>
               </div>
 
-              {/* Password Prompt if Custom Float Entered */}
               {isFloatCustom && (
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
                   <span className="font-bold text-amber-900 text-[11px] flex items-center gap-1">
