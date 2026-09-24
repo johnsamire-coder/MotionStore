@@ -1,0 +1,9 @@
+==========================================
+--- 1. «·„ÊœÌ·«  «·Õ«·Ì… ›Ì  ÿ»Ìﬁ «· ”⁄Ì— (pricing) ---
+==========================================
+Œÿ√ √À‰«¡ ›Õ’ «· ”⁄Ì—: 'charmap' codec can't encode character '\U0001f4e6' in position 2: character maps to <undefined>
+
+==========================================
+--- 2. «·ÕﬁÊ· Ê«·œ—Ã«  ›Ì  ÿ»Ìﬁ «·„‰ Ã«  (products) ---
+==========================================
+Œÿ√ √À‰«¡ ›Õ’ «·„‰ Ã« : 'charmap' codec can't encode character '\U0001f4e6' in position 2: character maps to <undefined>
