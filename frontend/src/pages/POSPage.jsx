@@ -3,8 +3,8 @@ import { usePOSHotkeys } from '../hooks/usePOSHotkeys';
 import { useLanguage } from '../context/LanguageContext';
 import axiosClient from '../api/axiosClient';
 import { 
-  Printer, Plus, Save, Trash2, Search, RefreshCw, 
-  ShoppingBag, AlertCircle, CheckCircle2, User, CreditCard, Tag, FileText, ArrowRight
+  Printer, Plus, Save, Trash2, Search, 
+  CheckCircle2, AlertCircle, FileText
 } from 'lucide-react';
 
 export default function POSPage() {
@@ -137,7 +137,7 @@ export default function POSPage() {
 
       await axiosClient.post('/sales/checkout/', payload).catch(() => {});
 
-      setMessage({ type: 'success', text: تم حفظ الفاتورة # بنجاح! });
+      setMessage({ type: 'success', text: 'تم حفظ الفاتورة بنجاح!' });
       setTimeout(() => {
         handleNewInvoice();
       }, 1200);
@@ -194,7 +194,10 @@ export default function POSPage() {
 
         {/* Notifications */}
         {message.text && (
-          <div className={px-3 py-1 rounded text-xs font-bold }>
+          <div className={`px-3 py-1 rounded text-xs font-bold ${
+            message.type === 'success' ? 'bg-emerald-600 text-white' : 
+            message.type === 'error' ? 'bg-rose-600 text-white' : 'bg-blue-600 text-white'
+          }`}>
             {message.text}
           </div>
         )}
