@@ -118,6 +118,56 @@ class StockItemViewSet(BaseTenantViewSet):
     model = StockItem
     serializer_class = StockItemSerializer
 
+    @action(detail=True, methods=['post'])
+    def transfer(self, request, pk=None):
+        from django.db import transaction
+        from decimal import Decimal
+        from apps.warehouses.models import Warehouse
+
+        source_item = self.get_object()
+        target_wh_id = request.data.get('target_warehouse')
+        weight_kg = Decimal(str(request.data.get('weight_kg', '0.000')))
+        pieces = int(request.data.get('quantity_pieces', 0) or 0)
+
+        if weight_kg > source_item.total_weight_kg:
+            return Response({'detail': 'الوزن المطلوب أكبر من المتاح بالرصيد'}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            source_item.total_weight_kg = max(Decimal('0.000'), source_item.total_weight_kg - weight_kg)
+            source_item.total_quantity_pieces = max(0, source_item.total_quantity_pieces - pieces)
+            source_item.save()
+
+            target_wh = Warehouse.objects.get(id=target_wh_id)
+            target_item, _ = StockItem.objects.get_or_create(
+                tenant=source_item.tenant,
+                warehouse=target_wh,
+                product=source_item.product,
+                grade=source_item.grade,
+                source_lot=source_item.source_lot,
+                defaults={'total_weight_kg': Decimal('0.000'), 'total_quantity_pieces': 0}
+            )
+            target_item.total_weight_kg += weight_kg
+            target_item.total_quantity_pieces += pieces
+            target_item.save()
+
+            InventoryTransaction.objects.create(
+                tenant=source_item.tenant, transaction_type='TRANSFER_OUT', stock_item=source_item,
+                product=source_item.product, grade=source_item.grade, warehouse=source_item.warehouse,
+                weight_change_kg=-weight_kg, quantity_change_pieces=-pieces, unit_cost=Decimal('100.00'),
+                total_cost_change=-weight_kg*Decimal('100.00'), source_document_type='TransferOrder',
+                source_document_id=str(target_item.id), notes=f"تحويل إلى {target_wh.name}"
+            )
+
+            InventoryTransaction.objects.create(
+                tenant=source_item.tenant, transaction_type='TRANSFER_IN', stock_item=target_item,
+                product=source_item.product, grade=source_item.grade, warehouse=target_wh,
+                weight_change_kg=weight_kg, quantity_change_pieces=pieces, unit_cost=Decimal('100.00'),
+                total_cost_change=weight_kg*Decimal('100.00'), source_document_type='TransferOrder',
+                source_document_id=str(source_item.id), notes=f"استلام تحويل من {source_item.warehouse.name}"
+            )
+
+        return Response(StockItemSerializer(source_item).data, status=status.HTTP_200_OK)
+
 class InventoryTransactionViewSet(BaseTenantViewSet):
     model = InventoryTransaction
     serializer_class = InventoryTransactionSerializer
