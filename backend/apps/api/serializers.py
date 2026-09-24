@@ -169,8 +169,18 @@ class SaleInvoiceSerializer(serializers.ModelSerializer):
     lines = SaleLineItemSerializer(many=True, read_only=True)
     cashier_username = serializers.ReadOnlyField(source='cashier.username')
     branch_name = serializers.ReadOnlyField(source='branch.name')
+    branch = serializers.PrimaryKeyRelatedField(read_only=True)
+    pos_terminal = serializers.PrimaryKeyRelatedField(read_only=True)
+    shift = serializers.PrimaryKeyRelatedField(read_only=True)
+    cashier = serializers.PrimaryKeyRelatedField(read_only=True)
+    invoice_date_time = serializers.DateTimeField(read_only=True)
 
     class Meta:
+        model = SaleInvoice
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'branch', 'pos_terminal', 'shift', 'cashier', 'invoice_date_time']
+
+class Meta:
         model = SaleInvoice
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'branch', 'pos_terminal', 'shift', 'cashier', 'invoice_date_time']
