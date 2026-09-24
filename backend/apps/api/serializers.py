@@ -1,4 +1,4 @@
-from rest_framework import serializers
+﻿from rest_framework import serializers
 from apps.tenants.models import Tenant
 from apps.companies.models import Company
 from apps.branches.models import Branch
@@ -113,6 +113,7 @@ class SortingOrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class StockItemSerializer(serializers.ModelSerializer):
+    source_lot_code = serializers.ReadOnlyField(source='source_lot.lot_code')
     product_name = serializers.ReadOnlyField(source='product.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
     class Meta:
@@ -175,3 +176,4 @@ class JournalEntrySerializer(serializers.ModelSerializer):
         model = JournalEntry
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
