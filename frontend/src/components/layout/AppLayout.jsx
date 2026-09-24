@@ -2,19 +2,20 @@
 import { Outlet, NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { 
-  ShoppingCart, 
-  Layers, 
-  Package, 
-  Truck, 
-  Clock, 
-  BarChart3, 
-  Vault, 
-  LogOut, 
+import {
+  ShoppingCart,
+  Layers,
+  Package,
+  Truck,
+  Clock,
+  BarChart3,
+  Vault,
+  LogOut,
   Store,
   FileSpreadsheet,
   Settings,
-  Globe
+  Globe,
+  Tag
 } from 'lucide-react';
 
 export default function AppLayout() {
@@ -39,7 +40,7 @@ export default function AppLayout() {
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col border-x border-slate-800">
         <div className="h-16 flex items-center gap-3 px-6 bg-slate-950 border-b border-slate-800">
           <div className="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-base">
-            {isRTL ? 'ظ…' : 'M'}
+            {isRTL ? 'م' : 'M'}
           </div>
           <div>
             <h1 className="font-bold text-white tracking-wide text-sm">{t('nav.brand')}</h1>
@@ -79,7 +80,7 @@ export default function AppLayout() {
               <p className="text-[10px] text-emerald-400 font-mono tracking-wider">{user?.role}</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={logout}
             className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
             title={t('nav.logout')}
@@ -104,11 +105,11 @@ export default function AppLayout() {
               className="flex items-center gap-2 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 rounded-xl text-xs font-black transition cursor-pointer shadow-md"
             >
               <Globe size={16} />
-              <span>{lang === 'ar' ? 'English (EN)' : 'ط§ظ„ط¹ط±ط¨ظٹط© (AR)'}</span>
+              <span>{lang === 'ar' ? 'English (EN)' : 'العربية (AR)'}</span>
             </button>
 
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-              â—ڈ {t('nav.onlineEngine')}
+              ● {t('nav.onlineEngine')}
             </span>
           </div>
         </header>
@@ -120,4 +121,3 @@ export default function AppLayout() {
     </div>
   );
 }
-
