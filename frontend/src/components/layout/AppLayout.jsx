@@ -15,7 +15,8 @@ import {
   FileSpreadsheet,
   Settings,
   Globe,
-  Tag
+  Tag,
+  FileText
 } from 'lucide-react';
 
 export default function AppLayout() {
@@ -122,4 +123,3 @@ export default function AppLayout() {
     </div>
   );
 }
-
