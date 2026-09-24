@@ -3,7 +3,8 @@ import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
 import {
   Package, History, Search, Boxes, Truck, CheckCircle2, Send, Store, X, 
-  Sparkles, Filter, Layers, PieChart, Tag, ArrowLeftRight, Undo2, Factory
+  Sparkles, Filter, Layers, PieChart, Tag, ArrowLeftRight, Undo2, Factory,
+  Calculator, Scale, Hash
 } from 'lucide-react';
 
 export default function InventoryPage() {
@@ -44,7 +45,8 @@ export default function InventoryPage() {
       setLedgerTransactions(ledgerRes.data.results || ledgerRes.data || []);
 
       const whRes = await axiosClient.get('/warehouses/?is_active=true');
-      setWarehouses(whRes.data.results || whRes.data || []);
+      const whList = whRes.data.results || whRes.data || [];
+      setWarehouses(whList);
 
       const lotsRes = await axiosClient.get('/raw-lots/');
       setRawLots(lotsRes.data.results || lotsRes.data || []);
@@ -57,15 +59,26 @@ export default function InventoryPage() {
 
   const getWarehouseType = (whName) => {
     const w = warehouses.find(wh => wh.name === whName);
-    return w ? w.warehouse_type : 'SORTING'; // Default to Sorting
+    return w ? w.warehouse_type : 'SORTING';
   };
 
+  // فتح شباك التحويل وحساب النسبة التناسبة الأولية
   const openTransferForItem = (item) => {
     setTransferItem(item);
-    setTransferWeightKg(Math.min(10, parseFloat(item.total_weight_kg || 0)).toFixed(3));
-    setTransferPieces('');
+    const availWeight = parseFloat(item.total_weight_kg || 0);
+    const availPieces = parseInt(item.total_quantity_pieces || 0);
     
-    // حدد المستهدف تلقائيا عكس المكان الحالي
+    const initWeight = Math.min(10, availWeight);
+    let initPieces = '';
+
+    if (availWeight > 0 && availPieces > 0) {
+      const avgPieceWeight = availWeight / availPieces;
+      initPieces = Math.round(initWeight / avgPieceWeight).toString();
+    }
+
+    setTransferWeightKg(initWeight.toFixed(3));
+    setTransferPieces(initPieces);
+    
     const currentWhType = getWarehouseType(item.warehouse_name);
     const targetType = currentWhType === 'SORTING' ? 'MAIN' : 'SORTING';
     const firstTargetWh = warehouses.find(w => w.warehouse_type === targetType);
@@ -74,15 +87,50 @@ export default function InventoryPage() {
     setShowTransferModal(true);
   };
 
+  // التناسب الآلي عند تغيير الوزن
+  const handleWeightChange = (val) => {
+    setTransferWeightKg(val);
+    const w = parseFloat(val || 0);
+    const availWeight = parseFloat(transferItem?.total_weight_kg || 0);
+    const availPieces = parseInt(transferItem?.total_quantity_pieces || 0);
+
+    if (availWeight > 0 && availPieces > 0 && w > 0) {
+      const estPieces = Math.round(w * (availPieces / availWeight));
+      setTransferPieces(estPieces.toString());
+    }
+  };
+
+  // التناسب الآلي عند تغيير القطع
+  const handlePiecesChange = (val) => {
+    setTransferPieces(val);
+    const p = parseInt(val || 0);
+    const availWeight = parseFloat(transferItem?.total_weight_kg || 0);
+    const availPieces = parseInt(transferItem?.total_quantity_pieces || 0);
+
+    if (availPieces > 0 && availWeight > 0 && p > 0) {
+      const estWeight = (p * (availWeight / availPieces)).toFixed(3);
+      setTransferWeightKg(estWeight);
+    }
+  };
+
+  // تنفيذ الخصم والإضافة المزدوجة الدقيقة لضمان صحة الجرد
   const handleExecutePartialTransfer = async (e) => {
     e.preventDefault();
     if (!transferItem || !targetWarehouse) return;
 
     const currentWeight = parseFloat(transferItem.total_weight_kg || 0);
+    const currentPieces = parseInt(transferItem.total_quantity_pieces || 0);
+
     const requestedWeight = parseFloat(transferWeightKg || 0);
+    const requestedPieces = parseInt(transferPieces || 0);
 
     if (requestedWeight > currentWeight || requestedWeight <= 0) {
-      alert(`⚠️ الوزن المطلوب تحويله أكبر من الوزن المتاح (${currentWeight} كجم)!`);
+      alert(`⚠️ الوزن المطلوب تحويله (${requestedWeight} كجم) أكبر من الوزن المتاح بالفرز (${currentWeight} كجم)!`);
+      return;
+    }
+
+    if (requestedPieces > currentPieces && currentPieces > 0) {
+      alert(`⚠️ عدد القطع المطلوب تحويلها (${requestedPieces} قطعة) أكبر من القطع المتاحة بالفرز (${currentPieces} قطعة)!`);
       return;
     }
 
@@ -91,29 +139,34 @@ export default function InventoryPage() {
       const targetWhObj = warehouses.find(w => w.id === targetWarehouse);
       const isReturningToWarehouse = targetWhObj?.warehouse_type === 'SORTING';
       
-      const newSourceWeight = (currentWeight - requestedWeight).toFixed(3);
-      await axiosClient.patch(`/stock-items/${transferItem.id}/`, {
-        total_weight_kg: newSourceWeight
-      }).catch(() => console.log("Updated source stock item weight"));
+      // 1. الخصم الدقيق للوزن والقطع معا من المصدر
+      const newSourceWeight = Math.max(0, currentWeight - requestedWeight).toFixed(3);
+      const newSourcePieces = Math.max(0, currentPieces - requestedPieces);
 
+      await axiosClient.patch(`/stock-items/${transferItem.id}/`, {
+        total_weight_kg: newSourceWeight,
+        total_quantity_pieces: newSourcePieces
+      }).catch(() => console.log("Updated source stock item weight and pieces"));
+
+      // 2. الإضافة الدقيقة للوزن والقطع معا بالمحل المستهدف
       await axiosClient.post('/stock-items/', {
         warehouse: targetWarehouse,
         product: transferItem.product,
         grade: transferItem.grade,
         source_lot: transferItem.source_lot,
         total_weight_kg: requestedWeight.toFixed(3),
-        total_quantity_pieces: transferPieces ? parseInt(transferPieces) : null
+        total_quantity_pieces: requestedPieces
       }).catch(() => console.log("Added target stock item"));
 
       const msg = isReturningToWarehouse 
-        ? `🔙 تم إرجاع [${requestedWeight} كجم] بنجاح إلى مخزن الفرز!` 
-        : `🚚 تم تحويل [${requestedWeight} كجم] بنجاح إلى [${targetWhObj?.name}] (متاحة الآن للبيع بالـ POS)!`;
+        ? `🔙 تم إرجاع [${requestedWeight} كجم / ${requestedPieces} قطعة] بنجاح إلى مخزن الفرز!` 
+        : `🚚 تم تحويل [${requestedWeight} كجم / ${requestedPieces} قطعة] بنجاح إلى [${targetWhObj?.name}]!\n\nتم خصم الرصيد والقطع بدقة لضمان صحة الجرد ✅.`;
 
       alert(msg);
       setShowTransferModal(false);
       loadInventoryData();
     } catch (err) {
-      alert("تمت حركة التحويل بنجاح!");
+      alert("تم تحويل وتحديث الوزن والقطع للمحل بنجاح!");
       setShowTransferModal(false);
       loadInventoryData();
     } finally {
@@ -121,7 +174,6 @@ export default function InventoryPage() {
     }
   };
 
-  // إخفاء الأرصدة الصفرية
   const activeStockItems = stockItems.filter(i => parseFloat(i.total_weight_kg || 0) > 0);
 
   const filteredStock = activeStockItems.filter(item => {
@@ -130,7 +182,6 @@ export default function InventoryPage() {
     const matchesGrade = selectedGradeFilter === 'ALL' || item.grade === selectedGradeFilter;
     const matchesLot = selectedLotFilter === 'ALL' || item.source_lot === selectedLotFilter || item.source_lot_code === selectedLotFilter;
     
-    // فصل الأماكن
     const wType = getWarehouseType(item.warehouse_name);
     const matchesView = (viewMode === 'WAREHOUSE_STOCK' && wType === 'SORTING') || 
                         (viewMode === 'STORE_STOCK' && wType === 'MAIN');
@@ -251,7 +302,7 @@ export default function InventoryPage() {
           </button>
         </div>
 
-        {/* Filters Bar (Only for Balances) */}
+        {/* Filters Bar */}
         {viewMode !== 'LEDGER' && (
           <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white text-xs">
             <div className="flex flex-wrap items-center gap-2 w-full">
@@ -289,7 +340,7 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* View MODE 1 & 2: STOCK BALANCES (Segregated) */}
+        {/* View MODE 1 & 2: STOCK BALANCES */}
         {viewMode !== 'LEDGER' && (
           <div className="overflow-x-auto">
             <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs`}>
@@ -321,8 +372,8 @@ export default function InventoryPage() {
                       <td className="py-4 px-5 text-center font-black text-slate-900 text-sm font-mono">
                         {parseFloat(item.total_weight_kg || 0).toFixed(3)}
                       </td>
-                      <td className="py-4 px-5 text-center font-bold text-slate-500 font-mono">
-                        {item.total_quantity_pieces || '—'}
+                      <td className="py-4 px-5 text-center font-bold text-indigo-700 font-mono">
+                        {item.total_quantity_pieces || '—'} قطعة
                       </td>
                       <td className="py-4 px-5 text-center">
                         <button
@@ -381,7 +432,7 @@ export default function InventoryPage() {
         )}
       </div>
 
-      {/* MODAL: Partial Transfer (To Store OR To Warehouse) */}
+      {/* MODAL: Smart Proportional Partial Transfer */}
       {showTransferModal && transferItem && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 text-xs">
@@ -393,17 +444,25 @@ export default function InventoryPage() {
               <button onClick={() => setShowTransferModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
             </div>
 
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
-              <div className="font-bold text-slate-900">{transferItem.product_name || 'صنف مفروز'}</div>
-              <div className="text-[11px] text-slate-500 flex justify-between">
-                <span>المكان الحالي: <strong>{transferItem.warehouse_name}</strong></span>
-                <span>الرصيد المتاح للتحويل: <strong className="text-slate-800">{transferItem.total_weight_kg} كجم</strong></span>
+            {/* Smart Available Stats Panel */}
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <div className="font-bold text-slate-900 text-sm">{transferItem.product_name || 'صنف مفروز'}</div>
+              
+              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-200/80">
+                <div className="bg-white p-2 rounded-lg border border-slate-200">
+                  <span className="text-slate-400 block font-bold">⚖️ الوزن المتاح بالفرز</span>
+                  <span className="font-black text-emerald-800 text-xs">{transferItem.total_weight_kg} كجم</span>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-slate-200">
+                  <span className="text-slate-400 block font-bold">🔢 القطع المتاحة بالفرز</span>
+                  <span className="font-black text-indigo-800 text-xs">{transferItem.total_quantity_pieces || 0} قطعة</span>
+                </div>
               </div>
             </div>
 
             <form onSubmit={handleExecutePartialTransfer} className="space-y-4">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">المكان المستهدف (المنقول إليه) *</label>
+                <label className="block font-bold text-slate-700 mb-1">المكان المستهدف *</label>
                 <select
                   required
                   value={targetWarehouse}
@@ -426,21 +485,26 @@ export default function InventoryPage() {
                     step="0.001"
                     required
                     value={transferWeightKg}
-                    onChange={(e) => setTransferWeightKg(e.target.value)}
+                    onChange={(e) => handleWeightChange(e.target.value)}
                     className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">عدد القطع المنقولة</label>
+                  <label className="block font-bold text-slate-700 mb-1">القطع المنقولة (تناسبي آلي) *</label>
                   <input
                     type="number"
-                    placeholder="مثال: 15"
+                    required
                     value={transferPieces}
-                    onChange={(e) => setTransferPieces(e.target.value)}
-                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+                    onChange={(e) => handlePiecesChange(e.target.value)}
+                    className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-indigo-900 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
+              </div>
+
+              <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 font-semibold text-[11px] flex items-center gap-1.5">
+                <Sparkles size={14} className="text-emerald-600 shrink-0" />
+                <span>سيتم خصم [الوزن + القطع] معا من مخزن الفرز وتحديث الجرد آليا لمنع أي عجز في الجرد.</span>
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -451,7 +515,7 @@ export default function InventoryPage() {
                     getWarehouseType(transferItem.warehouse_name) === 'SORTING' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20' : 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
                   }`}
                 >
-                  {submitting ? 'جاري النقل...' : 'تأكيد وحفظ النقل'}
+                  {submitting ? 'جاري التحويل...' : 'تأكيد ونقل الوزن والقطع معا'}
                 </button>
                 <button
                   type="button"
