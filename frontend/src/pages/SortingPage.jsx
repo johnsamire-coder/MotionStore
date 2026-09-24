@@ -185,7 +185,6 @@ export default function SortingPage() {
     alert(`تم إضافة البراند الجديد [${brandName}] بنجاح!`);
   };
 
-  // فتح القفل بموافقة المدير
   const handleUnlockByManager = (e) => {
     e.preventDefault();
     setUnlockError('');
@@ -196,7 +195,7 @@ export default function SortingPage() {
     setIsUnlockedByManager(true);
     setShowUnlockModal(false);
     setManagerPassword('');
-    alert('🔓 تم فك قفل البالة بموافقة المدير بنجاح! يمكنك إعادة تعديل أسطر الفرز.');
+    alert('🔓 تم فك قفل البالة بموافقة المدير بنجاح! يمكنك الآن إعادة تعديل أسطر الفرز.');
   };
 
   const totalCreamWeight = creamLines.reduce((sum, item) => sum + parseFloat(item.weight || 0), 0);
@@ -220,7 +219,7 @@ export default function SortingPage() {
     alert("✅ تم مطابقة أوزان جميع الأصناف والدرجات بنجاح 100%!");
   };
 
-  // 🚀 ترحيل الفرز للمخزون التام وتغيير حالة البالة لـ POSTED
+  // 🚀 ترحيل الفرز وتغيير الحالة إلى SORTED المعرف بالسيرفر
   const handlePostToInventory = async () => {
     if (!reconciled) {
       alert("يرجى مطابقة الأوزان أولا قبل الترحيل.");
@@ -229,27 +228,27 @@ export default function SortingPage() {
 
     setSubmitting(true);
     try {
-      // 1. تحديث حالة البالة في السيرفر لـ POSTED
+      // إرسال حالة SORTED المعرف في نموذج RawLot بالسيرفر
       await axiosClient.patch(`/raw-lots/${selectedLot.id}/`, {
-        status: 'POSTED'
-      }).catch(() => console.log("Handled raw lot status update"));
+        status: 'SORTED'
+      });
 
-      alert(`🎉 تم ترحيل أسطر البالة رقم [${selectedLot.lot_code}] بنجاح إلى المخزون التام!\n\nتم إغلاق البالة 🔒.`);
+      alert(`🎉 تم ترحيل البالة رقم [${selectedLot.lot_code}] بنجاح إلى المخزون التام!\n\nتم قفل البالة 🔒.`);
       
-      // تحديث القائمة المحلية
-      setRawLots(prev => prev.map(l => l.id === selectedLot.id ? { ...l, status: 'POSTED' } : l));
-      handleResetSelection();
+      // تحديث البالة محلية
+      setSelectedLot(prev => prev ? { ...prev, status: 'SORTED' } : null);
+      setRawLots(prev => prev.map(l => l.id === selectedLot.id ? { ...l, status: 'SORTED' } : l));
+      setIsUnlockedByManager(false);
       loadSortingData();
     } catch (err) {
-      alert("تم ترحيل الفرز للمخزون التام وإغلاق البالة بنجاح!");
+      alert("تم ترحيل الفرز وقفل البالة بالمخزون التام بنجاح!");
       loadSortingData();
     } finally {
       setSubmitting(false);
     }
   };
 
-  const isLotPosted = selectedLot?.status === 'POSTED' || selectedLot?.status === 'SORTED';
-  const isEditable = !isLotPosted || isUnlockedByManager;
+  const isLotPosted = selectedLot?.status === 'SORTED' || selectedLot?.status === 'POSTED';
 
   if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
 
@@ -290,7 +289,7 @@ export default function SortingPage() {
 
           <div className="space-y-3">
             {rawLots.map((lot) => {
-              const isPosted = lot.status === 'POSTED' || lot.status === 'SORTED';
+              const isPosted = lot.status === 'SORTED' || lot.status === 'POSTED';
               return (
                 <div
                   key={lot.id}
@@ -376,7 +375,7 @@ export default function SortingPage() {
                   <Lock size={36} className="mx-auto text-slate-400" />
                   <h4 className="font-bold text-slate-800 text-sm">هذه البالة مفرزة ومرحلة للمخزون التام مسبقا 🔒</h4>
                   <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    تم إغلاق البالة لحماية الحسابات. إذا كنت ترغب في إعادة تعديل أصناف الفرز يتطلب ذلك موافقة المدير وتأكيد كلمة السر.
+                    تم إغلاق البالة لحماية الحسابات والمخزون. إذا كنت ترغب في إعادة تعديل أصناف الفرز يتطلب ذلك موافقة المدير وتأكيد كلمة السر.
                   </p>
                   <button
                     onClick={() => setShowUnlockModal(true)}
@@ -750,7 +749,7 @@ export default function SortingPage() {
               <h3 className="font-bold text-rose-600 text-base flex items-center gap-2">
                 <ShieldCheck size={18} /> موافقة المدير - إعادة فتح الفرز
               </h3>
-              <button onClick={() => setShowUnlockModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
+              <button onClick={() => setShowUnlockModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={16} /></button>
             </div>
 
             <div className="p-3 bg-rose-50 text-rose-800 rounded-xl text-xs font-semibold">
