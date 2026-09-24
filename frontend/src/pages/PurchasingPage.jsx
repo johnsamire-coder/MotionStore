@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
 import {
@@ -11,7 +11,12 @@ import {
   DollarSign,
   X,
   Calendar,
-  Sparkles
+  Sparkles,
+  Printer,
+  Share2,
+  Ban,
+  ShieldCheck,
+  Eye
 } from 'lucide-react';
 
 export default function PurchasingPage() {
@@ -27,6 +32,10 @@ export default function PurchasingPage() {
   // Modals
   const [showNewInvoiceModal, setShowNewInvoiceModal] = useState(false);
   const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
+  const [selectedInvoiceForView, setSelectedInvoiceForView] = useState(null);
+  const [selectedInvoiceForCancel, setSelectedInvoiceForCancel] = useState(null);
+  const [managerPassword, setManagerPassword] = useState('');
+  const [cancelError, setCancelError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // New Invoice Form States
@@ -36,7 +45,7 @@ export default function PurchasingPage() {
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
   const [additionalCosts, setAdditionalCosts] = useState('0.00');
 
-  // Line Item States (Bale Presets List)
+  // Line Item States
   const balePresets = [
     'بالة ملابس أوروبية شتوي',
     'بالة ملابس أوروبية صيفي',
@@ -47,7 +56,7 @@ export default function PurchasingPage() {
     'بالة ملابس حريمي سوبر لوكس',
     'بالة ملابس رجالي تصفيات',
     'بالة جاكيت ومعاطف ثقيلة',
-    'بالة رياضية متنوّعة'
+    'بالة رياضية متنوعة'
   ];
 
   const [itemDescription, setItemDescription] = useState(balePresets[0]);
@@ -195,16 +204,62 @@ export default function PurchasingPage() {
       setNewSupplierTax('');
       alert(`تم حفظ المورد [${res.data.name}] بنجاح!`);
     } catch (err) {
-      console.error("Supplier Create Error:", err.response?.data);
-      const errorMsg = err.response?.data?.name?.[0] || err.response?.data?.detail || "اسم المورد موجود مسبقاً، يرجى كتابة اسم مختلف قليلاً.";
+      const errorMsg = err.response?.data?.name?.[0] || err.response?.data?.detail || "اسم المورد موجود مسبقا يرجى كتابة اسم مختلف قليلا.";
       alert(errorMsg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const totalPurchasesCost = invoices.reduce((acc, i) => acc + parseFloat(i.total_cost || 0), 0);
-  const totalInvoicesCount = invoices.length;
+  // إلغاء الفاتورة بموافقة المدير
+  const handleCancelInvoiceWithManagerApproval = async (e) => {
+    e.preventDefault();
+    setCancelError('');
+
+    // التحقق من كلمة سر المدير (الافتراضية: 123456)
+    if (managerPassword !== '123456') {
+      setCancelError('كلمة سر المدير غير صحيحة!');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await axiosClient.patch(`/purchases/${selectedInvoiceForCancel.id}/`, {
+        status: 'CANCELLED'
+      });
+      alert(`تم إلغاء الفاتورة رقم [${selectedInvoiceForCancel.invoice_number}] وعكس حركتها بنجاح بموافقة المدير!`);
+      setSelectedInvoiceForCancel(null);
+      setManagerPassword('');
+      loadPurchasingData();
+    } catch (err) {
+      alert("فشل إلغاء الفاتورة. يرجى المحاولة لاحقا.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // مشاركة الفاتورة عبر واتساب
+  const handleShareWhatsApp = (inv) => {
+    const text = `📄 *فاتورة شراء - موشن ستور*\n\n` +
+      `🔢 *رقم الفاتورة:* ${inv.invoice_number}\n` +
+      `👤 *المورد:* ${inv.supplier_name || 'غير محدد'}\n` +
+      `🏬 *المخزن:* ${inv.warehouse_name || 'مخزن الفرز'}\n` +
+      `📅 *التاريخ:* ${inv.invoice_date}\n` +
+      `💰 *التكلفة الإجمالية:* ${inv.total_cost} ج.م\n` +
+      `📌 *الحالة:* ${inv.status}\n\n` +
+      `تم استخراجها بواسطة نظام Motion Store SaaS 🚀`;
+
+    const encodedText = encodeURIComponent(text);
+    window.open(`https://api.whatsapp.com/send?text=${encodedText}`, '_blank');
+  };
+
+  // طباعة التقرير / الفاتورة
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const totalPurchasesCost = invoices.reduce((acc, i) => acc + (i.status !== 'CANCELLED' ? parseFloat(i.total_cost || 0) : 0), 0);
+  const totalInvoicesCount = invoices.filter(i => i.status !== 'CANCELLED').length;
 
   const filteredInvoices = invoices.filter(inv =>
     inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -222,6 +277,12 @@ export default function PurchasingPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={handlePrint}
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+          >
+            <Printer size={16} /> طباعة التقرير الإجمالي
+          </button>
           <button
             onClick={() => setShowNewSupplierModal(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
@@ -242,7 +303,7 @@ export default function PurchasingPage() {
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('purchasing.totalProcurement')}</span>
           <div className="text-2xl font-black text-slate-900">{totalPurchasesCost.toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span></div>
           <p className="text-xs text-slate-500 mt-2 flex items-center gap-1 font-medium">
-            <DollarSign size={13} className="text-emerald-600" /> ({totalInvoicesCount}) فواتير شراء
+            <DollarSign size={13} className="text-emerald-600" /> ({totalInvoicesCount}) فواتير نشطة
           </p>
         </div>
 
@@ -291,14 +352,14 @@ export default function PurchasingPage() {
                 <th className="py-3.5 px-5">{t('purchasing.colInvNumber')}</th>
                 <th className="py-3.5 px-5">{t('purchasing.colSupplier')}</th>
                 <th className="py-3.5 px-5">{t('purchasing.colHub')}</th>
-                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('purchasing.colFreight')}</th>
                 <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('purchasing.colTotalCost')}</th>
                 <th className="py-3.5 px-5 text-center">{t('common.status')}</th>
+                <th className="py-3.5 px-5 text-center">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-150 text-slate-800 font-medium">
               {filteredInvoices.map((inv) => (
-                <tr key={inv.id} className="hover:bg-slate-50/70 transition">
+                <tr key={inv.id} className={`hover:bg-slate-50/70 transition ${inv.status === 'CANCELLED' ? 'bg-rose-50/40 opacity-70' : ''}`}>
                   <td className="py-4 px-5">
                     <div className="font-bold text-slate-900 text-sm">{inv.invoice_number}</div>
                     <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
@@ -309,16 +370,44 @@ export default function PurchasingPage() {
                     <div className="font-semibold text-slate-800">{inv.supplier_name || 'Global Vendor'}</div>
                   </td>
                   <td className="py-4 px-5 text-slate-600">{inv.warehouse_name || 'Sorting Center'}</td>
-                  <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-mono text-slate-500`}>
-                    +{parseFloat(inv.additional_costs || 0).toFixed(2)} {t('common.currency')}
-                  </td>
                   <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-slate-900 text-sm`}>
                     {parseFloat(inv.total_cost || 0).toFixed(2)} <span className="text-[10px] font-normal text-slate-500">{t('common.currency')}</span>
                   </td>
                   <td className="py-4 px-5 text-center">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase tracking-wider">
-                      {inv.status}
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                      inv.status === 'CANCELLED' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {inv.status === 'CANCELLED' ? 'ملغاة ❌' : inv.status}
                     </span>
+                  </td>
+                  <td className="py-4 px-5">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => setSelectedInvoiceForView(inv)}
+                        className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition cursor-pointer"
+                        title="عرض ومعاينة الفاتورة"
+                      >
+                        <Eye size={15} />
+                      </button>
+
+                      <button
+                        onClick={() => handleShareWhatsApp(inv)}
+                        className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-lg transition cursor-pointer"
+                        title="مشاركة عبر واتساب"
+                      >
+                        <Share2 size={15} />
+                      </button>
+
+                      {inv.status !== 'CANCELLED' && (
+                        <button
+                          onClick={() => setSelectedInvoiceForCancel(inv)}
+                          className="p-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 rounded-lg transition cursor-pointer"
+                          title="إلغاء الفاتورة (بموافقة المدير)"
+                        >
+                          <Ban size={15} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -334,6 +423,111 @@ export default function PurchasingPage() {
           </table>
         </div>
       </div>
+
+      {/* MODAL: View Invoice Details */}
+      {selectedInvoiceForView && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                <FileText size={18} className="text-emerald-600" /> تفاصيل الفاتورة #{selectedInvoiceForView.invoice_number}
+              </h3>
+              <button onClick={() => setSelectedInvoiceForView(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-700">
+              <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                <span className="font-bold">المورد:</span>
+                <span className="font-bold text-slate-900">{selectedInvoiceForView.supplier_name || 'غير محدد'}</span>
+              </div>
+              <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                <span className="font-bold">المخزن:</span>
+                <span>{selectedInvoiceForView.warehouse_name || 'مخزن الفرز'}</span>
+              </div>
+              <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                <span className="font-bold">تاريخ الشراء:</span>
+                <span>{selectedInvoiceForView.invoice_date}</span>
+              </div>
+              <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                <span className="font-bold">إجمالي التكلفة:</span>
+                <span className="font-black text-slate-900 text-sm">{selectedInvoiceForView.total_cost} ج.م</span>
+              </div>
+              <div className="flex justify-between p-2.5 bg-slate-50 rounded-xl">
+                <span className="font-bold">الحالة:</span>
+                <span className="font-bold text-emerald-700">{selectedInvoiceForView.status}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handlePrint}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-2"
+              >
+                <Printer size={16} /> طباعة الفاتورة
+              </button>
+              <button
+                onClick={() => setSelectedInvoiceForView(null)}
+                className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition text-xs cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Cancel Invoice (Manager Password Required) */}
+      {selectedInvoiceForCancel && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-rose-600 text-base flex items-center gap-2">
+                <ShieldCheck size={18} /> موافقة المدير - إلغاء الفاتورة
+              </h3>
+              <button onClick={() => setSelectedInvoiceForCancel(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18} /></button>
+            </div>
+
+            <div className="p-3 bg-rose-50 text-rose-800 rounded-xl text-xs font-semibold">
+              ⚠️ أنت على وشك إلغاء الفاتورة رقم [{selectedInvoiceForCancel.invoice_number}]. سيقوم النظام بعمل قيد عكسي وعكس حسابات المخزون.
+            </div>
+
+            <form onSubmit={handleCancelInvoiceWithManagerApproval} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1.5">أدخل كلمة سر المدير للموافقة *</label>
+                <input
+                  type="password"
+                  required
+                  value={managerPassword}
+                  onChange={(e) => setManagerPassword(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-rose-500"
+                  placeholder="كلمة سر المدير (123456)"
+                />
+              </div>
+
+              {cancelError && (
+                <div className="text-rose-600 font-bold text-xs">{cancelError}</div>
+              )}
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white font-bold py-2.5 rounded-xl transition shadow-md cursor-pointer text-xs"
+                >
+                  {submitting ? 'جاري الإلغاء...' : 'تأكيد إلغاء الفاتورة'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedInvoiceForCancel(null)}
+                  className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition text-xs cursor-pointer"
+                >
+                  تراجع
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: New Purchase Invoice */}
       {showNewInvoiceModal && (
@@ -527,7 +721,7 @@ export default function PurchasingPage() {
               </div>
 
               <div className="p-3 bg-emerald-50/60 border border-emerald-100 rounded-xl text-[11px] text-emerald-800 font-semibold">
-                ℹ️ يتولد كود المورد تلقائياً بالترتيب لمنع التكرار.
+                ℹ️ يتولد كود المورد تلقائيا بالترتيب لمنع التكرار.
               </div>
 
               <div className="flex gap-3 pt-2">
