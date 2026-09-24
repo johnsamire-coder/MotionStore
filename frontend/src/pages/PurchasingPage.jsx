@@ -16,7 +16,9 @@ import {
   Share2,
   Ban,
   ShieldCheck,
-  Eye
+  Eye,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 
 export default function PurchasingPage() {
@@ -216,7 +218,6 @@ export default function PurchasingPage() {
     e.preventDefault();
     setCancelError('');
 
-    // التحقق من كلمة سر المدير (الافتراضية: 123456)
     if (managerPassword !== '123456') {
       setCancelError('كلمة سر المدير غير صحيحة!');
       return;
@@ -253,9 +254,137 @@ export default function PurchasingPage() {
     window.open(`https://api.whatsapp.com/send?text=${encodedText}`, '_blank');
   };
 
-  // طباعة التقرير / الفاتورة
-  const handlePrint = () => {
-    window.print();
+  // 1️⃣ تصدير التقرير إلى شيت إكسل (Excel / CSV)
+  const handleExportExcel = () => {
+    let csv = '\uFEFF'; // دعم اللغة العربية في إكسل
+    csv += 'رقم الفاتورة,تاريخ الشراء,اسم المورد,مخزن الاستلام,التكلفة الإجمالية (ج.م),حالة الفاتورة\n';
+    filteredInvoices.forEach(inv => {
+      csv += `"${inv.invoice_number}","${inv.invoice_date}","${inv.supplier_name || 'غير محدد'}","${inv.warehouse_name || 'مخزن الفرز'}","${inv.total_cost || 0}","${inv.status}"\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `تقرير_مشتريات_موشن_ستور_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // 2️⃣ إنتاج تقرير PDF رسمي متنسق بلوجو الشركة
+  const handleExportPDFReport = () => {
+    const printWindow = window.open('', '_blank', 'width=1000,height=800');
+    const dateStr = new Date().toLocaleDateString('ar-EG');
+    const totalCostSum = invoices.reduce((acc, i) => acc + (i.status !== 'CANCELLED' ? parseFloat(i.total_cost || 0) : 0), 0);
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <title>تقرير المشتريات الشامل — موشن ستور</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; color: #0f172a; background: #fff; }
+          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #10b981; padding-bottom: 20px; margin-bottom: 25px; }
+          .brand { display: flex; align-items: center; gap: 12px; }
+          .logo { background: #10b981; color: #fff; width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 24px; }
+          .title { font-size: 22px; font-weight: 800; color: #0f172a; margin: 0; }
+          .sub { font-size: 13px; color: #64748b; margin-top: 4px; }
+          .meta { text-align: left; font-size: 12px; color: #334155; line-height: 1.6; }
+          .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 30px; }
+          .stat-card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 15px; background: #f8fafc; }
+          .stat-label { font-size: 11px; color: #64748b; font-weight: 700; text-transform: uppercase; }
+          .stat-val { font-size: 22px; font-weight: 900; color: #0f172a; margin-top: 5px; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 15px; }
+          th, td { border: 1px solid #cbd5e1; padding: 10px 14px; text-align: right; }
+          th { background-color: #10b981; color: #ffffff; font-weight: 800; font-size: 12px; }
+          tr:nth-child(even) { background-color: #f8fafc; }
+          .status-badge { font-weight: bold; padding: 3px 8px; border-radius: 6px; font-size: 10px; }
+          .status-ok { background: #d1fae5; color: #065f46; }
+          .status-cancel { background: #ffe4e6; color: #991b1b; }
+          .footer { margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 20px; display: flex; justify-content: space-between; font-size: 11px; color: #64748b; }
+          @media print {
+            body { padding: 0; }
+            @page { size: A4; margin: 15mm; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="brand">
+            <div class="logo">M</div>
+            <div>
+              <h1 class="title">موشن ستور — Motion Store</h1>
+              <div class="sub">تقرير إجمالي المشتريات والشحنات | فرع سموحة الرئيسي</div>
+            </div>
+          </div>
+          <div class="meta">
+            <div><strong>تاريخ التقرير:</strong> ${dateStr}</div>
+            <div><strong>اسم المستخدم:</strong> admin</div>
+            <div><strong>حالة النظام:</strong> موثق بالدفتر المحاسبي</div>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">إجمالي المشتريات المعتمدة</div>
+            <div class="stat-val">${totalCostSum.toFixed(2)} ج.م</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">عدد الفواتير النشطة</div>
+            <div class="stat-val">${invoices.filter(i => i.status !== 'CANCELLED').length} فواتير</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">عدد الموردين المعتمدين</div>
+            <div class="stat-val">${suppliers.length} مورد</div>
+          </div>
+        </div>
+
+        <h3 style="margin-bottom: 10px; font-size: 15px;">سجل تفاصيل فواتير الشراء</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>رقم الفاتورة</th>
+              <th>تاريخ الشراء</th>
+              <th>اسم المورد</th>
+              <th>مخزن الاستلام</th>
+              <th>الإجمالي (ج.م)</th>
+              <th>حالة الفاتورة</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredInvoices.map(inv => `
+              <tr>
+                <td><strong>${inv.invoice_number}</strong></td>
+                <td>${inv.invoice_date}</td>
+                <td>${inv.supplier_name || 'غير محدد'}</td>
+                <td>${inv.warehouse_name || 'مخزن الفرز'}</td>
+                <td><strong>${parseFloat(inv.total_cost || 0).toFixed(2)}</strong></td>
+                <td>
+                  <span class="status-badge ${inv.status === 'CANCELLED' ? 'status-cancel' : 'status-ok'}">
+                    ${inv.status === 'CANCELLED' ? 'ملغاة' : 'معتمدة'}
+                  </span>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <div>نظام إدارة التجارة والبالات — Motion Store Enterprise SaaS</div>
+          <div>اعتماد الإدارة: ________________________</div>
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+          }
+        </script>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   };
 
   const totalPurchasesCost = invoices.reduce((acc, i) => acc + (i.status !== 'CANCELLED' ? parseFloat(i.total_cost || 0) : 0), 0);
@@ -276,19 +405,30 @@ export default function PurchasingPage() {
           <p className="text-sm text-slate-500">{t('purchasing.subtitle')}</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
-            onClick={handlePrint}
-            className="flex items-center gap-2 px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition cursor-pointer"
+            title="تصدير إلى شيت إكسل"
           >
-            <Printer size={16} /> طباعة التقرير الإجمالي
+            <FileSpreadsheet size={16} /> تصدير إكسل (Excel)
           </button>
+
+          <button
+            onClick={handleExportPDFReport}
+            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition cursor-pointer shadow-sm"
+            title="طباعة / تحويل لـ PDF"
+          >
+            <Printer size={16} /> طباعة تقرير PDF رسمى
+          </button>
+
           <button
             onClick={() => setShowNewSupplierModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
           >
             <Building2 size={16} className="text-slate-500" /> {t('purchasing.newSupplier')}
           </button>
+
           <button
             onClick={handleOpenNewInvoiceModal}
             className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20 cursor-pointer"
@@ -460,10 +600,10 @@ export default function PurchasingPage() {
 
             <div className="flex gap-3 pt-2">
               <button
-                onClick={handlePrint}
+                onClick={handleExportPDFReport}
                 className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl transition cursor-pointer text-xs flex items-center justify-center gap-2"
               >
-                <Printer size={16} /> طباعة الفاتورة
+                <Printer size={16} /> طباعة الفاتورة الرسمية PDF
               </button>
               <button
                 onClick={() => setSelectedInvoiceForView(null)}
