@@ -111,11 +111,11 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block font-semibold text-slate-600 mb-1">اسم الشركة / البراند</label>
-              <input type="text" readOnly value="موشن ستور للملابس والأحذية الأوروبية" className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-800" />
+              <input type="text" readOnly value="Jacky Store - چاكي للملابس والأحذية الأوروبية" className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-800" />
             </div>
             <div>
               <label className="block font-semibold text-slate-600 mb-1">الفرع الرئيسي</label>
-              <input type="text" readOnly value="فرع سموحة الرئيسي - الإسكندرية" className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-800" />
+              <input type="text" readOnly value="ستور مدينة نصر" className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl font-bold text-slate-800" />
             </div>
           </div>
         </div>
@@ -219,3 +219,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

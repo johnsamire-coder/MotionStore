@@ -634,8 +634,8 @@ export default function POSPage() {
           <div className="bg-white rounded-2xl p-6 max-w-xs w-full shadow-2xl space-y-4">
             <div id="receipt-print-area" className="p-4 bg-slate-50 border rounded-xl text-slate-900 font-mono text-[11px] space-y-3">
               <div className="text-center space-y-1 border-b pb-2">
-                <div className="font-black text-sm">موشن ستور — Motion Store</div>
-                <div>فرع سموحة الرئيسي - الإسكندرية</div>
+                <div className="font-black text-sm">Jacky Store — چاكي</div>
+                <div>ستور مدينة نصر</div>
                 <div className="text-[9px] text-slate-500">رقم الفاتورة: #{lastInvoice.invoice_number}</div>
                 <div className="text-[9px] text-slate-500">التاريخ: {lastInvoice.date}</div>
               </div>
@@ -741,3 +741,4 @@ export default function POSPage() {
     </div>
   );
 }
+

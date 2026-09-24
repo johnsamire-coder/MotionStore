@@ -98,7 +98,7 @@ export default function ShiftsPage() {
   };
 
   const handleShareShiftWhatsApp = (shift) => {
-    const text = `📊 *تقرير تقفيل وردية كاشير معتمدة - موشن ستور*\n\n` +
+    const text = `📊 *تقرير تقفيل وردية كاشير معتمدة - Jacky Store - چاكي*\n\n` +
       `👤 *الكاشير:* ${shift.cashier_username || shift.cashier || 'admin'}\n` +
       `📅 *التاريخ:* ${shift.opened_at?.slice(0, 10) || 'اليوم'}\n` +
       `💵 *عهدة الافتتاح:* ${shift.opening_cash} ج.م\n` +
@@ -129,7 +129,7 @@ export default function ShiftsPage() {
       </head>
       <body dir="rtl">
         <table>
-          <tr><td colspan="8" class="header-title">موشن ستور — Motion Store Enterprise SaaS</td></tr>
+          <tr><td colspan="8" class="header-title">Jacky Store — چاكي Enterprise SaaS</td></tr>
           <tr><td colspan="8" class="header-sub">سجل وتفاصيل وراديات الكاشير وتسليم العهد | تاريخ الاستخراج: ${dateStr}</td></tr>
           <tr><td colspan="8"></td></tr>
           <thead>
@@ -484,3 +484,4 @@ export default function ShiftsPage() {
     </div>
   );
 }
+

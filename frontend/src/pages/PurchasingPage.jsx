@@ -311,7 +311,7 @@ export default function PurchasingPage() {
   };
 
   const handleShareWhatsApp = (inv) => {
-    const text = `📄 *فاتورة شراء - موشن ستور*\n\n` +
+    const text = `📄 *فاتورة شراء - Jacky Store - چاكي*\n\n` +
       `🔢 *رقم الفاتورة:* ${inv.invoice_number}\n` +
       `👤 *المورد:* ${inv.supplier_name || 'غير محدد'}\n` +
       `🏬 *المخزن:* ${inv.warehouse_name || 'مخزن الفرز'}\n` +
@@ -344,7 +344,7 @@ export default function PurchasingPage() {
       </head>
       <body dir="rtl">
         <table>
-          <tr><td colspan="6" class="header-title">موشن ستور — Motion Store Enterprise SaaS</td></tr>
+          <tr><td colspan="6" class="header-title">Jacky Store — چاكي Enterprise SaaS</td></tr>
           <tr><td colspan="6" class="header-sub">تقرير المشتريات وفواتير الشحنات المعتمدة | تاريخ الاستخراج: ${dateStr}</td></tr>
           <tr><td colspan="6"></td></tr>
           <thead>
@@ -409,12 +409,12 @@ export default function PurchasingPage() {
       element.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #10b981; padding-bottom: 15px; margin-bottom: 20px;">
           <div>
-            <h1 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 800;">موشن ستور — Motion Store</h1>
+            <h1 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 800;">Jacky Store — چاكي</h1>
             <p style="margin: 4px 0 0 0; color: #64748b; font-size: 11px;">تقرير فواتير الشراء والشحنات المعتمدة</p>
           </div>
           <div style="text-align: left; font-size: 11px; color: #334155; line-height: 1.5;">
             <div><b>التاريخ:</b> ${dateStr}</div>
-            <div><b>الفرع:</b> فرع سموحة الرئيسي</div>
+            <div><b>الفرع:</b> ستور مدينة نصر</div>
           </div>
         </div>
 
@@ -1194,3 +1194,4 @@ export default function PurchasingPage() {
     </div>
   );
 }
+

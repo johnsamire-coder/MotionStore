@@ -187,8 +187,8 @@ export default function SalesPage() {
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
             <div id="receipt-print-area" className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono text-[11px] space-y-3">
               <div className="text-center space-y-1 border-b border-slate-300 pb-2">
-                <div className="font-black text-sm">موشن ستور — Motion Store</div>
-                <div>فرع سموحة الرئيسي - الإسكندرية</div>
+                <div className="font-black text-sm">Jacky Store — چاكي</div>
+                <div>ستور مدينة نصر</div>
                 <div className="text-[9px] text-slate-500">رقم الفاتورة: #{selectedInvoiceForView.invoice_number}</div>
               </div>
               <div className="space-y-1 font-bold text-xs pt-1">
@@ -232,3 +232,4 @@ export default function SalesPage() {
     </div>
   );
 }
+
