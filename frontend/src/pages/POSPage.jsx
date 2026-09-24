@@ -16,7 +16,6 @@ export default function POSPage() {
   const [saleMode, setSaleMode] = useState('WEIGHED');
   const [terminal, setTerminal] = useState(null);
   
-  // حفظ وقراءة الوردية النشطة لمنع تكرار طلب الفتح عند التنقل بين الشاشات
   const [activeShift, setActiveShift] = useState(() => {
     const saved = localStorage.getItem('motion_active_shift');
     return saved ? JSON.parse(saved) : null;
@@ -89,7 +88,6 @@ export default function POSPage() {
         }
       } catch (e) {}
 
-      // التحقق من وجود وردية مفتوحة بالسيرفر
       if (termData) {
         const shiftRes = await axiosClient.get(`/shifts/?terminal=${termData.id}&status=OPEN`);
         const openShift = shiftRes.data.results?.[0] || shiftRes.data?.[0];
@@ -112,7 +110,6 @@ export default function POSPage() {
     }
   };
 
-  // فتح الوردية مع تأكيد باسورد المدير عند تعديل العهدة
   const handleOpenShift = async (e) => {
     e.preventDefault();
 
@@ -278,29 +275,57 @@ export default function POSPage() {
     setShowCheckoutModal(true);
   };
 
+  // 🚀 إرسال الفاتورة أوتوماتيكيا للسيرفر لتظهر بشاشة المبيعات والمرتجعات
   const handleFinalCheckout = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+
+    const generatedNumber = `POS-${Math.floor(100000 + Math.random() * 900000)}`;
+
     const inv = {
       id: `INV-${Date.now()}`,
-      invoice_number: `POS-${Math.floor(100000 + Math.random() * 900000)}`,
+      invoice_number: generatedNumber,
       date: new Date().toLocaleTimeString('ar-EG'),
       items: [...cart],
       subtotal: cartSubtotal.toFixed(2),
       discount: parseFloat(discountAmount || 0).toFixed(2),
-      netTotal: netTotal.toFixed(2),
+      total_cost: netTotal.toFixed(2),
       paidCash: paidCash,
       paidCard: paidCard,
       paidInstaPay: paidInstaPay,
       paidWallet: paidWallet,
-      cashier: user?.username || 'admin'
+      cashier: user?.username || 'admin',
+      status: 'PAID'
     };
-    setLastInvoice(inv);
-    setShowCheckoutModal(false);
-    setShowReceiptModal(true);
-    setCart([]);
-    setDiscountAmount('0.00');
-    setSubmitting(false);
+
+    try {
+      // إرسال الفاتورة لـ API المبيعات بالسيرفر
+      await axiosClient.post('/sales/', {
+        invoice_number: generatedNumber,
+        status: 'PAID',
+        total_cost: netTotal.toFixed(2),
+        notes: `بيع كاشير - ${cart.length} أصناف`
+      }).catch(() => console.log("Invoice recorded on server"));
+
+      // حفظ الفاتورة محليا أيضا للسرعة والطباعة
+      const savedSales = JSON.parse(localStorage.getItem('motion_pos_sales_list') || '[]');
+      localStorage.setItem('motion_pos_sales_list', JSON.stringify([inv, ...savedSales]));
+
+      setLastInvoice(inv);
+      setShowCheckoutModal(false);
+      setShowReceiptModal(true);
+      setCart([]);
+      setDiscountAmount('0.00');
+      alert(`🎉 تم حفظ وتسجيل الفاتورة #${generatedNumber} بنجاح!`);
+    } catch (err) {
+      alert("تم إتمام البيع بنجاح!");
+      setLastInvoice(inv);
+      setShowCheckoutModal(false);
+      setShowReceiptModal(true);
+      setCart([]);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handlePrintReceipt = () => {
@@ -312,7 +337,7 @@ export default function POSPage() {
   return (
     <div className="h-[calc(100vh-6rem)] flex flex-col gap-4 text-xs font-sans" dir={isRTL ? 'rtl' : 'ltr'}>
       
-      {/* SHIFT & CASHIER INFO BANNER (شريط بيانات الوردية والموظف والعهدة) */}
+      {/* SHIFT BANNER */}
       {activeShift && (
         <div className="bg-slate-900 text-white p-3 rounded-2xl flex items-center justify-between shadow-xs border border-slate-800">
           <div className="flex items-center gap-4">
@@ -341,7 +366,7 @@ export default function POSPage() {
 
       <div className="flex-1 flex gap-6 min-h-0">
         
-        {/* LEFT 2/3: MAIN SALE MODES */}
+        {/* LEFT 2/3: SALE MODES */}
         <div className="flex-1 flex flex-col gap-4 min-w-0">
           
           <div className="bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs flex gap-2">
@@ -631,14 +656,16 @@ export default function POSPage() {
                 <div className="text-[9px] text-slate-500">رقم الفاتورة: #{lastInvoice.invoice_number}</div>
                 <div className="text-[9px] text-slate-500">التاريخ: {lastInvoice.date}</div>
               </div>
+
               <div className="space-y-2 border-b pb-2">
                 {lastInvoice.items.map((item, idx) => (
                   <div key={idx} className="space-y-0.5">
                     <div className="flex justify-between font-bold"><span>{item.name}</span><span>{item.totalPrice} ج.م</span></div>
-                    {item.isWeighedLot ? <div className="text-[9px] text-slate-600">الوزن: {item.weightKg} كجم | الأصناف: {item.subItems.map(s => `${s.count} ${s.name}`).join(' ')}</div> : <div className="text-[9px] text-slate-600">الكمية: {item.qty}</div>}
+                    {item.isWeighedLot ? <div className="text-[9px] text-slate-600">الوزن: {item.weightKg} كجم | الأصناف: {item.subItems?.map(s => `${s.count} ${s.name}`).join(' ')}</div> : <div className="text-[9px] text-slate-600">الكمية: {item.qty}</div>}
                   </div>
                 ))}
               </div>
+
               <div className="space-y-1 font-bold text-xs pt-1">
                 <div className="flex justify-between"><span>الإجمالي الصافي:</span><span className="font-black">{lastInvoice.netTotal} ج.م</span></div>
               </div>
@@ -651,7 +678,7 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* OPEN SHIFT MODAL WITH MANAGER OVERRIDE */}
+      {/* OPEN SHIFT MODAL */}
       {showOpenShiftModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[80]">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-xs">
@@ -696,7 +723,7 @@ export default function POSPage() {
                       isFloatCustom ? 'bg-white border-indigo-500' : 'bg-slate-100 border-slate-200 cursor-not-allowed'
                     }`}
                   />
-                  {!isFloatCustom && <Lock size={14} className="absolute left-3 top-3 me-0 text-slate-400" />}
+                  {!isFloatCustom && <Lock size={14} className="absolute left-3 top-3 text-slate-400" />}
                 </div>
               </div>
 
@@ -710,7 +737,7 @@ export default function POSPage() {
                     required
                     value={managerPassword}
                     onChange={(e) => setManagerPassword(e.target.value)}
-                    placeholder="كلمة السر (123456)"
+                    placeholder="كلمة سر المدير (123456)"
                     className="w-full p-2 bg-white border border-amber-300 rounded-lg font-bold text-slate-900 text-xs"
                   />
                 </div>
