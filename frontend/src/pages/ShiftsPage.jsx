@@ -13,44 +13,31 @@ export default function ShiftsPage() {
   const [activeShift, setActiveShift] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Close Shift Modal
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [actualCashInput, setActualCashInput] = useState('');
   const [closeNotes, setCloseNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    // تنظيف ذاكرة المتصفح القديمة المسببة للتدبيل
+    localStorage.removeItem('motion_pos_sales_list');
     loadShiftsData();
   }, []);
 
   const loadShiftsData = async () => {
     setLoading(true);
     try {
-      // 1. جلب المبيعات وتنقيتها من المكرر بين السيرفر والـ localStorage
+      // 1. جلب المبيعات الحقيقية من السيرفر فقط
       let serverSales = [];
       try {
         const salesRes = await axiosClient.get('/sales/');
         serverSales = salesRes.data.results || salesRes.data || [];
       } catch (e) {}
 
-      const localSales = JSON.parse(localStorage.getItem('motion_pos_sales_list') || '[]');
-      const mergedMap = new Map();
+      const validSales = serverSales.filter(s => s.status !== 'RETURNED' && s.status !== 'REFUNDED' && s.status !== 'CANCELLED');
+      const exactCashSales = validSales.reduce((sum, s) => sum + parseFloat(s.total_amount || s.total_cost || 0), 0);
 
-      // الدمج مع منع تكرار رقم الفاتورة
-      localSales.forEach(inv => mergedMap.set(inv.invoice_number, inv));
-      serverSales.forEach(inv => {
-        mergedMap.set(inv.invoice_number, {
-          id: inv.id,
-          invoice_number: inv.invoice_number,
-          total_cost: inv.total_amount || inv.total_cost || '0.00',
-          status: inv.status || 'PAID'
-        });
-      });
-
-      const uniqueSalesList = Array.from(mergedMap.values()).filter(s => s.status !== 'RETURNED' && s.status !== 'REFUNDED' && s.status !== 'CANCELLED');
-      const exactCashSales = uniqueSalesList.reduce((sum, s) => sum + parseFloat(s.total_cost || s.total_amount || 0), 0);
-
-      // 2. جلب بيانات الورديات
+      // 2. جلب الورديات
       const res = await axiosClient.get('/shifts/');
       const list = res.data.results || res.data || [];
       setShiftsHistory(list);
