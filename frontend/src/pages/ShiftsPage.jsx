@@ -5,7 +5,7 @@ import {
   Clock, CheckCircle2, AlertCircle, RefreshCw, Lock, Printer,
   Banknote, DollarSign, User, ShieldCheck, FileText, X,
   CreditCard, QrCode, Smartphone, Vault, Calculator, Building2,
-  Share2, FileSpreadsheet, Download, Check
+  Share2, FileSpreadsheet, Download
 } from 'lucide-react';
 
 export default function ShiftsPage() {
@@ -15,7 +15,7 @@ export default function ShiftsPage() {
   const [activeShift, setActiveShift] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Close Shift Modal States
+  // Close Shift Modal
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [showClosedReceiptModal, setShowClosedReceiptModal] = useState(false);
   const [closedShiftSummary, setClosedShiftSummary] = useState(null);
@@ -40,65 +40,47 @@ export default function ShiftsPage() {
   const loadShiftsData = async () => {
     setLoading(true);
     try {
+      // 1. جلب المبيعات
       let serverSales = [];
       try {
         const salesRes = await axiosClient.get('/sales/');
         serverSales = salesRes.data.results || salesRes.data || [];
       } catch (e) {}
 
-      const localSales = JSON.parse(localStorage.getItem('motion_pos_sales_list') || '[]');
-      const mergedMap = new Map();
+      const validSales = serverSales.filter(s => s.status !== 'RETURNED' && s.status !== 'REFUNDED' && s.status !== 'CANCELLED');
+      const cashSum = validSales.reduce((sum, s) => sum + parseFloat(s.total_amount || s.total_cost || 0), 0);
 
-      localSales.forEach(inv => mergedMap.set(inv.invoice_number, inv));
-      serverSales.forEach(inv => {
-        mergedMap.set(inv.invoice_number, {
-          id: inv.id,
-          invoice_number: inv.invoice_number,
-          total_cost: inv.total_amount || inv.total_cost || '0.00',
-          paidCash: inv.paidCash || inv.total_amount || inv.total_cost || '0.00',
-          paidCard: inv.paidCard || '0.00',
-          paidInstaPay: inv.paidInstaPay || '0.00',
-          paidWallet: inv.paidWallet || '0.00',
-          status: inv.status || 'PAID'
-        });
-      });
+      setSalesBreakdown({ cash: cashSum, card: 0, instapay: 0, wallet: 0 });
 
-      const activeSales = Array.from(mergedMap.values()).filter(s => s.status !== 'RETURNED' && s.status !== 'REFUNDED' && s.status !== 'CANCELLED');
-
-      let cashSum = 0, cardSum = 0, instaSum = 0, walletSum = 0;
-
-      activeSales.forEach(s => {
-        cashSum += parseFloat(s.paidCash || s.total_cost || s.total_amount || 0);
-        cardSum += parseFloat(s.paidCard || 0);
-        instaSum += parseFloat(s.paidInstaPay || 0);
-        walletSum += parseFloat(s.paidWallet || 0);
-      });
-
-      setSalesBreakdown({ cash: cashSum, card: cardSum, instapay: instaSum, wallet: walletSum });
-
+      // 2. جلب الورديات من السيرفر حصريا
       const res = await axiosClient.get('/shifts/');
       const list = res.data.results || res.data || [];
       setShiftsHistory(list);
 
       const openS = list.find(s => s.status === 'OPEN');
-      const savedShift = JSON.parse(localStorage.getItem('motion_active_shift') || 'null');
 
-      const currentOpening = openS ? parseFloat(openS.opening_cash || 500) : (savedShift ? parseFloat(savedShift.opening_cash || 500) : 500);
-      const expectedPhysicalCash = currentOpening + cashSum;
+      if (openS) {
+        const currentOpening = parseFloat(openS.opening_cash || 500);
+        const expectedTotal = currentOpening + cashSum;
 
-      const activeShiftObj = {
-        id: openS?.id || savedShift?.id || 'SHIFT-ACTIVE-01',
-        cashier: openS?.cashier_username || savedShift?.cashier_name || 'admin',
-        opened_at: openS?.opened_at?.slice(0, 16) || savedShift?.opened_at || '2026-09-24 10:00',
-        opening_cash: currentOpening.toFixed(2),
-        cash_sales_total: cashSum.toFixed(2),
-        expected_cash: expectedPhysicalCash.toFixed(2),
-        status: 'OPEN'
-      };
+        const activeShiftObj = {
+          id: openS.id,
+          cashier: openS.cashier_username || 'admin',
+          opened_at: openS.opened_at?.slice(0, 16) || '2026-09-24 10:00',
+          opening_cash: currentOpening.toFixed(2),
+          cash_sales_total: cashSum.toFixed(2),
+          expected_cash: expectedTotal.toFixed(2),
+          status: 'OPEN'
+        };
 
-      setActiveShift(activeShiftObj);
-      setBankDepositAmount(Math.max(0, expectedPhysicalCash - 305).toFixed(2));
-      setRetainedFloat(Math.min(305, expectedPhysicalCash).toFixed(2));
+        setActiveShift(activeShiftObj);
+        setBankDepositAmount(Math.max(0, expectedTotal - 305).toFixed(2));
+        setRetainedFloat(Math.min(305, expectedTotal).toFixed(2));
+      } else {
+        // عدم وجود وردية مفتوحة في السيرفر ➔ مسح الوردية النشطة تماما
+        setActiveShift(null);
+        localStorage.removeItem('motion_active_shift');
+      }
 
     } catch (err) {
       console.error("Failed to load shifts data:", err);
@@ -115,155 +97,19 @@ export default function ShiftsPage() {
     setDenominations(prev => ({ ...prev, [note]: Math.max(0, parseInt(count || 0)) }));
   };
 
-  // 1️⃣ إرسال ملخص الوردية الختامي عبر واتساب
-  const sendClosedShiftToWhatsApp = (summary) => {
+  const handleShareShiftWhatsApp = (shift) => {
     const text = `📊 *تقرير تقفيل وردية كاشير معتمدة - موشن ستور*\n\n` +
-      `👤 *الكاشير:* ${summary.cashier}\n` +
-      `📅 *تاريخ وتوقيت التقفيل:* ${summary.closed_at}\n` +
-      `----------------------------\n` +
-      `💵 *عهدة الافتتاح الكاش:* ${summary.opening_cash} ج.م\n` +
-      `📈 *مبيعات الكاش (نقدي):* +${summary.cash_sales} ج.م\n` +
-      `💳 *مبيعات الفيزا:* +${summary.card_sales} ج.م\n` +
-      `📱 *مبيعات إنستا باي:* +${summary.instapay_sales} ج.م\n` +
-      `📲 *مبيعات المحفظة:* +${summary.wallet_sales} ج.م\n` +
-      `----------------------------\n` +
-      `💰 *الكاش المتوقع بالدرج:* ${summary.expected_cash} ج.م\n` +
-      `🔢 *العد الفعلي بالدرج:* ${summary.actual_cash} ج.م\n` +
-      `⚠️ *الفارق (عجز/زيادة):* ${summary.difference} ج.م\n` +
-      `----------------------------\n` +
-      `🏛️ *المورد للبنك / الخزينة:* ${summary.bank_deposit} ج.م\n` +
-      `🪙 *الفكة المتبقية للشيفت القادم:* ${summary.retained_float} ج.م\n\n` +
-      `تم إغلاق الوردية وتوريد النقدية بنجاح 🚀`;
+      `👤 *الكاشير:* ${shift.cashier_username || shift.cashier || 'admin'}\n` +
+      `📅 *التاريخ:* ${shift.opened_at?.slice(0, 10) || 'اليوم'}\n` +
+      `💵 *عهدة الافتتاح:* ${shift.opening_cash} ج.م\n` +
+      `📈 *مبيعات الكاش:* +${salesBreakdown.cash.toFixed(2)} ج.م\n` +
+      `💰 *الكاش المتوقع بالدرج:* ${shift.expected_cash} ج.م\n` +
+      `🏛️ *المورد للبنك:* ${bankDepositAmount} ج.م\n` +
+      `🪙 *الفكة المتبقية بالدرج:* ${retainedFloat} ج.م\n` +
+      `📌 *الحالة:* مغلقة ومطابقة 🔒\n\n` +
+      `تم الاعتماد بواسطة نظام Motion Store SaaS 🚀`;
 
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
-  // 2️⃣ تنزيل تقرير الوردية PDF مباشر
-  const downloadClosedShiftPDF = (summary) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-    
-    script.onload = () => {
-      const element = document.createElement('div');
-      element.dir = 'rtl';
-      element.style.padding = '25px';
-      element.style.fontFamily = 'Segoe UI, Tahoma, sans-serif';
-      element.style.color = '#0f172a';
-      element.style.backgroundColor = '#ffffff';
-
-      element.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #10b981; padding-bottom: 15px; margin-bottom: 20px;">
-          <div>
-            <h1 style="margin: 0; color: #0f172a; font-size: 20px; font-weight: 800;">موشن ستور — Motion Store</h1>
-            <p style="margin: 4px 0 0 0; color: #64748b; font-size: 11px;">تقرير تقفيل وردية الكاشير وتوريد النقدية</p>
-          </div>
-          <div style="text-align: left; font-size: 11px; color: #334155; line-height: 1.5;">
-            <div><b>الكاشير:</b> ${summary.cashier}</div>
-            <div><b>التاريخ والوقت:</b> ${summary.closed_at}</div>
-          </div>
-        </div>
-
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-          <h3 style="margin: 0 0 10px 0; font-size: 13px; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px;">ملخص نقدية الوردية</h3>
-          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; font-size: 11px;">
-            <div><b>عةدة الافتتاح:</b> ${summary.opening_cash} ج.م</div>
-            <div><b>المبيعات النقدي:</b> ${summary.cash_sales} ج.م</div>
-            <div><b>الكاش المتوقع بالدرج:</b> ${summary.expected_cash} ج.م</div>
-            <div><b>العد الفعلي بالدرج:</b> ${summary.actual_cash} ج.م</div>
-            <div><b>الفارق (عجز/زيادة):</b> <b style="color:${parseFloat(summary.difference) < 0 ? '#e11d48' : '#059669'};">${summary.difference} ج.م</b></div>
-          </div>
-        </div>
-
-        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-          <h3 style="margin: 0 0 10px 0; font-size: 13px; color: #065f46; border-bottom: 1px solid #6ee7b7; padding-bottom: 5px;">تفنيط تحصيلات المبيعات حسب طرق الدفع</h3>
-          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 11px; color: #064e3b;">
-            <div>💵 <b>كاش:</b> ${summary.cash_sales} ج.م</div>
-            <div>💳 <b>فيزا:</b> ${summary.card_sales} ج.م</div>
-            <div>📱 <b>إنستا باي:</b> ${summary.instapay_sales} ج.م</div>
-            <div>📲 <b>محفظة:</b> ${summary.wallet_sales} ج.م</div>
-          </div>
-        </div>
-
-        <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-          <h3 style="margin: 0 0 10px 0; font-size: 13px; color: #334155; border-bottom: 1px solid #cbd5e1; padding-bottom: 5px;">توزيع التوريد والعهدة القادمة</h3>
-          <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; font-size: 11px;">
-            <div>🏛️ <b>المبلغ المورد للبنك/الخزينة:</b> <b>${summary.bank_deposit} ج.م</b></div>
-            <div>🪙 <b>الفكة المتبقية بالدرج للشيفت القادم:</b> <b>${summary.retained_float} ج.م</b></div>
-          </div>
-        </div>
-
-        <div style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 15px; display: flex; justify-content: space-between; font-size: 10px; color: #64748b;">
-          <span>توقيع الكاشير: ________________________</span>
-          <span>اعتماد المدير المسؤول: ________________________</span>
-        </div>
-      `;
-
-      const opt = {
-        margin:       8,
-        filename:     `تقرير_تقفيل_وردية_${summary.cashier}_${new Date().toISOString().slice(0,10)}.pdf`,
-        image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2 },
-        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
-
-      window.html2pdf().set(opt).from(element).save();
-    };
-
-    if (window.html2pdf) script.onload();
-    else document.body.appendChild(script);
-  };
-
-  // 3️⃣ تقفيل الوردية الحقيقي وفتح الشاشة الختامية
-  const handleCloseShiftSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    const exp = parseFloat(activeShift?.expected_cash || 0);
-    const act = actualCashCalculated > 0 ? actualCashCalculated : exp;
-    const diff = (act - exp).toFixed(2);
-    const nowStr = new Date().toLocaleString('ar-EG');
-
-    const summaryObj = {
-      cashier: activeShift.cashier,
-      opened_at: activeShift.opened_at,
-      closed_at: nowStr,
-      opening_cash: activeShift.opening_cash,
-      cash_sales: salesBreakdown.cash.toFixed(2),
-      card_sales: salesBreakdown.card.toFixed(2),
-      instapay_sales: salesBreakdown.instapay.toFixed(2),
-      wallet_sales: salesBreakdown.wallet.toFixed(2),
-      expected_cash: activeShift.expected_cash,
-      actual_cash: act.toFixed(2),
-      difference: diff,
-      bank_deposit: bankDepositAmount,
-      retained_float: retainedFloat,
-      notes: closeNotes
-    };
-
-    try {
-      await axiosClient.post(`/shifts/${activeShift.id}/close/`, {
-        actual_cash: act.toFixed(2),
-        notes: closeNotes
-      }).catch(() => console.log("Shift closed"));
-
-      localStorage.setItem('motion_next_shift_float', JSON.stringify({ opening_cash: retainedFloat }));
-      localStorage.removeItem('motion_active_shift');
-
-      setShowCloseModal(false);
-      setClosedShiftSummary(summaryObj);
-      setShowClosedReceiptModal(true);
-      setActiveShift(null);
-      loadShiftsData();
-    } catch (err) {
-      localStorage.removeItem('motion_active_shift');
-      setShowCloseModal(false);
-      setClosedShiftSummary(summaryObj);
-      setShowClosedReceiptModal(true);
-      setActiveShift(null);
-      loadShiftsData();
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const handleExportStyledExcel = () => {
@@ -327,6 +173,58 @@ export default function ShiftsPage() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleCloseShiftSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const exp = parseFloat(activeShift?.expected_cash || 0);
+    const act = actualCashCalculated > 0 ? actualCashCalculated : exp;
+    const diff = (act - exp).toFixed(2);
+    const nowStr = new Date().toLocaleString('ar-EG');
+
+    const summaryObj = {
+      cashier: activeShift.cashier,
+      opened_at: activeShift.opened_at,
+      closed_at: nowStr,
+      opening_cash: activeShift.opening_cash,
+      cash_sales: salesBreakdown.cash.toFixed(2),
+      card_sales: salesBreakdown.card.toFixed(2),
+      instapay_sales: salesBreakdown.instapay.toFixed(2),
+      wallet_sales: salesBreakdown.wallet.toFixed(2),
+      expected_cash: activeShift.expected_cash,
+      actual_cash: act.toFixed(2),
+      difference: diff,
+      bank_deposit: bankDepositAmount,
+      retained_float: retainedFloat,
+      notes: closeNotes
+    };
+
+    try {
+      await axiosClient.post(`/shifts/${activeShift.id}/close/`, {
+        actual_cash: act.toFixed(2),
+        notes: closeNotes
+      }).catch(() => console.log("Shift closed"));
+
+      localStorage.setItem('motion_next_shift_float', JSON.stringify({ opening_cash: retainedFloat }));
+      localStorage.removeItem('motion_active_shift');
+
+      setShowCloseModal(false);
+      setClosedShiftSummary(summaryObj);
+      setShowClosedReceiptModal(true);
+      setActiveShift(null);
+      loadShiftsData();
+    } catch (err) {
+      localStorage.removeItem('motion_active_shift');
+      setShowCloseModal(false);
+      setClosedShiftSummary(summaryObj);
+      setShowClosedReceiptModal(true);
+      setActiveShift(null);
+      loadShiftsData();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
@@ -445,47 +343,30 @@ export default function ShiftsPage() {
                 <th className="py-3.5 px-5 text-center">الكاش المتوقع</th>
                 <th className="py-3.5 px-5 text-center">العد الفعلي</th>
                 <th className="py-3.5 px-5 text-center">الفارق (عجز/زيادة)</th>
-                <th className="py-3.5 px-5 text-center">الحالة الإجراءات</th>
+                <th className="py-3.5 px-5 text-center">الحالة</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-150 text-slate-800 font-medium">
-              {activeShift && (
-                <tr className="bg-emerald-50/30">
-                  <td className="py-4 px-5">
-                    <div className="font-bold text-slate-900">{activeShift.cashier} (الوردية الحالية)</div>
-                    <div className="text-[10px] text-slate-400">{activeShift.opened_at}</div>
-                  </td>
-                  <td className="py-4 px-5 text-center font-mono font-bold">{activeShift.opening_cash} ج.م</td>
-                  <td className="py-4 px-5 text-center font-mono font-bold text-emerald-700">+{activeShift.cash_sales_total} ج.م</td>
-                  <td className="py-4 px-5 text-center font-mono font-black text-slate-900">{activeShift.expected_cash} ج.م</td>
-                  <td className="py-4 px-5 text-center text-slate-400">—</td>
-                  <td className="py-4 px-5 text-center text-slate-400">—</td>
-                  <td className="py-4 px-5 text-center">
-                    <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 uppercase">
-                      OPEN (نشطة)
-                    </span>
-                  </td>
-                </tr>
-              )}
-
-              {shiftsHistory.filter(s => s.status === 'CLOSED').map((s) => (
+              {shiftsHistory.map((s) => (
                 <tr key={s.id} className="hover:bg-slate-50/70 transition">
                   <td className="py-4 px-5">
                     <div className="font-bold text-slate-900">{s.cashier_username || 'admin'}</div>
                     <div className="text-[10px] text-slate-400">{s.opened_at?.slice(0, 10)}</div>
                   </td>
                   <td className="py-4 px-5 text-center font-mono">{s.opening_cash} ج.م</td>
-                  <td className="py-4 px-5 text-center font-mono text-emerald-700">+{s.cash_sales_total} ج.م</td>
-                  <td className="py-4 px-5 text-center font-mono font-bold">{s.expected_cash} ج.م</td>
-                  <td className="py-4 px-5 text-center font-mono font-black text-slate-900">{s.actual_cash} ج.م</td>
+                  <td className="py-4 px-5 text-center font-mono text-emerald-700">+{s.cash_sales_total || 0} ج.م</td>
+                  <td className="py-4 px-5 text-center font-mono font-bold">{s.expected_cash || s.opening_cash} ج.م</td>
+                  <td className="py-4 px-5 text-center font-mono font-black text-slate-900">{s.actual_cash || '—'} ج.م</td>
                   <td className={`py-4 px-5 text-center font-mono font-bold ${
                     parseFloat(s.difference || 0) < 0 ? 'text-rose-600' : (parseFloat(s.difference || 0) > 0 ? 'text-emerald-600' : 'text-slate-700')
                   }`}>
                     {s.difference || '0.00'} ج.م
                   </td>
                   <td className="py-4 px-5 text-center">
-                    <span className="px-2.5 py-1 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 uppercase">
-                      CLOSED (مغلقة)
+                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase ${
+                      s.status === 'OPEN' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {s.status === 'OPEN' ? 'OPEN (نشطة)' : 'CLOSED (مغلقة)'}
                     </span>
                   </td>
                 </tr>
@@ -495,7 +376,7 @@ export default function ShiftsPage() {
         </div>
       </div>
 
-      {/* MODAL 1: CLOSE SHIFT FORM */}
+      {/* MODAL 1: CLOSE SHIFT */}
       {showCloseModal && activeShift && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[70]">
           <div className="bg-white rounded-2xl p-6 max-w-xl w-full shadow-2xl space-y-4 text-xs max-h-[90vh] overflow-y-auto">
@@ -593,85 +474,9 @@ export default function ShiftsPage() {
                 disabled={submitting}
                 className="w-full bg-rose-600 hover:bg-rose-500 text-white font-extrabold py-3.5 rounded-xl shadow-lg transition cursor-pointer text-xs"
               >
-                {submitting ? 'جاري الإغلاق والتوريد...' : 'تأكيد التوريد وإغلاق الوردية 🔒'}
+                {submitting ? 'جاري التوريد والإغلاق...' : 'تأكيد التوريد وإغلاق الوردية 🔒'}
               </button>
             </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 2: CLOSED SHIFT FINAL SUMMARY (شاشة ملخص التقفيل والواتساب والـ PDF المباشر) */}
-      {showClosedReceiptModal && closedShiftSummary && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 z-[80]">
-          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-5 text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={22} className="text-emerald-600" />
-                <div>
-                  <h3 className="font-extrabold text-slate-900 text-base">تم إغلاق وتقفيل الوردية بنجاح 🔒</h3>
-                  <p className="text-[11px] text-slate-500">ملخص التوريد والعهد النقدية المعتمدة</p>
-                </div>
-              </div>
-              <button onClick={() => setShowClosedReceiptModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18} /></button>
-            </div>
-
-            {/* Shift Summary Box */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 font-mono">
-              <div className="flex justify-between text-slate-700">
-                <span>👤 الكاشير المسئول:</span>
-                <span className="font-bold text-slate-900">{closedShiftSummary.cashier}</span>
-              </div>
-              <div className="flex justify-between text-slate-700">
-                <span>📅 وقت وتاريخ التقفيل:</span>
-                <span>{closedShiftSummary.closed_at}</span>
-              </div>
-              <div className="flex justify-between text-slate-700 pt-2 border-t border-slate-200">
-                <span>💵 مبيعات الكاش النقدية:</span>
-                <span className="font-bold text-emerald-700">+{closedShiftSummary.cash_sales} ج.م</span>
-              </div>
-              <div className="flex justify-between text-slate-700">
-                <span>💳 مبيعات الفيزا:</span>
-                <span className="font-bold text-indigo-700">+{closedShiftSummary.card_sales} ج.م</span>
-              </div>
-              <div className="flex justify-between text-slate-700">
-                <span>🏛️ المبلغ المورد للبنك:</span>
-                <span className="font-black text-slate-900 text-sm">{closedShiftSummary.bank_deposit} ج.م</span>
-              </div>
-              <div className="flex justify-between text-slate-700">
-                <span>🪙 العهدة المتبقية للشيفت القادم:</span>
-                <span className="font-bold text-indigo-800">{closedShiftSummary.retained_float} ج.م</span>
-              </div>
-              <div className="flex justify-between text-slate-700 pt-2 border-t border-slate-200">
-                <span>⚠️ الفارق بالدرج (عجز/زيادة):</span>
-                <span className={`font-black ${parseFloat(closedShiftSummary.difference) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                  {closedShiftSummary.difference} ج.م
-                </span>
-              </div>
-            </div>
-
-            {/* Action Buttons: WhatsApp, PDF, Close */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-              <button
-                onClick={() => sendClosedShiftToWhatsApp(closedShiftSummary)}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Share2 size={16} /> 📲 إرسال التقرير عبر واتساب
-              </button>
-
-              <button
-                onClick={() => downloadClosedShiftPDF(closedShiftSummary)}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Download size={16} /> 📥 تحميل التقرير PDF مباشر
-              </button>
-            </div>
-
-            <button
-              onClick={() => setShowClosedReceiptModal(false)}
-              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 rounded-xl transition cursor-pointer"
-            >
-              إغلاق
-            </button>
           </div>
         </div>
       )}
@@ -679,4 +484,3 @@ export default function ShiftsPage() {
     </div>
   );
 }
-
