@@ -11,13 +11,10 @@ from apps.sorting.models import SortingOrder, SortingOutputLine, SortingWasteLin
 from apps.costing.models import CostingConfiguration, CostingParameter
 from apps.inventory.models import StockItem, InventoryTransaction
 from apps.pricing.models import PriceList, PriceListItem
-from apps.discounts.models import DiscountRule
-from apps.treasury.models import Treasury, TreasuryTransaction
 from apps.pos.models import POSTerminal
 from apps.shifts.models import Shift
 from apps.sales.models import SaleInvoice, SaleLineItem
-from apps.returns.models import SalesReturn
-from apps.accounting.models import Account, JournalEntry
+from apps.accounting.models import JournalEntry
 
 class TenantSerializer(serializers.ModelSerializer):
     class Meta:
@@ -61,12 +58,6 @@ class SupplierSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'code', 'created_at', 'updated_at']
         extra_kwargs = {'tenant': {'required': False, 'allow_null': True}}
-        validators = []
-
-    class Meta:
-        model = Supplier
-        fields = '__all__'
-        read_only_fields = ['id', 'tenant', 'code', 'created_at', 'updated_at']
 
 class PurchaseLineItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -78,6 +69,7 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
     items = PurchaseLineItemSerializer(many=True, read_only=True)
     supplier_name = serializers.ReadOnlyField(source='supplier.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
+    
     class Meta:
         model = PurchaseInvoice
         fields = '__all__'
@@ -113,9 +105,9 @@ class SortingOrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class StockItemSerializer(serializers.ModelSerializer):
-    source_lot_code = serializers.ReadOnlyField(source='source_lot.lot_code')
     product_name = serializers.ReadOnlyField(source='product.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
+    source_lot_code = serializers.ReadOnlyField(source='source_lot.lot_code')
     class Meta:
         model = StockItem
         fields = '__all__'
@@ -125,8 +117,6 @@ class InventoryTransactionSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
     weight_kg = serializers.ReadOnlyField(source='weight_change_kg')
-    product_name = serializers.ReadOnlyField(source='product.name')
-    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
     class Meta:
         model = InventoryTransaction
         fields = '__all__'
@@ -135,13 +125,6 @@ class InventoryTransactionSerializer(serializers.ModelSerializer):
 class PriceListSerializer(serializers.ModelSerializer):
     class Meta:
         model = PriceList
-        fields = '__all__'
-        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
-
-class PriceListItemSerializer(serializers.ModelSerializer):
-    product_name = serializers.ReadOnlyField(source='product.name')
-    class Meta:
-        model = PriceListItem
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
@@ -169,30 +152,24 @@ class SaleInvoiceSerializer(serializers.ModelSerializer):
     lines = SaleLineItemSerializer(many=True, read_only=True)
     cashier_username = serializers.ReadOnlyField(source='cashier.username')
     branch_name = serializers.ReadOnlyField(source='branch.name')
-    branch = serializers.PrimaryKeyRelatedField(read_only=True)
-    pos_terminal = serializers.PrimaryKeyRelatedField(read_only=True)
-    shift = serializers.PrimaryKeyRelatedField(read_only=True)
-    cashier = serializers.PrimaryKeyRelatedField(read_only=True)
-    invoice_date_time = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = SaleInvoice
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'branch', 'pos_terminal', 'shift', 'cashier', 'invoice_date_time']
-
-class Meta:
-        model = SaleInvoice
-        fields = '__all__'
-        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'branch', 'pos_terminal', 'shift', 'cashier', 'invoice_date_time']
-    class Meta:
-        model = SaleInvoice
-        fields = '__all__'
-        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'branch': {'required': False, 'allow_null': True},
+            'pos_terminal': {'required': False, 'allow_null': True},
+            'shift': {'required': False, 'allow_null': True},
+            'cashier': {'required': False, 'allow_null': True},
+            'invoice_date_time': {'required': False, 'allow_null': True},
+            'status': {'required': False, 'allow_null': True},
+            'subtotal': {'required': False, 'allow_null': True},
+            'total_amount': {'required': False, 'allow_null': True}
+        }
 
 class JournalEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = JournalEntry
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
-
-
