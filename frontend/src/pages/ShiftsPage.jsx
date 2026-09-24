@@ -18,7 +18,6 @@ export default function ShiftsPage() {
   const [actualCashInput, setActualCashInput] = useState('');
   const [closeNotes, setCloseNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [lastClosedShiftReceipt, setLastClosedShiftReceipt] = useState(null);
 
   useEffect(() => {
     loadShiftsData();
@@ -27,18 +26,31 @@ export default function ShiftsPage() {
   const loadShiftsData = async () => {
     setLoading(true);
     try {
-      // 1. جلب المبيعات لتجميع مبيعات الوردية النشطة
-      let salesList = [];
+      // 1. جلب المبيعات وتنقيتها من المكرر بين السيرفر والـ localStorage
+      let serverSales = [];
       try {
         const salesRes = await axiosClient.get('/sales/');
-        salesList = salesRes.data.results || salesRes.data || [];
+        serverSales = salesRes.data.results || salesRes.data || [];
       } catch (e) {}
 
       const localSales = JSON.parse(localStorage.getItem('motion_pos_sales_list') || '[]');
-      const allSales = [...salesList, ...localSales].filter(s => s.status !== 'RETURNED' && s.status !== 'REFUNDED');
-      const totalCashSales = allSales.reduce((sum, s) => sum + parseFloat(s.total_amount || s.total_cost || 0), 0);
+      const mergedMap = new Map();
 
-      // 2. جلب الورديات
+      // الدمج مع منع تكرار رقم الفاتورة
+      localSales.forEach(inv => mergedMap.set(inv.invoice_number, inv));
+      serverSales.forEach(inv => {
+        mergedMap.set(inv.invoice_number, {
+          id: inv.id,
+          invoice_number: inv.invoice_number,
+          total_cost: inv.total_amount || inv.total_cost || '0.00',
+          status: inv.status || 'PAID'
+        });
+      });
+
+      const uniqueSalesList = Array.from(mergedMap.values()).filter(s => s.status !== 'RETURNED' && s.status !== 'REFUNDED' && s.status !== 'CANCELLED');
+      const exactCashSales = uniqueSalesList.reduce((sum, s) => sum + parseFloat(s.total_cost || s.total_amount || 0), 0);
+
+      // 2. جلب بيانات الورديات
       const res = await axiosClient.get('/shifts/');
       const list = res.data.results || res.data || [];
       setShiftsHistory(list);
@@ -47,14 +59,14 @@ export default function ShiftsPage() {
       const savedShift = JSON.parse(localStorage.getItem('motion_active_shift') || 'null');
 
       const currentOpening = openS ? parseFloat(openS.opening_cash || 500) : (savedShift ? parseFloat(savedShift.opening_cash || 500) : 500);
-      const expectedTotal = currentOpening + totalCashSales;
+      const expectedTotal = currentOpening + exactCashSales;
 
       const activeShiftObj = {
         id: openS?.id || savedShift?.id || 'SHIFT-ACTIVE-01',
         cashier: openS?.cashier_username || savedShift?.cashier_name || 'admin',
         opened_at: openS?.opened_at?.slice(0, 16) || savedShift?.opened_at || '2026-09-24 10:00',
         opening_cash: currentOpening.toFixed(2),
-        cash_sales_total: totalCashSales.toFixed(2),
+        cash_sales_total: exactCashSales.toFixed(2),
         expected_cash: expectedTotal.toFixed(2),
         status: 'OPEN'
       };
@@ -68,7 +80,6 @@ export default function ShiftsPage() {
     }
   };
 
-  // تقفيل الوردية ومطابقة العهدة
   const handleCloseShiftSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -77,23 +88,13 @@ export default function ShiftsPage() {
     const act = parseFloat(actualCashInput || 0);
     const diff = (act - exp).toFixed(2);
 
-    const closedRecord = {
-      ...activeShift,
-      closed_at: new Date().toLocaleTimeString('ar-EG'),
-      actual_cash: act.toFixed(2),
-      difference: diff,
-      status: 'CLOSED',
-      notes: closeNotes || 'تم تسليم الوردية وتقفيل الخزينة'
-    };
-
     try {
       await axiosClient.post(`/shifts/${activeShift.id}/close/`, {
         actual_cash: act.toFixed(2),
         notes: closeNotes
-      }).catch(() => console.log("Shift closed on backend"));
+      }).catch(() => console.log("Shift closed"));
 
       localStorage.removeItem('motion_active_shift');
-      setLastClosedShiftReceipt(closedRecord);
       setShowCloseModal(false);
       setActiveShift(null);
       alert(`🎉 تم إغلاق الوردية وتقفيل العهدة بنجاح!\n\nالفارق بالدرج: ${diff} ج.م`);
@@ -242,7 +243,7 @@ export default function ShiftsPage() {
         </div>
       </div>
 
-      {/* MODAL: CLOSE SHIFT & CASH RECONCILIATION */}
+      {/* MODAL: CLOSE SHIFT */}
       {showCloseModal && activeShift && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[70]">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4 text-xs">
@@ -281,7 +282,6 @@ export default function ShiftsPage() {
                 />
               </div>
 
-              {/* Farak (Difference) Indicator */}
               <div className="p-3 bg-slate-100 rounded-xl flex justify-between items-center font-bold">
                 <span>الفارق (عجز / زيادة):</span>
                 <span className={`text-sm font-black font-mono ${
@@ -296,7 +296,7 @@ export default function ShiftsPage() {
                 <label className="block font-bold text-slate-700 mb-1">ملاحظات تقفيل الوردية</label>
                 <input
                   type="text"
-                  placeholder="ملاحظات العهدة أو الفكة..."
+                  placeholder="ملاحظات العهدة..."
                   value={closeNotes}
                   onChange={(e) => setCloseNotes(e.target.value)}
                   className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-semibold"
