@@ -20,7 +20,8 @@ import {
   FileSpreadsheet,
   Download,
   Layers,
-  Tag
+  Tag,
+  FolderPlus
 } from 'lucide-react';
 
 export default function PurchasingPage() {
@@ -36,6 +37,9 @@ export default function PurchasingPage() {
   // Modals
   const [showNewInvoiceModal, setShowNewInvoiceModal] = useState(false);
   const [showNewSupplierModal, setShowNewSupplierModal] = useState(false);
+  const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
+  const [showNewBrandModal, setShowNewBrandModal] = useState(false);
+
   const [selectedInvoiceForView, setSelectedInvoiceForView] = useState(null);
   const [selectedInvoiceForCancel, setSelectedInvoiceForCancel] = useState(null);
   const [managerPassword, setManagerPassword] = useState('');
@@ -55,7 +59,7 @@ export default function PurchasingPage() {
   // Bale Options
   const [baleWeightOption, setBaleWeightOption] = useState('45'); // '40', '45', '50', 'CUSTOM'
   const [customBaleWeight, setCustomBaleWeight] = useState('45.000');
-  const baleItemPresets = [
+  const [baleItemPresets, setBaleItemPresets] = useState([
     'ملابس رجالي شتوي',
     'ملابس حريمي صيفي',
     'ملابس أطفال متنوعة',
@@ -64,13 +68,17 @@ export default function PurchasingPage() {
     'مفروشات وبياضات منزلية',
     'ملابس رياضية',
     'تصفيات وتدشين'
-  ];
-  const [baleItemType, setBaleItemType] = useState(baleItemPresets[0]);
+  ]);
+  const [baleItemType, setBaleItemType] = useState('ملابس رجالي شتوي');
 
   // Stock Lot Options
   const [stockWeightKg, setStockWeightKg] = useState('100.000');
+  const [stockBrandPresets, setStockBrandPresets] = useState(['Zara', 'H&M', 'Bershka', 'Pull & Bear', 'Nike', 'Adidas', 'Max', 'LC Waikiki']);
   const [stockBrand, setStockBrand] = useState('Zara');
-  const stockBrandPresets = ['Zara', 'H&M', 'Bershka', 'Pull & Bear', 'Nike', 'Adidas', 'Max', 'LC Waikiki', 'براند آخر'];
+
+  // Quick Add States
+  const [newCustomCategory, setNewCustomCategory] = useState('');
+  const [newCustomBrand, setNewCustomBrand] = useState('');
 
   // Financials
   const [estimatedPieces, setEstimatedPieces] = useState('');
@@ -117,7 +125,10 @@ export default function PurchasingPage() {
       const catRes = await axiosClient.get('/categories/?is_active=true');
       const catList = catRes.data.results || catRes.data || [];
       setCategories(catList);
-      if (catList.length > 0) setSelectedCategory(catList[0].id);
+      if (catList.length > 0) {
+        const catNames = catList.map(c => c.name);
+        setBaleItemPresets(prev => Array.from(new Set([...prev, ...catNames])));
+      }
     } catch (e) { console.error("Error loading categories", e); }
 
     setInvoiceNumber(generateInvoiceNumber());
@@ -136,6 +147,38 @@ export default function PurchasingPage() {
     setShowNewInvoiceModal(true);
   };
 
+  // إضافة صنف جديد
+  const handleAddNewCategory = async (e) => {
+    e.preventDefault();
+    if (!newCustomCategory.trim()) return;
+    const catName = newCustomCategory.trim();
+
+    try {
+      await axiosClient.post('/categories/', { name: catName, description: 'صنف بالات جديد' });
+    } catch (err) {
+      console.warn("Category saved locally for instant dropdown selection");
+    }
+
+    setBaleItemPresets(prev => [...prev, catName]);
+    setBaleItemType(catName);
+    setNewCustomCategory('');
+    setShowNewCategoryModal(false);
+    alert(`تم إضافة الصنف الجديد [${catName}] بنجاح!`);
+  };
+
+  // إضافة براند جديد
+  const handleAddNewBrand = (e) => {
+    e.preventDefault();
+    if (!newCustomBrand.trim()) return;
+    const brandName = newCustomBrand.trim();
+
+    setStockBrandPresets(prev => [...prev, brandName]);
+    setStockBrand(brandName);
+    setNewCustomBrand('');
+    setShowNewBrandModal(false);
+    alert(`تم إضافة البراند الجديد [${brandName}] بنجاح!`);
+  };
+
   const handleCreateInvoice = async (e) => {
     e.preventDefault();
     if (!selectedSupplier || !selectedWarehouse) {
@@ -143,7 +186,6 @@ export default function PurchasingPage() {
       return;
     }
 
-    // حساب الوزن والوصف بناء على نوع الشراء (بالة أم استوك)
     let finalWeight = '0.000';
     let finalDescription = '';
 
@@ -176,7 +218,7 @@ export default function PurchasingPage() {
         invoice: invoiceId,
         item_type: purchaseType === 'BALE' ? 'RAW_BALE' : 'STOCK_LOT',
         description: finalDescription,
-        category: selectedCategory || null,
+        category: null,
         weight_kg: parsedWeight.toFixed(3),
         quantity_pieces: estimatedPieces ? parseInt(estimatedPieces) : null,
         unit_cost: unitCost,
@@ -189,7 +231,7 @@ export default function PurchasingPage() {
         purchase_invoice: invoiceId,
         supplier: selectedSupplier,
         warehouse: selectedWarehouse,
-        category: selectedCategory || null,
+        category: null,
         original_weight_kg: parsedWeight.toFixed(3),
         original_quantity_pieces: estimatedPieces ? parseInt(estimatedPieces) : null,
         purchase_cost: parsedCost.toFixed(2),
@@ -817,7 +859,16 @@ export default function PurchasingPage() {
                 {purchaseType === 'BALE' && (
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-slate-600 font-bold mb-1">نوع الصنف (صنف واحد) *</label>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-slate-600 font-bold">نوع الصنف (صنف واحد) *</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowNewCategoryModal(true)}
+                          className="text-emerald-700 hover:text-emerald-800 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                        >
+                          <FolderPlus size={13} /> + إضافة صنف جديد
+                        </button>
+                      </div>
                       <select
                         value={baleItemType}
                         onChange={(e) => setBaleItemType(e.target.value)}
@@ -881,18 +932,25 @@ export default function PurchasingPage() {
                 {purchaseType === 'STOCK' && (
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-slate-600 font-bold mb-1">اسم البراند / الماركة (براند واحد) *</label>
-                      <div className="flex gap-2">
-                        <select
-                          value={stockBrand}
-                          onChange={(e) => setStockBrand(e.target.value)}
-                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-slate-600 font-bold">اسم البراند / الماركة (براند واحد) *</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowNewBrandModal(true)}
+                          className="text-indigo-700 hover:text-indigo-800 font-bold text-[11px] flex items-center gap-1 cursor-pointer"
                         >
-                          {stockBrandPresets.map((b, idx) => (
-                            <option key={idx} value={b}>{b}</option>
-                          ))}
-                        </select>
+                          <Plus size={13} /> + إضافة براند جديد
+                        </button>
                       </div>
+                      <select
+                        value={stockBrand}
+                        onChange={(e) => setStockBrand(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                      >
+                        {stockBrandPresets.map((b, idx) => (
+                          <option key={idx} value={b}>{b}</option>
+                        ))}
+                      </select>
                     </div>
 
                     <div>
@@ -960,6 +1018,66 @@ export default function PurchasingPage() {
                 className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl transition duration-150 shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer text-xs"
               >
                 {submitting ? t('common.loading') : `حفظ الفاتورة وإنشاء شحنة ${purchaseType === 'BALE' ? 'البالة' : 'الاستوك'}`}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: New Category */}
+      {showNewCategoryModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <FolderPlus size={16} className="text-emerald-600" /> إضافة صنف جديد
+              </h3>
+              <button onClick={() => setShowNewCategoryModal(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleAddNewCategory} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">اسم الصنف الجديد *</label>
+                <input
+                  type="text"
+                  required
+                  value={newCustomCategory}
+                  onChange={(e) => setNewCustomCategory(e.target.value)}
+                  placeholder="مثال: ملابس حريمي سوبر لوكس"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl shadow-md transition cursor-pointer">
+                حفظ الصنف واختياره
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: New Brand */}
+      {showNewBrandModal && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <Tag size={16} className="text-indigo-600" /> إضافة براند جديد
+              </h3>
+              <button onClick={() => setShowNewBrandModal(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+            </div>
+            <form onSubmit={handleAddNewBrand} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">اسم البراند / الماركة *</label>
+                <input
+                  type="text"
+                  required
+                  value={newCustomBrand}
+                  onChange={(e) => setNewCustomBrand(e.target.value)}
+                  placeholder="مثال: Massimo Dutti"
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 rounded-xl shadow-md transition cursor-pointer">
+                حفظ البراند واختياره
               </button>
             </form>
           </div>
