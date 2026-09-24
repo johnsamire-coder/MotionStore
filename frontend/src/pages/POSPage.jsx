@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import {
   ShoppingCart, Search, Trash2, Plus, Minus, CreditCard, Banknote,
   Printer, Clock, CheckCircle2, X, Scale, Tag, Sparkles, Gift, Layers,
-  Receipt, ArrowRight, User, Package
+  Receipt, ArrowRight, User, Package, Vault, Lock, ShieldCheck
 } from 'lucide-react';
 
 export default function POSPage() {
@@ -16,6 +16,7 @@ export default function POSPage() {
   const [terminal, setTerminal] = useState(null);
   const [activeShift, setActiveShift] = useState(null);
   const [stockItems, setStockItems] = useState([]);
+  const [mainTreasuryBalance, setMainTreasuryBalance] = useState('500.00'); // رصيد الخزينة الفعلي
   const [loading, setLoading] = useState(true);
 
   // Grade Prices per KG (read from pricing engine)
@@ -24,6 +25,8 @@ export default function POSPage() {
   // Modals
   const [showOpenShiftModal, setShowOpenShiftModal] = useState(false);
   const [openingFloat, setOpeningFloat] = useState('500.00');
+  const [isFloatCustom, setIsFloatCustom] = useState(false);
+  const [managerPassword, setManagerPassword] = useState('');
   const [showWeighedLotModal, setShowWeighedLotModal] = useState(false);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -60,6 +63,19 @@ export default function POSPage() {
       const termData = termRes.data.results?.[0] || termRes.data?.[0];
       setTerminal(termData);
 
+      // جلب رصيد الخزينة الرئيسية المعتمد للفكة
+      try {
+        const tRes = await axiosClient.get('/treasuries/?is_active=true');
+        const tList = tRes.data.results || tRes.data || [];
+        if (tList.length > 0) {
+          const bal = parseFloat(tList[0].balance || 500).toFixed(2);
+          setMainTreasuryBalance(bal);
+          setOpeningFloat(bal);
+        }
+      } catch (e) {
+        console.log("Using default verified Treasury Float");
+      }
+
       if (termData) {
         const shiftRes = await axiosClient.get(`/shifts/?terminal=${termData.id}&status=OPEN`);
         const openShift = shiftRes.data.results?.[0] || shiftRes.data?.[0];
@@ -79,17 +95,24 @@ export default function POSPage() {
 
   const handleOpenShift = async (e) => {
     e.preventDefault();
+
+    // لو الكاشير حاول يغير العهدة من دماغه لازم كلمة سر المدير
+    if (isFloatCustom && managerPassword !== '123456') {
+      alert("⚠️ عذرا! تعديل العهدة النقدية الافتتاحية يتطلب كلمة سر المدير الصحيحة (123456)!");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await axiosClient.post('/shifts/open/', {
         terminal_id: terminal?.id || 'd045390e-6926-4eeb-9290-6a6263077f4a',
         opening_cash: parseFloat(openingFloat || 0).toFixed(2),
-        notes: 'فتح وردية الكاشير الرئيسية'
+        notes: `فتح وردية بعهدة موثقة من الخزينة الرئيسية (${openingFloat} ج.م)`
       }).catch(() => ({ data: { id: 'SHIFT-LOCAL-101', opening_cash: openingFloat } }));
 
       setActiveShift(res.data);
       setShowOpenShiftModal(false);
-      alert(`✅ تم فتح الوردية بنجاح بعهدة افتتاحية (${openingFloat} ج.م)!`);
+      alert(`✅ تم فتح الوردية بنجاح وتسليم العهدة النقدية الموثقة (${openingFloat} ج.م)!`);
     } catch (err) {
       setShowOpenShiftModal(false);
     } finally {
@@ -97,7 +120,7 @@ export default function POSPage() {
     }
   };
 
-  // 1️⃣ إضافة وزنة مجمعة (شراء ميزان) للسلة
+  // إضافة وزنة مجمعة لسلة المبيعات
   const handleAddWeighedLotToCart = (e) => {
     e.preventDefault();
     const w = parseFloat(weighedWeightKg || 0);
@@ -105,7 +128,6 @@ export default function POSPage() {
 
     const rate = parseFloat(gradePrices[weighedGrade] || 100);
     const lineTotal = (w * rate).toFixed(2);
-
     const gradeTitle = weighedGrade === 'NEW_COLLECTION' ? '✨ وزنة كريمة (Super Lux)' : (weighedGrade === 'MIDDLE' ? '📦 وزنة وسط' : '🏷️ وزنة تصفيات');
 
     const newItem = {
@@ -123,7 +145,7 @@ export default function POSPage() {
     setShowWeighedLotModal(false);
   };
 
-  // 2️⃣ إضافة قطعة مباشرة بـ السعر الثابت للسلة
+  // إضافة قطعة مباشرة بسعر ثابت
   const handleAddStockItemToCart = (item) => {
     const existing = cart.find(c => c.id === item.id);
     if (existing) {
@@ -149,7 +171,6 @@ export default function POSPage() {
 
   const removeFromCart = (id) => setCart(cart.filter(c => c.id !== id));
 
-  // حساب الحسابات والعروض
   const cartSubtotal = cart.reduce((sum, item) => sum + parseFloat(item.totalPrice || 0), 0);
   const netTotal = Math.max(0, cartSubtotal - parseFloat(discountAmount || 0));
 
@@ -199,8 +220,6 @@ export default function POSPage() {
       
       {/* LEFT 2/3: PRODUCTS & WEIGHED LOT SELECTION */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
-        
-        {/* Top Action Bar */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <button
@@ -253,10 +272,8 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* RIGHT 1/3: CART & CHECKOUT PANEL */}
+      {/* RIGHT 1/3: CART PANEL */}
       <div className="w-80 md:w-96 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col overflow-hidden">
-        
-        {/* Cart Header */}
         <div className="p-4 bg-slate-900 text-white flex justify-between items-center">
           <div className="flex items-center gap-2">
             <ShoppingCart size={18} className="text-emerald-400" />
@@ -267,13 +284,11 @@ export default function POSPage() {
           </span>
         </div>
 
-        {/* Cart Items List */}
         <div className="flex-1 p-3 overflow-y-auto space-y-2.5 divide-y divide-slate-100">
           {cart.map((item) => (
             <div key={item.id} className="pt-2 flex justify-between items-start gap-2">
               <div className="space-y-1 flex-1">
                 <div className="font-bold text-slate-900 text-xs">{item.name}</div>
-                
                 {item.isWeighedLot ? (
                   <div className="text-[10px] text-slate-500 space-y-0.5">
                     <div>الوزن: <strong>{item.weightKg} كجم</strong> @ {item.pricePerKg} ج.م/كجم</div>
@@ -305,7 +320,6 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Cart Summary & Checkout Actions */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-3">
           <div className="space-y-1.5 text-xs text-slate-600">
             <div className="flex justify-between">
@@ -341,7 +355,7 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* MODAL 1: ADD WEIGHED LOT (وزنة مجمعة / شراء ميزان) */}
+      {/* MODAL 1: ADD WEIGHED LOT */}
       {showWeighedLotModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
@@ -428,7 +442,7 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* MODAL 2: CHECKOUT & PAYMENT SPLIT */}
+      {/* MODAL 2: CHECKOUT */}
       {showCheckoutModal && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 z-[60]">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
@@ -485,12 +499,10 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* MODAL 3: THERMAL RECEIPT PRINT (80mm) */}
+      {/* MODAL 3: RECEIPT */}
       {showReceiptModal && lastInvoice && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[70]">
           <div className="bg-white rounded-2xl p-6 max-w-xs w-full shadow-2xl space-y-4">
-            
-            {/* Receipt Preview Area */}
             <div id="receipt-print-area" className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-mono text-[11px] space-y-3">
               <div className="text-center space-y-1 border-b border-slate-300 pb-2">
                 <div className="font-black text-sm">موشن ستور — Motion Store</div>
@@ -499,7 +511,6 @@ export default function POSPage() {
                 <div className="text-[9px] text-slate-500">التاريخ: {lastInvoice.date}</div>
               </div>
 
-              {/* Items List */}
               <div className="space-y-2 border-b border-slate-300 pb-2">
                 {lastInvoice.items.map((item, idx) => (
                   <div key={idx} className="space-y-0.5">
@@ -516,7 +527,6 @@ export default function POSPage() {
                 ))}
               </div>
 
-              {/* Receipt Totals */}
               <div className="space-y-1 font-bold text-xs pt-1">
                 <div className="flex justify-between">
                   <span>الإجمالي الصافي:</span>
@@ -557,27 +567,82 @@ export default function POSPage() {
         </div>
       )}
 
-      {/* MODAL 4: OPEN SHIFT */}
+      {/* MODAL 4: OPEN SHIFT (WITH VERIFIED TREASURY FLOAT & MANAGER OVERRIDE) */}
       {showOpenShiftModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-[80]">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
-            <h3 className="font-bold text-slate-900 text-base flex items-center gap-2 border-b border-slate-100 pb-2">
-              <Clock size={18} className="text-emerald-600" /> فتح وردية كاشير جديدة
-            </h3>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4 text-xs">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <Clock size={18} className="text-emerald-600" /> فتح وردية كاشير جديدة
+              </h3>
+            </div>
+
+            {/* Treasury Verified Float Box */}
+            <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-1.5">
+              <div className="flex items-center gap-1.5 text-emerald-900 font-bold">
+                <Vault size={16} className="text-emerald-600" />
+                <span>العهدة المعتمدة من الخزينة الرئيسية</span>
+              </div>
+              <div className="text-xl font-black text-slate-900 font-mono">
+                {mainTreasuryBalance} <span className="text-xs font-normal text-slate-500">ج.م فكة</span>
+              </div>
+              <p className="text-[10px] text-emerald-800">
+                ℹ️ هذه هي النقدية المعتمدة المستلمة بالدرج من الخزينة لافتتاح الوردية.
+              </p>
+            </div>
+
             <form onSubmit={handleOpenShift} className="space-y-4">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">العهدة النقدية الافتتاحية بالدرج (ج.م) *</label>
-                <input
-                  type="number"
-                  step="1"
-                  required
-                  value={openingFloat}
-                  onChange={(e) => setOpeningFloat(e.target.value)}
-                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl font-black text-slate-900 text-sm"
-                />
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block font-bold text-slate-700">العهدة الافتتاحية المدخلة بالدرج *</label>
+                  <button
+                    type="button"
+                    onClick={() => setIsFloatCustom(!isFloatCustom)}
+                    className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer flex items-center gap-0.5"
+                  >
+                    {isFloatCustom ? 'تراجع للعهدة الرسمية' : '✏️ تعديل بطلب المدير'}
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="1"
+                    required
+                    readOnly={!isFloatCustom}
+                    value={openingFloat}
+                    onChange={(e) => setOpeningFloat(e.target.value)}
+                    className={`w-full p-2.5 rounded-xl font-black text-slate-900 text-sm border ${
+                      isFloatCustom ? 'bg-white border-indigo-500' : 'bg-slate-100 border-slate-200 cursor-not-allowed'
+                    }`}
+                  />
+                  {!isFloatCustom && <Lock size={14} className="absolute left-3 top-3 text-slate-400" />}
+                </div>
               </div>
-              <button type="submit" disabled={submitting} className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-md cursor-pointer">
-                {submitting ? 'جاري الفتح...' : 'تأكيد وفتح الوردية'}
+
+              {/* Password Prompt if Custom Float Entered */}
+              {isFloatCustom && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                  <span className="font-bold text-amber-900 text-[11px] flex items-center gap-1">
+                    <ShieldCheck size={14} /> يتطلب موافقة المدير وتأكيد كلمة السر
+                  </span>
+                  <input
+                    type="password"
+                    required
+                    value={managerPassword}
+                    onChange={(e) => setManagerPassword(e.target.value)}
+                    placeholder="كلمة سر المدير (123456)"
+                    className="w-full p-2 bg-white border border-amber-300 rounded-lg font-bold text-slate-900 text-xs"
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold py-3.5 rounded-xl shadow-lg shadow-emerald-600/20 transition cursor-pointer text-xs"
+              >
+                {submitting ? 'جاري الفتح...' : 'تأكيد وتسليم العهدة وفتح الوردية'}
               </button>
             </form>
           </div>
