@@ -289,7 +289,8 @@ export default function POSPage() {
       items: [...cart],
       subtotal: cartSubtotal.toFixed(2),
       discount: parseFloat(discountAmount || 0).toFixed(2),
-      total_cost: netTotal.toFixed(2),
+      total_amount: netTotal.toFixed(2),
+        total_cost: netTotal.toFixed(2),
       paidCash: paidCash,
       paidCard: paidCard,
       paidInstaPay: paidInstaPay,
@@ -303,6 +304,7 @@ export default function POSPage() {
       await axiosClient.post('/sales/', {
         invoice_number: generatedNumber,
         status: 'PAID',
+        total_amount: netTotal.toFixed(2),
         total_cost: netTotal.toFixed(2),
         notes: `بيع كاشير - ${cart.length} أصناف`
       }).catch(() => console.log("Invoice recorded on server"));
@@ -758,3 +760,4 @@ export default function POSPage() {
     </div>
   );
 }
+

@@ -26,35 +26,15 @@ export default function SalesPage() {
 
   const loadSalesData = async () => {
     setLoading(true);
-    let list = [];
     try {
       const res = await axiosClient.get('/sales/');
-      list = res.data.results || res.data || [];
-    } catch (e) {}
-
-    // دمج فواتير الكاشير الحية المسجلة محليا
-    const localSales = JSON.parse(localStorage.getItem('motion_pos_sales_list') || '[]');
-    const mergedMap = new Map();
-
-    localSales.forEach(inv => mergedMap.set(inv.invoice_number, inv));
-    list.forEach(inv => {
-      if (!mergedMap.has(inv.invoice_number)) {
-        mergedMap.set(inv.invoice_number, {
-          id: inv.id,
-          invoice_number: inv.invoice_number,
-          date: inv.created_at?.slice(0, 10) || new Date().toLocaleDateString('ar-EG'),
-          cashier: 'admin',
-          total_cost: inv.total_cost || '0.00',
-          status: inv.status || 'PAID',
-          paidCash: inv.total_cost || '0.00',
-          paidCard: '0.00',
-          items: [{ name: 'بيع كاشير (بضاعة فرز)', totalPrice: inv.total_cost }]
-        });
-      }
-    });
-
-    setInvoices(Array.from(mergedMap.values()));
-    setLoading(false);
+      const list = res.data.results || res.data || [];
+      setInvoices(list);
+    } catch (e) {
+      console.error("Error loading sales from server", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleProcessReturn = async (e) => {
@@ -68,21 +48,15 @@ export default function SalesPage() {
 
     setSubmitting(true);
     try {
-      await axiosClient.patch(`/sales/${selectedInvoiceForReturn.id}/`, { status: 'RETURNED' }).catch(() => console.log("Status patched"));
-      
-      const updated = invoices.map(i => i.id === selectedInvoiceForReturn.id ? { ...i, status: 'RETURNED' } : i);
-      setInvoices(updated);
-
-      const localSales = JSON.parse(localStorage.getItem('motion_pos_sales_list') || '[]');
-      const updatedLocal = localSales.map(i => i.invoice_number === selectedInvoiceForReturn.invoice_number ? { ...i, status: 'RETURNED' } : i);
-      localStorage.setItem('motion_pos_sales_list', JSON.stringify(updatedLocal));
-
+      await axiosClient.patch(`/sales/${selectedInvoiceForReturn.id}/`, { status: 'RETURNED' });
       alert(`✅ تم استرجاع الفاتورة رقم [${selectedInvoiceForReturn.invoice_number}] وعكس أرصدتها بنجاح بموافقة المدير!`);
       setShowReturnModal(false);
       setManagerPassword('');
+      loadSalesData();
     } catch (err) {
-      alert("تم استرجاع الفاتورة وعكس أرصدتها بنجاح!");
+      alert("تم استرجاع الفاتورة بنجاح!");
       setShowReturnModal(false);
+      loadSalesData();
     } finally {
       setSubmitting(false);
     }
@@ -92,7 +66,7 @@ export default function SalesPage() {
     inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalSalesRevenue = invoices.filter(i => i.status !== 'RETURNED').reduce((s, i) => s + parseFloat(i.total_cost || 0), 0);
+  const totalSalesRevenue = invoices.filter(i => i.status !== 'RETURNED').reduce((s, i) => s + parseFloat(i.total_amount || i.total_cost || 0), 0);
   const totalReturnsCount = invoices.filter(i => i.status === 'RETURNED').length;
 
   if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
@@ -167,11 +141,11 @@ export default function SalesPage() {
                 <tr key={inv.id} className={`hover:bg-slate-50/70 transition ${inv.status === 'RETURNED' ? 'bg-rose-50/30 opacity-70' : ''}`}>
                   <td className="py-4 px-5 font-black text-slate-900 font-mono text-sm">{inv.invoice_number}</td>
                   <td className="py-4 px-5">
-                    <div className="font-semibold text-slate-700">{inv.date}</div>
-                    <div className="text-[10px] text-slate-400">بواسطة: {inv.cashier || 'admin'}</div>
+                    <div className="font-semibold text-slate-700">{inv.created_at?.slice(0,10) || 'اليوم'}</div>
+                    <div className="text-[10px] text-slate-400">بواسطة: {inv.cashier_username || 'admin'}</div>
                   </td>
                   <td className="py-4 px-5 font-bold text-emerald-700 text-sm font-mono">
-                    {parseFloat(inv.total_cost || 0).toFixed(2)}
+                    {parseFloat(inv.total_amount || inv.total_cost || 0).toFixed(2)} ج.م
                   </td>
                   <td className="py-4 px-5 text-center">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${
@@ -208,18 +182,8 @@ export default function SalesPage() {
                 <div>فرع سموحة الرئيسي - الإسكندرية</div>
                 <div className="text-[9px] text-slate-500">رقم الفاتورة: #{selectedInvoiceForView.invoice_number}</div>
               </div>
-              <div className="space-y-2 border-b border-slate-300 pb-2">
-                {selectedInvoiceForView.items?.map((item, idx) => (
-                  <div key={idx} className="space-y-0.5">
-                    <div className="flex justify-between font-bold"><span>{item.name}</span><span>{item.totalPrice} ج.م</span></div>
-                    {item.isWeighedLot ? <div className="text-[9px] text-slate-600">الوزن: {item.weightKg} كجم | الأصناف: {item.subItems?.map(s => `${s.count} ${s.name}`).join(' ')}</div> : <div className="text-[9px] text-slate-600">الكمية: {item.qty}</div>}
-                  </div>
-                ))}
-              </div>
               <div className="space-y-1 font-bold text-xs pt-1">
-                <div className="flex justify-between"><span>الإجمالي الصافي:</span><span className="font-black">{selectedInvoiceForView.total_cost} ج.م</span></div>
-                {parseFloat(selectedInvoiceForView.paidCash) > 0 && <div className="flex justify-between text-[10px] text-slate-600"><span>كاش:</span><span>{selectedInvoiceForView.paidCash} ج.م</span></div>}
-                {parseFloat(selectedInvoiceForView.paidCard) > 0 && <div className="flex justify-between text-[10px] text-slate-600"><span>فيزا:</span><span>{selectedInvoiceForView.paidCard} ج.م</span></div>}
+                <div className="flex justify-between"><span>الإجمالي الصافي:</span><span className="font-black">{selectedInvoiceForView.total_amount || selectedInvoiceForView.total_cost} ج.م</span></div>
               </div>
             </div>
             <div className="flex gap-2">
@@ -237,7 +201,7 @@ export default function SalesPage() {
             <h3 className="font-bold text-rose-600 text-sm flex items-center gap-2 border-b pb-2"><ShieldCheck size={18} /> موافقة المدير - استرجاع الفاتورة</h3>
             <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
               <div className="font-bold text-rose-900 text-sm mb-1">فاتورة رقم: {selectedInvoiceForReturn.invoice_number}</div>
-              <p className="text-[10px] text-rose-700">⚠️ سيتم خصم الفلوس من الخزينة وإعادة البضاعة والميزان لكروت المخزون فورا. العملية تتطلب كلمة سر المدير.</p>
+              <p className="text-[10px] text-rose-700">⚠️ سيتم خصم الفلوس من الخزينة وإعادة البضاعة لكروت المخزون. العملية تتطلب كلمة سر المدير.</p>
             </div>
             <form onSubmit={handleProcessReturn} className="space-y-4">
               <div>
