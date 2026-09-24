@@ -18,7 +18,9 @@ import {
   ShieldCheck,
   Eye,
   FileSpreadsheet,
-  Download
+  Download,
+  Layers,
+  Tag
 } from 'lucide-react';
 
 export default function PurchasingPage() {
@@ -47,23 +49,30 @@ export default function PurchasingPage() {
   const [selectedWarehouse, setSelectedWarehouse] = useState('');
   const [additionalCosts, setAdditionalCosts] = useState('0.00');
 
-  // Line Item States
-  const balePresets = [
-    'بالة ملابس أوروبية شتوي',
-    'بالة ملابس أوروبية صيفي',
-    'بالة ملابس أطفال شتوي',
-    'بالة ملابس أطفال صيفي',
-    'بالة أحذية أوروبية فاخرة',
-    'بالة مفروشات وبياضات',
-    'بالة ملابس حريمي سوبر لوكس',
-    'بالة ملابس رجالي تصفيات',
-    'بالة جاكيت ومعاطف ثقيلة',
-    'بالة رياضية متنوعة'
-  ];
+  // Dynamic Purchase Type: 'BALE' (بالة) vs 'STOCK' (استوك)
+  const [purchaseType, setPurchaseType] = useState('BALE');
 
-  const [itemDescription, setItemDescription] = useState(balePresets[0]);
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [weightKg, setWeightKg] = useState('100.000');
+  // Bale Options
+  const [baleWeightOption, setBaleWeightOption] = useState('45'); // '40', '45', '50', 'CUSTOM'
+  const [customBaleWeight, setCustomBaleWeight] = useState('45.000');
+  const baleItemPresets = [
+    'ملابس رجالي شتوي',
+    'ملابس حريمي صيفي',
+    'ملابس أطفال متنوعة',
+    'جاكيت ومعاطف ثقيلة',
+    'أحذية أوروبية فاخرة',
+    'مفروشات وبياضات منزلية',
+    'ملابس رياضية',
+    'تصفيات وتدشين'
+  ];
+  const [baleItemType, setBaleItemType] = useState(baleItemPresets[0]);
+
+  // Stock Lot Options
+  const [stockWeightKg, setStockWeightKg] = useState('100.000');
+  const [stockBrand, setStockBrand] = useState('Zara');
+  const stockBrandPresets = ['Zara', 'H&M', 'Bershka', 'Pull & Bear', 'Nike', 'Adidas', 'Max', 'LC Waikiki', 'براند آخر'];
+
+  // Financials
   const [estimatedPieces, setEstimatedPieces] = useState('');
   const [totalCost, setTotalCost] = useState('10000.00');
 
@@ -133,6 +142,19 @@ export default function PurchasingPage() {
       alert("يرجى اختيار المورد ومخزن الاستلام.");
       return;
     }
+
+    // حساب الوزن والوصف بناء على نوع الشراء (بالة أم استوك)
+    let finalWeight = '0.000';
+    let finalDescription = '';
+
+    if (purchaseType === 'BALE') {
+      finalWeight = baleWeightOption === 'CUSTOM' ? parseFloat(customBaleWeight || 0).toFixed(3) : parseFloat(baleWeightOption).toFixed(3);
+      finalDescription = `بالة ${baleItemType} (وزن ${baleWeightOption === 'CUSTOM' ? customBaleWeight : baleWeightOption} كجم - براندات متعددة)`;
+    } else {
+      finalWeight = parseFloat(stockWeightKg || 0).toFixed(3);
+      finalDescription = `استوك ماركة [${stockBrand}] (أصناف متعددة)`;
+    }
+
     setSubmitting(true);
     try {
       const invRes = await axiosClient.post('/purchases/', {
@@ -142,18 +164,18 @@ export default function PurchasingPage() {
         invoice_date: invoiceDate,
         status: 'CONFIRMED',
         additional_costs: parseFloat(additionalCosts || 0).toFixed(2),
-        notes: `شراء بالة خام - ${itemDescription}`
+        notes: `شراء ${purchaseType === 'BALE' ? 'بالة' : 'استوك'} - ${finalDescription}`
       });
 
       const invoiceId = invRes.data.id;
-      const parsedWeight = parseFloat(weightKg || 0);
+      const parsedWeight = parseFloat(finalWeight || 0);
       const parsedCost = parseFloat(totalCost || 0);
       const unitCost = parsedWeight > 0 ? (parsedCost / parsedWeight).toFixed(2) : '0.00';
 
       await axiosClient.post('/purchase-line-items/', {
         invoice: invoiceId,
-        item_type: 'RAW_BALE',
-        description: itemDescription,
+        item_type: purchaseType === 'BALE' ? 'RAW_BALE' : 'STOCK_LOT',
+        description: finalDescription,
         category: selectedCategory || null,
         weight_kg: parsedWeight.toFixed(3),
         quantity_pieces: estimatedPieces ? parseInt(estimatedPieces) : null,
@@ -161,7 +183,7 @@ export default function PurchasingPage() {
         total_cost: parsedCost.toFixed(2)
       });
 
-      const lotCode = `BALE-${invoiceNumber.replace('PINV-', '')}`;
+      const lotCode = `${purchaseType === 'BALE' ? 'BALE' : 'STK'}-${invoiceNumber.replace('PINV-', '')}`;
       await axiosClient.post('/raw-lots/', {
         lot_code: lotCode,
         purchase_invoice: invoiceId,
@@ -173,10 +195,10 @@ export default function PurchasingPage() {
         purchase_cost: parsedCost.toFixed(2),
         status: 'RECEIVED',
         received_date: invoiceDate,
-        notes: `بالة جديدة بانتظار الفرز`
+        notes: `${purchaseType === 'BALE' ? 'بالة' : 'شحنة استوك'} جديدة بانتظار الفرز`
       });
 
-      alert(`تم حفظ الفاتورة وإنشاء البالة الخام رقم #${lotCode} بنجاح!`);
+      alert(`تم حفظ الفاتورة وإنشاء الشحنة رقم #${lotCode} بنجاح!`);
       setShowNewInvoiceModal(false);
       loadPurchasingData();
     } catch (err) {
@@ -252,7 +274,6 @@ export default function PurchasingPage() {
     window.open(`https://api.whatsapp.com/send?text=${encodedText}`, '_blank');
   };
 
-  // 1️⃣ تصدير شيت إكسل فاخر ومصمم بالألوان والحدود العريضة (Excel .xls)
   const handleExportStyledExcel = () => {
     const totalCostSum = invoices.reduce((acc, i) => acc + (i.status !== 'CANCELLED' ? parseFloat(i.total_cost || 0) : 0), 0);
     const dateStr = new Date().toLocaleDateString('ar-EG');
@@ -320,7 +341,6 @@ export default function PurchasingPage() {
     document.body.removeChild(link);
   };
 
-  // 2️⃣ تنزيل التقرير كملف PDF مباشر في التحميلات (Direct PDF Download)
   const handleDownloadDirectPDF = () => {
     const script = document.createElement('script');
     script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
@@ -707,6 +727,30 @@ export default function PurchasingPage() {
             </div>
 
             <form onSubmit={handleCreateInvoice} className="space-y-4 text-xs">
+
+              {/* Purchase Type Selector: Bale vs Stock */}
+              <div className="p-3 bg-slate-100 rounded-2xl border border-slate-200 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPurchaseType('BALE')}
+                  className={`flex-1 py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                    purchaseType === 'BALE' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Layers size={16} /> 📦 شراء بالة (صنف واحد - براندات متعددة)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPurchaseType('STOCK')}
+                  className={`flex-1 py-2.5 px-4 rounded-xl font-bold flex items-center justify-center gap-2 transition cursor-pointer ${
+                    purchaseType === 'STOCK' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Tag size={16} /> 🏷️ شراء استوك (براند واحد - أصناف متعددة)
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-slate-600 mb-1">المورد / المصدر *</label>
@@ -763,58 +807,130 @@ export default function PurchasingPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <span className="font-bold text-slate-700 block text-[11px] uppercase tracking-wider">
-                  مواصفات وتكلفة البالة الخام
+              {/* Dynamic Form Content Based on Purchase Type */}
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-4">
+                <span className="font-bold text-slate-800 block text-xs uppercase tracking-wider flex items-center gap-1.5">
+                  {purchaseType === 'BALE' ? '📦 مواصفات وتكلفة البالة' : '🏷️ مواصفات وتكلفة شحنة الاستوك'}
                 </span>
 
-                <div>
-                  <label className="block text-slate-500 font-medium mb-1">وصف البالة / الشحنة *</label>
-                  <select
-                    required
-                    value={itemDescription}
-                    onChange={(e) => setItemDescription(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    {balePresets.map((preset, idx) => (
-                      <option key={idx} value={preset}>{preset}</option>
-                    ))}
-                  </select>
-                </div>
+                {/* CASE 1: BALE TYPE */}
+                {purchaseType === 'BALE' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">نوع الصنف (صنف واحد) *</label>
+                      <select
+                        value={baleItemType}
+                        onChange={(e) => setBaleItemType(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                      >
+                        {baleItemPresets.map((preset, idx) => (
+                          <option key={idx} value={preset}>{preset}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-slate-500 font-medium mb-1">الوزن الإجمالي (كجم) *</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      required
-                      value={weightKg}
-                      onChange={(e) => setWeightKg(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
-                    />
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1.5">اختر وزن البالة *</label>
+                      <div className="flex gap-2">
+                        {['40', '45', '50'].map((wOption) => (
+                          <button
+                            key={wOption}
+                            type="button"
+                            onClick={() => setBaleWeightOption(wOption)}
+                            className={`flex-1 py-2 rounded-xl font-extrabold text-xs transition border cursor-pointer ${
+                              baleWeightOption === wOption
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {wOption} كجم
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setBaleWeightOption('CUSTOM')}
+                          className={`flex-1 py-2 rounded-xl font-extrabold text-xs transition border cursor-pointer ${
+                            baleWeightOption === 'CUSTOM'
+                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          ✏️ وزن مخصص
+                        </button>
+                      </div>
+                    </div>
+
+                    {baleWeightOption === 'CUSTOM' && (
+                      <div>
+                        <label className="block text-slate-600 font-bold mb-1">أدخل الوزن المخصص (كجم) *</label>
+                        <input
+                          type="number"
+                          step="0.001"
+                          required
+                          value={customBaleWeight}
+                          onChange={(e) => setCustomBaleWeight(e.target.value)}
+                          className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-emerald-500"
+                          placeholder="مثال: 52.500"
+                        />
+                      </div>
+                    )}
                   </div>
+                )}
 
+                {/* CASE 2: STOCK TYPE */}
+                {purchaseType === 'STOCK' && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">اسم البراند / الماركة (براند واحد) *</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={stockBrand}
+                          onChange={(e) => setStockBrand(e.target.value)}
+                          className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                        >
+                          {stockBrandPresets.map((b, idx) => (
+                            <option key={idx} value={b}>{b}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-slate-600 font-bold mb-1">وزن شحنة الاستوك (كجم) *</label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        required
+                        value={stockWeightKg}
+                        onChange={(e) => setStockWeightKg(e.target.value)}
+                        className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                        placeholder="أدخل وزن الاستوك"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
                   <div>
-                    <label className="block text-slate-500 font-medium mb-1">عدد القطع التقريبي</label>
+                    <label className="block text-slate-600 font-bold mb-1">عدد القطع التقريبي</label>
                     <input
                       type="number"
                       value={estimatedPieces}
                       onChange={(e) => setEstimatedPieces(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
-                      placeholder="مثال: 100"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+                      placeholder="مثال: 100 قطعة"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-slate-500 font-medium mb-1">تكلفة الشراء (ج.م) *</label>
+                    <label className="block text-slate-600 font-bold mb-1">تكلفة الشراء (ج.م) *</label>
                     <input
                       type="number"
                       step="10"
                       required
                       value={totalCost}
                       onChange={(e) => setTotalCost(e.target.value)}
-                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-bold text-emerald-700 focus:outline-none focus:border-emerald-500"
+                      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl font-bold text-emerald-700 focus:outline-none focus:border-emerald-500"
                     />
                   </div>
                 </div>
@@ -826,13 +942,13 @@ export default function PurchasingPage() {
                     step="10"
                     value={additionalCosts}
                     onChange={(e) => setAdditionalCosts(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
               </div>
 
               <div className="pt-2 flex justify-between items-center text-xs">
-                <span className="text-slate-500">إجمالي صافي التكلفة:</span>
+                <span className="text-slate-500 font-bold">إجمالي صافي التكلفة:</span>
                 <span className="font-extrabold text-slate-900 text-sm">
                   {(parseFloat(totalCost || 0) + parseFloat(additionalCosts || 0)).toFixed(2)} {t('common.currency')}
                 </span>
@@ -841,9 +957,9 @@ export default function PurchasingPage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl transition duration-150 shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer text-xs"
+                className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl transition duration-150 shadow-lg shadow-emerald-600/20 disabled:opacity-50 cursor-pointer text-xs"
               >
-                {submitting ? t('common.loading') : 'حفظ الفاتورة وإنشاء البالة الخام بساحة الفرز'}
+                {submitting ? t('common.loading') : `حفظ الفاتورة وإنشاء شحنة ${purchaseType === 'BALE' ? 'البالة' : 'الاستوك'}`}
               </button>
             </form>
           </div>
