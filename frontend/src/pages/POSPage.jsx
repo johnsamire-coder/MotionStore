@@ -4,7 +4,7 @@ import { useLanguage } from '../context/LanguageContext';
 import axiosClient from '../api/axiosClient';
 import { 
   Printer, Plus, Save, Trash2, Search, 
-  CheckCircle2, AlertCircle, FileText, Keyboard, X, Info
+  CheckCircle2, AlertCircle, FileText, Keyboard, X, PlusCircle, Tag
 } from 'lucide-react';
 
 export default function POSPage() {
@@ -30,8 +30,21 @@ export default function POSPage() {
   
   const [loading, setLoading] = useState(false);
   const [showHotkeysModal, setShowHotkeysModal] = useState(false);
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [invoiceNumber, setInvoiceNumber] = useState(Math.floor(1000 + Math.random() * 9000));
+
+  // New Product Form State
+  const [newProdName, setNewProdName] = useState('');
+  const [newProdCode, setNewProdCode] = useState('');
+  const [newProdCat, setNewProdCat] = useState('');
+  const [newProdUom, setNewProdUom] = useState('PIECE');
+  const [newPriceKgNew, setNewPriceKgNew] = useState('300');
+  const [newPriceKgMid, setNewPriceKgMid] = useState('150');
+  const [newPriceKgClr, setNewPriceKgMidClr] = useState('50');
+  const [newPricePcNew, setNewPricePcNew] = useState('150');
+  const [newPricePcMid, setNewPricePcMid] = useState('75');
+  const [newPricePcClr, setNewPricePcClr] = useState('25');
 
   const searchInputRef = useRef(null);
 
@@ -61,6 +74,7 @@ export default function POSPage() {
       setActiveShift(shiftRes.data);
       setCustomers(custData);
       setPriceListItems(priceData);
+      if (catData.length > 0) setNewProdCat(catData[0].id);
     } catch (err) {
       console.error("Error loading POS data", err);
     } finally {
@@ -68,9 +82,47 @@ export default function POSPage() {
     }
   };
 
+  // Create & Code New Product Handlers
+  const handleCodeNewProduct = async (e) => {
+    e.preventDefault();
+    if (!newProdName) {
+      alert("يرجى كتابة اسم الصنف على الأقل");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // 1. Create Product
+      const prodPayload = {
+        name: newProdName,
+        code: newProdCode || `COD-${Math.floor(1000 + Math.random()*9000)}`,
+        category: newProdCat || null,
+        unit_of_measure: newProdUom,
+        is_active: true
+      };
+
+      const res = await axiosClient.post('/products/', prodPayload);
+      const createdProd = res.data;
+
+      setMessage({ type: 'success', text: `تم تكويد الصنف (${newProdName}) بنجاح!` });
+      setShowAddProductModal(false);
+      
+      // Reset Form
+      setNewProdName('');
+      setNewProdCode('');
+
+      // Reload list
+      fetchInitialData();
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: 'error', text: 'حدث خطأ أثناء تكويد الصنف' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Helper: Get Resolved Dynamic Price from Pricing Engine
   const getResolvedPrice = (product, grade, uom) => {
-    // Search in active price list items by product ID and grade
     const matched = priceListItems.find(
       item => (item.product === product.id || item.product_id === product.id) && 
               item.grade === grade
@@ -81,8 +133,7 @@ export default function POSPage() {
       if (uom === 'PIECE') return parseFloat(matched.price_per_piece || 0);
     }
 
-    // Fallback to product base price
-    return parseFloat(product.selling_price || product.price || 0);
+    return parseFloat(product.selling_price || product.price || 100);
   };
 
   // Cart Calculations
@@ -106,8 +157,8 @@ export default function POSPage() {
         rawProduct: product,
         name: product.name,
         code: product.code || '---',
-        uom: defaultUom, // 'KG' or 'PIECE'
-        grade: defaultGrade, // 'NEW', 'MIDDLE', 'CLEARANCE'
+        uom: defaultUom,
+        grade: defaultGrade,
         price: resolvedPrice,
         quantity: 1
       }]);
@@ -199,9 +250,8 @@ export default function POSPage() {
     }
   };
 
-  const toggleHotkeysModal = () => {
-    setShowHotkeysModal(prev => !prev);
-  };
+  const toggleHotkeysModal = () => setShowHotkeysModal(prev => !prev);
+  const toggleAddProductModal = () => setShowAddProductModal(prev => !prev);
 
   // Register Keyboard Hotkeys (F1, F3, F7, *)
   usePOSHotkeys({
@@ -209,18 +259,6 @@ export default function POSPage() {
     onNew: handleNewInvoice,
     onQuickSearch: handleFocusSearch
   });
-
-  // Global F12 listener for Hotkeys Help Modal
-  useEffect(() => {
-    const handleF12 = (e) => {
-      if (e.key === 'F12') {
-        e.preventDefault();
-        toggleHotkeysModal();
-      }
-    };
-    window.addEventListener('keydown', handleF12);
-    return () => window.removeEventListener('keydown', handleF12);
-  }, []);
 
   // Filter Products
   const filteredProducts = products.filter(p => {
@@ -253,7 +291,7 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Hotkey Help Button & Notifications */}
+        {/* Action Buttons & Notifications */}
         <div className="flex items-center gap-2">
           {message.text && (
             <div className={`px-3 py-1 rounded text-xs font-bold ${
@@ -263,6 +301,15 @@ export default function POSPage() {
               {message.text}
             </div>
           )}
+
+          {/* Quick Code Product Button */}
+          <button 
+            onClick={toggleAddProductModal}
+            className="bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow"
+          >
+            <PlusCircle className="w-4 h-4 text-emerald-200" /> + تكويد صنف جديد
+          </button>
+
           <button 
             onClick={toggleHotkeysModal}
             className="bg-slate-800 hover:bg-slate-900 text-amber-300 px-2.5 py-1 rounded text-xs font-bold flex items-center gap-1.5 shadow"
@@ -287,7 +334,7 @@ export default function POSPage() {
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="w-full border border-slate-300 rounded p-1 bg-white text-xs"
               >
-                <option value="">الكل</option>
+                <option value="">الكل ({products.length})</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
@@ -330,7 +377,9 @@ export default function POSPage() {
               <tbody>
                 {filteredProducts.length === 0 ? (
                   <tr>
-                    <td colSpan="3" className="text-center p-6 text-slate-400">لا توجد أصناف مطابقة</td>
+                    <td colSpan="3" className="text-center p-8 text-slate-400 font-medium">
+                      لا توجد أصناف مكودة حالياً. اضغط على <strong className="text-emerald-700 cursor-pointer underline" onClick={toggleAddProductModal}>"+ تكويد صنف جديد"</strong> بالأعلى لإضافة أول صنف!
+                    </td>
                   </tr>
                 ) : (
                   filteredProducts.map((p, idx) => (
@@ -342,7 +391,7 @@ export default function POSPage() {
                       <td className="p-1.5 border-x font-mono text-slate-500">{p.code || '---'}</td>
                       <td className="p-1.5 border-x font-bold text-slate-800">{p.name}</td>
                       <td className="p-1.5 border-x text-center font-bold text-emerald-700 bg-emerald-50/50">
-                        {parseFloat(p.selling_price || p.price || 0).toFixed(2)}
+                        {parseFloat(p.selling_price || p.price || 100).toFixed(2)}
                       </td>
                     </tr>
                   ))
@@ -380,7 +429,7 @@ export default function POSPage() {
                   {cart.length === 0 ? (
                     <tr>
                       <td colSpan="8" className="text-center p-12 text-slate-400 font-medium">
-                        الفاتورة فارغة. اضغط على أي صنف لإضافته.
+                        الفاتورة فارغة. اضغط على أي صنف من قائمة الشمال لإضافته.
                       </td>
                     </tr>
                   ) : (
@@ -534,6 +583,100 @@ export default function POSPage() {
 
       </div>
 
+      {/* Code New Product Modal */}
+      {showAddProductModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-2xl border border-slate-300 w-full max-w-md overflow-hidden">
+            <div className="bg-emerald-800 text-white p-3 flex justify-between items-center">
+              <span className="font-bold flex items-center gap-2 text-sm">
+                <PlusCircle className="w-5 h-5 text-emerald-300" /> تكويد صنف / استوك جديد
+              </span>
+              <button onClick={toggleAddProductModal} className="text-emerald-200 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <form onSubmit={handleCodeNewProduct} className="p-4 space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">اسم الصنف / الاستوك *</label>
+                <input 
+                  type="text" 
+                  required
+                  value={newProdName}
+                  onChange={(e) => setNewProdName(e.target.value)}
+                  placeholder="مثال: بلوزة حريمي / استوك زارا"
+                  className="w-full border border-slate-300 rounded p-1.5 text-xs font-semibold focus:ring-1 focus:ring-emerald-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">الكود (اختياري)</label>
+                  <input 
+                    type="text" 
+                    value={newProdCode}
+                    onChange={(e) => setNewProdCode(e.target.value)}
+                    placeholder="مثال: 8776"
+                    className="w-full border border-slate-300 rounded p-1.5 text-xs font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">التصنيف</label>
+                  <select 
+                    value={newProdCat}
+                    onChange={(e) => setNewProdCat(e.target.value)}
+                    className="w-full border border-slate-300 rounded p-1.5 text-xs bg-white"
+                  >
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">وحدة البيع الافتراضية</label>
+                <div className="flex gap-4 border p-2 rounded bg-slate-50">
+                  <label className="flex items-center gap-1.5 cursor-pointer font-semibold">
+                    <input 
+                      type="radio" 
+                      name="uom" 
+                      value="PIECE" 
+                      checked={newProdUom === 'PIECE'} 
+                      onChange={() => setNewProdUom('PIECE')} 
+                    /> 🔢 بالقطعة
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer font-semibold">
+                    <input 
+                      type="radio" 
+                      name="uom" 
+                      value="KG" 
+                      checked={newProdUom === 'KG'} 
+                      onChange={() => setNewProdUom('KG')} 
+                    /> ⚖️ بالوزن (كجم)
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t flex justify-end gap-2">
+                <button 
+                  type="button" 
+                  onClick={toggleAddProductModal}
+                  className="px-3 py-1.5 rounded border border-slate-300 text-slate-600 hover:bg-slate-100 font-semibold"
+                >
+                  إلغاء
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={loading}
+                  className="px-4 py-1.5 rounded bg-emerald-700 hover:bg-emerald-800 text-white font-bold flex items-center gap-1"
+                >
+                  <Save className="w-4 h-4" /> حفظ التكويد
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Hotkeys Help Modal */}
       {showHotkeysModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -563,10 +706,6 @@ export default function POSPage() {
               <div className="flex justify-between items-center bg-slate-50 p-2 rounded border">
                 <span className="font-bold text-slate-700">التركيز على حقل البحث السريع:</span>
                 <span className="bg-amber-600 text-white px-2 py-1 rounded font-mono font-bold">* (النجمة)</span>
-              </div>
-              <div className="flex justify-between items-center bg-slate-50 p-2 rounded border">
-                <span className="font-bold text-slate-700">فتح/إغلاق نافذة الاختصارات:</span>
-                <span className="bg-purple-600 text-white px-2 py-1 rounded font-mono font-bold">F12</span>
               </div>
             </div>
 
