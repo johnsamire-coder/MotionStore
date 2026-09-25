@@ -21,7 +21,8 @@ def calculate_sorting_costs(sorting_order_id) -> CostingCalculationRecord:
             raise ValueError("Cannot calculate costs on unbalanced sorting weights.")
 
     # 2. Retrieve Active Costing Policy
-    config = CostingConfiguration.objects.get(tenant=order.tenant, is_active=True)
+    config = CostingConfiguration.objects.get(tenant=order.tenant,
+        is_active=True)
     params = {p.grade: p for p in config.parameters.all()}
 
     # Raw values
@@ -159,6 +160,7 @@ def calculate_sorting_costs(sorting_order_id) -> CostingCalculationRecord:
         }
 
     record = CostingCalculationRecord.objects.create(
+        tenant=order.tenant,
         sorting_order=order,
         method_used=config.method,
         waste_treatment_used=config.waste_treatment,
