@@ -49,20 +49,20 @@ export default function LoginPage() {
   };
 
   const isAr = lang === 'ar';
-  const displayTitle = isAr ? ${t('login.title')} -  : ${brand.name} - ;
+  const displayTitle = isAr ? (t('login.title') + ' - ' + brand.name) : (brand.name + ' - ' + t('login.title'));
 
   return (
     <div 
       className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden font-sans bg-cover bg-center"
       style={{
-        backgroundImage: linear-gradient(to bottom, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.85)), url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1600&auto=format&fit=crop')
+        backgroundImage: "linear-gradient(to bottom, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.85)), url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1600&auto=format&fit=crop')"
       }}
       dir={isAr ? 'rtl' : 'ltr'}
     >
       <button
         onClick={toggleLanguage}
         type="button"
-        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-4 py-2 bg-white text-slate-800 border border-white/20 rounded-xl text-xs font-black transition shadow-xl cursor-pointer"
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-4 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-white/20 rounded-xl text-xs font-black transition shadow-xl cursor-pointer"
       >
         <Globe size={16} className="text-emerald-600" />
         <span>{isAr ? 'English (EN)' : 'العربية (AR)'}</span>
@@ -97,12 +97,12 @@ export default function LoginPage() {
           <div>
             <label className="block text-xs font-bold text-slate-200 mb-1">{t('login.username')}</label>
             <div className="relative">
-              <User size={16} className={bsolute  top-3.5 text-slate-400} />
+              <User size={16} className={"absolute " + (isAr ? "right-3" : "left-3") + " top-3.5 text-slate-400"} />
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className={w-full bg-slate-950/80 border border-slate-700 rounded-xl  py-3 text-sm font-black text-white outline-none transition focus:ring-2 focus:ring-emerald-500}
+                className={"w-full bg-slate-950/80 border border-slate-700 rounded-xl " + (isAr ? "pr-10 pl-4" : "pl-10 pr-4") + " py-3 text-sm font-black text-white outline-none transition focus:ring-2 focus:ring-emerald-500"}
                 required
               />
             </div>
@@ -111,12 +111,12 @@ export default function LoginPage() {
           <div>
             <label className="block text-xs font-bold text-slate-200 mb-1">{t('login.password')}</label>
             <div className="relative">
-              <Lock size={16} className={bsolute  top-3.5 text-slate-400} />
+              <Lock size={16} className={"absolute " + (isAr ? "right-3" : "left-3") + " top-3.5 text-slate-400"} />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={w-full bg-slate-950/80 border border-slate-700 rounded-xl  py-3 text-sm font-black text-white outline-none transition focus:ring-2 focus:ring-emerald-500}
+                className={"w-full bg-slate-950/80 border border-slate-700 rounded-xl " + (isAr ? "pr-10 pl-4" : "pl-10 pr-4") + " py-3 text-sm font-black text-white outline-none transition focus:ring-2 focus:ring-emerald-500"}
                 required
               />
             </div>
