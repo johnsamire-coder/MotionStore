@@ -47,6 +47,8 @@ class SaleInvoice(TenantAwareModel):
     )
     subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     discount_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    delivery_fee = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="Delivery Fee (مصاريف التوصيل)")
+    previous_balance = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="Previous Customer Balance (الرصيد السابق للعميل)")
     total_amount = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="Net Revenue")
     total_cogs = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="Total COGS")
     gross_profit = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="Gross Profit")
