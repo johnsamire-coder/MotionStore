@@ -1,3 +1,4 @@
+from rest_framework.permissions import AllowAny
 from apps.users.models import RolePermission
 from apps.users.serializers import RolePermissionSerializer
 from apps.discounts.models import DiscountRule
@@ -407,6 +408,18 @@ class UserViewSet(BaseTenantViewSet):
 class TenantViewSet(viewsets.ModelViewSet):
     queryset = Tenant.objects.all()
     serializer_class = TenantSerializer
+
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
+    def public_info(self, request):
+        tenant = Tenant.objects.filter(is_active=True).first()
+        if not tenant:
+            return Response({'name': 'جاكي ستور', 'logo_base64': None})
+        return Response({
+            'id': str(tenant.id),
+            'name': tenant.name,
+            'logo_base64': tenant.logo_base64
+        })
+
 
 class TreasuryViewSet(BaseTenantViewSet):
     model = Treasury
