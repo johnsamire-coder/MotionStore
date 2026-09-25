@@ -93,7 +93,7 @@ export default function ProductCodingPage() {
     setSaving(true);
     try {
       await axiosClient.post('/products/', form);
-      setSuccessMsg(تم تكويد وتسعير الصنف "" بنجاح ✅);
+      setSuccessMsg('تم حفظ وتكويد الصنف بنجاح ✅');
       setForm({
         name: '',
         code: '',
@@ -289,7 +289,7 @@ export default function ProductCodingPage() {
           <button
             type="submit"
             disabled={saving}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-black text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-50"
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-black text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-50 cursor-pointer"
           >
             <Save size={16} />
             <span>{saving ? 'جاري الحفظ...' : 'حفظ وتكويد الصنف (F1)'}</span>

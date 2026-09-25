@@ -70,13 +70,14 @@ export default function ExpensesPage() {
 
     setSaving(true);
     try {
+      const voucherId = 'EXP-' + String(Date.now()).slice(-6);
       await axiosClient.post('/treasury-transactions/', {
         treasury: form.treasury,
         transaction_type: 'WITHDRAWAL',
         amount: parseFloat(form.amount),
-        description: [] ,
+        description: '[' + form.entity + '] ' + (form.description || ''),
         source_document_type: 'ExpenseVoucher',
-        source_document_id: EXP-
+        source_document_id: voucherId
       });
 
       setSuccessMsg('تم حفظ المصروف وخصمه من الخزينة بنجاح ✅');
@@ -196,7 +197,7 @@ export default function ExpensesPage() {
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-lg font-black text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-50"
+              className="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-3 rounded-lg font-black text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-50 cursor-pointer"
             >
               <Save size={16} />
               <span>{saving ? 'جاري الحفظ...' : 'حفظ المصروف (F1)'}</span>
@@ -204,7 +205,7 @@ export default function ExpensesPage() {
             <button
               type="button"
               onClick={() => setForm({ date: new Date().toISOString().split('T')[0], entity: 'مصروفات عامة', amount: '', treasury: treasuries[0]?.id || '', description: '', notes: '' })}
-              className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-sm"
+              className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-sm cursor-pointer"
             >
               جديد (F3)
             </button>

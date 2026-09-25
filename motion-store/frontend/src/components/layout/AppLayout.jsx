@@ -42,15 +42,15 @@ export default function AppLayout() {
   }, [navigate]);
 
   const ribbonItems = [
-    { name: 'مشتريات F1', to: '/purchasing', icon: Truck, bg: 'hover:bg-blue-700' },
-    { name: 'مبيعات F2', to: '/pos', icon: ShoppingCart, bg: 'hover:bg-emerald-700' },
-    { name: 'مصروفات F3', to: '/expenses', icon: DollarSign, bg: 'hover:bg-rose-700' },
-    { name: 'تكويد F4', to: '/coding', icon: Tag, bg: 'hover:bg-purple-700' },
-    { name: 'الخزينة F7', to: '/treasury', icon: Vault, bg: 'hover:bg-amber-700' },
-    { name: 'المخزون F8', to: '/inventory', icon: Package, bg: 'hover:bg-cyan-700' },
-    { name: 'الورديات F9', to: '/shifts', icon: Clock, bg: 'hover:bg-indigo-700' },
-    { name: 'مرتجعات F10', to: '/returns', icon: RotateCcw, bg: 'hover:bg-orange-700' },
-    { name: 'التقارير', to: '/reports', icon: BarChart3, bg: 'hover:bg-slate-700' },
+    { name: 'مشتريات F1', to: '/purchasing', icon: Truck },
+    { name: 'مبيعات F2', to: '/pos', icon: ShoppingCart },
+    { name: 'مصروفات F3', to: '/expenses', icon: DollarSign },
+    { name: 'تكويد F4', to: '/coding', icon: Tag },
+    { name: 'الخزينة F7', to: '/treasury', icon: Vault },
+    { name: 'المخزون F8', to: '/inventory', icon: Package },
+    { name: 'الورديات F9', to: '/shifts', icon: Clock },
+    { name: 'مرتجعات F10', to: '/returns', icon: RotateCcw },
+    { name: 'التقارير', to: '/reports', icon: BarChart3 },
   ];
 
   const navigation = [
@@ -90,7 +90,10 @@ export default function AppLayout() {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  lex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors 
+                  'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors ' +
+                  (isActive
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800')
                 }
               >
                 <Icon size={15} />
@@ -103,7 +106,7 @@ export default function AppLayout() {
         <div className="p-3 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between">
           <div className="flex items-center gap-2 truncate">
             <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 text-xs font-semibold">
-              {user?.username?.substring(0, 2).toUpperCase()}
+              {user?.username ? user.username.substring(0, 2).toUpperCase() : 'AD'}
             </div>
             <div className="truncate">
               <p className="text-xs font-bold text-white truncate">{user?.username}</p>
@@ -132,7 +135,10 @@ export default function AppLayout() {
                   key={btn.to}
                   to={btn.to}
                   className={({ isActive }) =>
-                    lex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition whitespace-nowrap 
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition whitespace-nowrap ' +
+                    (isActive
+                      ? 'bg-emerald-600 text-white shadow-inner'
+                      : 'bg-slate-800 text-slate-200 hover:bg-slate-700')
                   }
                 >
                   <Icon size={14} />
@@ -145,7 +151,7 @@ export default function AppLayout() {
           <div className="flex items-center gap-3">
             <button
               onClick={toggleLanguage}
-              className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold border border-slate-700 transition"
+              className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold border border-slate-700 transition cursor-pointer"
             >
               <Globe size={14} />
               <span>{lang === 'ar' ? 'EN' : 'عربي'}</span>
