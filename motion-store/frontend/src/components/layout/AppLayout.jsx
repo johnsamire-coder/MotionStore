@@ -113,9 +113,13 @@ export default function AppLayout() {
       {/* Sidebar */}
       <aside className="w-60 bg-slate-900 text-slate-300 flex flex-col border-x border-slate-800">
         <div className="h-14 flex items-center gap-3 px-5 bg-slate-950 border-b border-slate-800">
-          <div className="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-base">
-            {isRTL ? 'م' : 'M'}
-          </div>
+          {tenant?.logo_base64 ? (
+            <img src={tenant.logo_base64} alt="Logo" className="w-8 h-8 rounded object-contain bg-white p-0.5" />
+          ) : (
+            <div className="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-base">
+              {isRTL ? 'م' : 'M'}
+            </div>
+          )}
           <div className="truncate">
             <h1 className="font-bold text-white tracking-wide text-xs">{tenant?.name || 'Motion Store'}</h1>
             <p className="text-[10px] text-emerald-400 font-mono">v1.0.0 PRO</p>

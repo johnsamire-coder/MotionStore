@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { FileSpreadsheet, Printer, Search, Calendar, Package, TrendingUp, DollarSign, Scale, Layers, Trash2, ArrowUpRight, ArrowDownLeft, Store, RefreshCw } from 'lucide-react';
+import { FileSpreadsheet, Printer, Search, Calendar, Package, TrendingUp, DollarSign, Scale, Layers, Trash2, ArrowUpRight, ArrowDownLeft, Store, RefreshCw, Image as ImageIcon } from 'lucide-react';
 
 export default function ReportsPage() {
   const { t } = useLanguage();
@@ -135,18 +135,23 @@ export default function ReportsPage() {
     <div className="space-y-6 font-sans print:m-0 print:p-0">
       
       {/* PDF Official Print Header */}
-      <div className="hidden print:block text-center border-b-2 border-slate-900 pb-4 mb-6">
+      <div className="hidden print:block border-b-2 border-slate-900 pb-4 mb-6">
         <div className="flex justify-between items-center px-4">
-          <div className="text-right">
-            <h1 className="text-2xl font-black text-slate-900">{tenant?.name || 'شركة Motion Store لتجارة البالات'}</h1>
-            <p className="text-xs text-slate-600 font-bold">تقرير تفصيلي موثق من المحرك المحاسبي المالي</p>
+          <div className="flex items-center gap-4">
+            {tenant?.logo_base64 && (
+              <img src={tenant.logo_base64} alt="Logo" className="w-16 h-16 object-contain" />
+            )}
+            <div className="text-right">
+              <h1 className="text-2xl font-black text-slate-900">{tenant?.name || 'شركة Motion Store لتجارة البالات'}</h1>
+              <p className="text-xs text-slate-600 font-bold">تقرير تفصيلي موثق من المحرك المحاسبي المالي</p>
+            </div>
           </div>
           <div className="text-left text-xs font-mono text-slate-500">
             <p>تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</p>
             <p>الفترة المالية: من {startDate} إلى {endDate}</p>
           </div>
         </div>
-        <h2 className="text-lg font-black text-slate-800 mt-4 bg-slate-100 py-1">
+        <h2 className="text-lg font-black text-slate-800 mt-4 bg-slate-100 py-1 text-center">
           {activeReport === 'ITEM_LEDGER' ? `كشف حركة صنف تفصيلي [${selectedProduct?.name || 'جميع الأصناف'}]` : 'تقرير الأداء المالي والأرباح والخسائر'}
         </h2>
       </div>

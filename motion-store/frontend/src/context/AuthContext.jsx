@@ -75,6 +75,21 @@ export const AuthProvider = ({ children }) => {
   };
 
   // دالة تسجيل الخروج
+  const updateTenant = (updatedTenantData) => {
+    const savedUser = localStorage.getItem('user_data');
+    if (savedUser) {
+      try {
+        const u = JSON.parse(savedUser);
+        u.tenant = { ...u.tenant, ...updatedTenantData };
+        localStorage.setItem('user_data', JSON.stringify(u));
+        setUser(u);
+        setTenant(u.tenant);
+      } catch (e) {
+        console.error("Error updating tenant", e);
+      }
+    }
+  };
+
   const logout = () => {
     localStorage.clear();
     setUser(null);
@@ -83,7 +98,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, tenant, login, logout, isAuthenticated: !!user, loading }}>
+    <AuthContext.Provider value={{ user, tenant, login, logout, updateTenant, isAuthenticated: !!user, loading }}>
       {children}
     </AuthContext.Provider>
   );
