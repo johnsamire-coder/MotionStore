@@ -16,6 +16,7 @@ import ShiftsPage from './pages/ShiftsPage';
 import TreasuryPage from './pages/TreasuryPage';
 import ReportsPage from './pages/ReportsPage';
 import PermissionsPage from './pages/PermissionsPage';
+import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
 
 const ProtectedRoute = ({ children }) => {
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="shifts" element={<ShiftsPage />} />
               <Route path="treasury" element={<TreasuryPage />} />
               <Route path="reports" element={<ReportsPage />} />
+              <Route path="users" element={<UsersPage />} />
               <Route path="permissions" element={<PermissionsPage />} />
               <Route path="settings" element={<SettingsPage />} />
             </Route>

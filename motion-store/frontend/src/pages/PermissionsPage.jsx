@@ -32,6 +32,7 @@ export default function PermissionsPage() {
     { path: '/shifts', name: 'الورديات وإغلاق الخزينة (F9)', category: 'المالية' },
     { path: '/treasury', name: 'الخزائن والصناديق (F7)', category: 'المالية' },
     { path: '/reports', name: 'مطبخ التقارير الشامل', category: 'التقارير' },
+    { path: '/users', name: 'إدارة الموظفين والعهدة', category: 'الإدارة' },
     { path: '/permissions', name: 'إدارة الصلاحيات والمسميات', category: 'الإدارة' },
     { path: '/settings', name: 'إعدادات المنشأة والنظام', category: 'الإدارة' }
   ];
