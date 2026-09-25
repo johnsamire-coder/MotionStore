@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
-import { Truck, Plus, Save, Users, FileText, CheckCircle2, X, Package, ShoppingBag, Trash2, ShoppingCart, DollarSign } from 'lucide-react';
+import { Truck, Plus, Save, Users, FileText, CheckCircle2, X, Package, ShoppingBag, Trash2, ShoppingCart, Tag } from 'lucide-react';
 
 export default function PurchasingPage() {
   const { t, isRTL } = useLanguage();
@@ -9,11 +9,13 @@ export default function PurchasingPage() {
   const [suppliers, setSuppliers] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Modals state
   const [showInvModal, setShowInvModal] = useState(false);
   const [showSupModal, setShowSupModal] = useState(false);
+  const [showQuickProdModal, setShowQuickProdModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -23,18 +25,22 @@ export default function PurchasingPage() {
   // Forms
   const [supForm, setSupForm] = useState({ name: '', phone: '', company: '' });
   
+  const [quickProdForm, setQuickProdForm] = useState({
+    name: '',
+    code: '',
+    category: '',
+    unit_of_measure: 'PIECE'
+  });
+
   const [invForm, setInvForm] = useState({
     supplier_id: '',
     warehouse_id: '',
     freight_cost: '0.00',
-    // Mode 1: Bale specific
     bale_content: '',
     bale_weight_type: '50',
     bale_custom_weight: '',
     bale_price: '',
-    // Mode 2: Coded Stock
     stock_items: [],
-    // Mode 3: Direct Purchase
     direct_items: []
   });
 
@@ -60,24 +66,32 @@ export default function PurchasingPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [invRes, supRes, whRes, prodRes] = await Promise.all([
+      const [invRes, supRes, whRes, prodRes, catRes] = await Promise.all([
         axiosClient.get('/purchases/'),
         axiosClient.get('/suppliers/'),
         axiosClient.get('/warehouses/'),
-        axiosClient.get('/products/')
+        axiosClient.get('/products/'),
+        axiosClient.get('/categories/')
       ]);
       setInvoices(invRes.data.results || invRes.data || []);
       const sList = supRes.data.results || supRes.data || [];
       const wList = whRes.data.results || whRes.data || [];
+      const pList = prodRes.data.results || prodRes.data || [];
+      const cList = catRes.data.results || catRes.data || [];
+
       setSuppliers(sList);
       setWarehouses(wList);
-      setProducts(prodRes.data.results || prodRes.data || []);
+      setProducts(pList);
+      setCategories(cList);
       
       if (sList.length > 0 && !invForm.supplier_id) {
         setInvForm(prev => ({ ...prev, supplier_id: sList[0].id }));
       }
       if (wList.length > 0 && !invForm.warehouse_id) {
         setInvForm(prev => ({ ...prev, warehouse_id: wList[0].id }));
+      }
+      if (cList.length > 0 && !quickProdForm.category) {
+        setQuickProdForm(prev => ({ ...prev, category: cList[0].id }));
       }
     } catch (err) {
       console.error(err);
@@ -97,6 +111,40 @@ export default function PurchasingPage() {
       setSupForm({ name: '', phone: '', company: '' });
       setShowSupModal(false);
       fetchData();
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err) {
+      alert(t('purchasing.errorSubmit'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Quick Code New Product into Global Catalog and auto-select in Line Item
+  const handleSaveQuickProduct = async (e) => {
+    if (e) e.preventDefault();
+    if (!quickProdForm.name.trim() || !quickProdForm.category) {
+      return alert(t('purchasing.productName') + ' & ' + t('purchasing.category'));
+    }
+
+    setSaving(true);
+    try {
+      const res = await axiosClient.post('/products/', quickProdForm);
+      const newProd = res.data;
+      
+      setSuccessMsg(t('purchasing.productSuccess'));
+      setQuickProdForm({ name: '', code: '', category: categories[0]?.id || '', unit_of_measure: 'PIECE' });
+      setShowQuickProdModal(false);
+      
+      // Refresh products list
+      const updatedProducts = [...products, newProd];
+      setProducts(updatedProducts);
+
+      // Auto add/select this newly coded product in the active purchase invoice stock items
+      setInvForm(prev => ({
+        ...prev,
+        stock_items: [...prev.stock_items, { product_id: newProd.id, qty: 1, price: 0 }]
+      }));
+
       setTimeout(() => setSuccessMsg(''), 3000);
     } catch (err) {
       alert(t('purchasing.errorSubmit'));
@@ -308,7 +356,7 @@ export default function PurchasingPage() {
         </div>
       </div>
 
-      {/* MODAL: NEW INVOICE WITH 3 MODES & FREIGHT */}
+      {/* MODAL: NEW INVOICE WITH 3 MODES & FREIGHT & QUICK PRODUCT CODING */}
       {showInvModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveInvoice} className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl border">
@@ -322,9 +370,7 @@ export default function PurchasingPage() {
               <button
                 type="button"
                 onClick={() => setInvMode('BALE')}
-                className={`flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ${
-                  invMode === 'BALE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'
-                }`}
+                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'BALE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
               >
                 <Package size={14}/>
                 <span>{t('purchasing.baleMode')}</span>
@@ -333,9 +379,7 @@ export default function PurchasingPage() {
               <button
                 type="button"
                 onClick={() => setInvMode('STOCK')}
-                className={`flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ${
-                  invMode === 'STOCK' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'
-                }`}
+                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'STOCK' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
               >
                 <ShoppingBag size={14}/>
                 <span>{t('purchasing.stockMode')}</span>
@@ -344,9 +388,7 @@ export default function PurchasingPage() {
               <button
                 type="button"
                 onClick={() => setInvMode('DIRECT')}
-                className={`flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ${
-                  invMode === 'DIRECT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200'
-                }`}
+                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'DIRECT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
               >
                 <ShoppingCart size={14}/>
                 <span>{t('purchasing.directMode')}</span>
@@ -441,18 +483,28 @@ export default function PurchasingPage() {
             {invMode === 'STOCK' && (
               <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200 space-y-3">
                 <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-black text-blue-900">أصناف الاستوك المتاحة للتطعيم من شاشة التكويد</span>
-                  <button
-                    type="button"
-                    onClick={addStockItem}
-                    className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg font-black shadow cursor-pointer"
-                  >
-                    {t('purchasing.addProduct')}
-                  </button>
+                  <span className="text-xs font-black text-blue-900">أصناف الاستوك المكودة المتاحة بالمشروع</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickProdModal(true)}
+                      className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg font-black shadow cursor-pointer flex items-center gap-1"
+                    >
+                      <Tag size={12}/>
+                      <span>{t('purchasing.quickCodeProduct')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addStockItem}
+                      className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg font-black shadow cursor-pointer"
+                    >
+                      {t('purchasing.addProduct')}
+                    </button>
+                  </div>
                 </div>
 
                 {invForm.stock_items.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-4">اضغط زر "+ إضافة صنف مكود" لاختيار الأصناف وسعرها</p>
+                  <p className="text-xs text-slate-400 text-center py-4">اضغط زر "+ إضافة صنف مكود" أو "➕ تكويد صنف جديد" لاختيار الأصناف</p>
                 ) : (
                   invForm.stock_items.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
@@ -553,6 +605,77 @@ export default function PurchasingPage() {
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm shadow transition cursor-pointer disabled:opacity-50"
             >
               {saving ? t('purchasing.saving') : t('purchasing.saveInvoice')}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: QUICK PRODUCT CODING TO GLOBAL CATALOG */}
+      {showQuickProdModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleSaveQuickProduct} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-emerald-300">
+            <div className="flex items-center justify-between border-b pb-3 font-black text-slate-800">
+              <span className="flex items-center gap-1.5 text-emerald-700"><Tag size={18}/> {t('purchasing.modalQuickProdTitle')}</span>
+              <button type="button" onClick={() => setShowQuickProdModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18}/></button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.productName')}</label>
+                <input
+                  type="text"
+                  placeholder="مثال: تيشرت أوفر سايز زارا"
+                  value={quickProdForm.name}
+                  onChange={e => setQuickProdForm({ ...quickProdForm, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.productCode')}</label>
+                <input
+                  type="text"
+                  placeholder="SKU-1001"
+                  value={quickProdForm.code}
+                  onChange={e => setQuickProdForm({ ...quickProdForm, code: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.category')}</label>
+                <select
+                  value={quickProdForm.category}
+                  onChange={e => setQuickProdForm({ ...quickProdForm, category: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                  required
+                >
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.uom')}</label>
+                <select
+                  value={quickProdForm.unit_of_measure}
+                  onChange={e => setQuickProdForm({ ...quickProdForm, unit_of_measure: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                >
+                  <option value="PIECE">قطعة / عدد</option>
+                  <option value="KG">كيلو / كجم</option>
+                  <option value="BOTH">قطعة + وزن</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm shadow transition cursor-pointer"
+            >
+              {saving ? t('purchasing.saving') : t('purchasing.saveProduct')}
             </button>
           </form>
         </div>
