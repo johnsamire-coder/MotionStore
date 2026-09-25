@@ -1,35 +1,39 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { Lock, User, AlertCircle, Globe } from 'lucide-react';
+import { User, Lock } from 'lucide-react';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('123456');
-  const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const { login, isAuthenticated } = useAuth();
-  const { lang, toggleLanguage } = useLanguage();
-  const isAr = lang === 'ar';
+  const { login, tenant: authTenant } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem('remembered_username');
-    if (savedUser) {
-      setUsername(savedUser);
-      setRememberMe(true);
-    } else {
-      setUsername('admin');
-    }
-  }, []);
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('123456');
+  const [rememberMe, setRememberMe] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  // لو المستخدم مسجل دخول بالفعل، ادخل فوراً للرئيسية
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
-  }
+  // Get tenant info from localStorage or AuthContext
+  const [tenantInfo, setTenantInfo] = useState(() => {
+    const saved = localStorage.getItem('user_data');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.tenant || null;
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (authTenant) {
+      setTenantInfo(authTenant);
+    }
+  }, [authTenant]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,133 +41,108 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(username, password);
-      if (rememberMe) {
-        localStorage.setItem('remembered_username', username);
-      } else {
-        localStorage.removeItem('remembered_username');
-      }
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.detail || (isAr ? 'اسم المستخدم أو كلمة المرور غير صحيحة.' : 'Invalid username or password.'));
+      setError(err.response?.data?.detail || 'اسم المستخدم أو كلمة المرور غير صحيحة');
     } finally {
       setLoading(false);
     }
   };
 
+  const companyName = tenantInfo?.name || 'جاكي ستور';
+  const logoUrl = tenantInfo?.logo_base64;
+
   return (
-    <div
-      className="min-h-screen relative flex items-center justify-center p-4 bg-cover bg-center font-sans"
-      style={{ backgroundImage: "url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1920&auto=format&fit=crop')" }}
-      dir={isAr ? 'rtl' : 'ltr'}
-    >
-      <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-[3px]"></div>
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans" dir="rtl">
+      {/* Background Ambient Glow */}
+      <div className="absolute w-[500px] h-[500px] bg-emerald-600/10 rounded-full blur-3xl pointer-events-none -top-40 -right-40" />
+      <div className="absolute w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none -bottom-20 -left-20" />
 
-      {/* Language Toggle Button */}
-      <button
-        type="button"
-        onClick={toggleLanguage}
-        className={`absolute top-6 ${isAr ? 'left-6' : 'right-6'} bg-emerald-600 hover:bg-emerald-500 text-white font-bold border border-emerald-400 px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 transition cursor-pointer shadow-xl z-50`}
-      >
-        <Globe size={18} />
-        <span>{isAr ? 'English (EN)' : 'العربية (AR)'}</span>
-      </button>
-
-      {/* Login Card */}
-      <div className="relative z-10 w-full max-w-[420px] bg-slate-950/85 border border-slate-800/80 p-8 rounded-[2rem] shadow-2xl backdrop-blur-xl">
-
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-slate-950 font-black text-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-emerald-500/30">
-            {isAr ? 'ش' : 'C'}
+      <div className="bg-slate-900/90 border border-slate-800 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6 z-10">
+        
+        {/* Header / Logo Section */}
+        <div className="text-center space-y-3">
+          <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-lg overflow-hidden p-1">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Company Logo" className="w-full h-full object-contain" />
+            ) : (
+              <span className="text-2xl font-black text-emerald-400">
+                {companyName.charAt(0)}
+              </span>
+            )}
           </div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">
-            {isAr ? 'نظام إدارة الشركة' : 'Company Workspace'}
-          </h2>
-          <p className="text-xs text-slate-400 mt-1.5 font-medium">
-            {isAr ? 'أدخل بيانات الاعتماد للوصول لمساحة العمل' : 'Enter your credentials to access the workspace'}
-          </p>
+
+          <div>
+            <h1 className="text-2xl font-black text-white tracking-wide">
+              نظام إدارة - {companyName}
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">أدخل بيانات الاعتماد للوصول لمساحة العمل</p>
+          </div>
         </div>
 
-        {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2 font-medium">
-            <AlertCircle size={16} />
-            <span>{error}</span>
+          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs font-bold text-center">
+            {error}
           </div>
         )}
 
-        {/* Input Form */}
-        <form onSubmit={handleSubmit} className="space-y-5 text-sm">
+        {/* Login Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block font-semibold text-slate-300 mb-2">
-              {isAr ? 'اسم المستخدم' : 'Username'}
-            </label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">اسم المستخدم</label>
             <div className="relative">
-              <User size={18} className={`absolute ${isAr ? 'right-3.5' : 'left-3.5'} top-3.5 text-slate-500`} />
+              <User size={16} className="absolute right-3 top-3.5 text-slate-500" />
               <input
                 type="text"
-                required
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className={`w-full bg-slate-900/80 border border-slate-700 rounded-xl ${isAr ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-3 text-white focus:outline-none focus:border-emerald-500 transition font-medium placeholder-slate-600`}
-                placeholder={isAr ? 'أدخل اسم المستخدم' : 'Enter username'}
+                className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pr-10 pl-4 py-3 text-sm font-bold text-white placeholder-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+                required
               />
             </div>
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-300 mb-2">
-              {isAr ? 'كلمة المرور' : 'Password'}
-            </label>
+            <label className="block text-xs font-bold text-slate-300 mb-1">كلمة المرور</label>
             <div className="relative">
-              <Lock size={18} className={`absolute ${isAr ? 'right-3.5' : 'left-3.5'} top-3.5 text-slate-500`} />
+              <Lock size={16} className="absolute right-3 top-3.5 text-slate-500" />
               <input
                 type="password"
-                required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={`w-full bg-slate-900/80 border border-slate-700 rounded-xl ${isAr ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-3 text-white focus:outline-none focus:border-emerald-500 transition font-medium placeholder-slate-600`}
-                placeholder="••••••••"
+                className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pr-10 pl-4 py-3 text-sm font-bold text-white placeholder-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+                required
               />
             </div>
           </div>
 
-          {/* Remember Me */}
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="remember"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="w-4 h-4 rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-950 cursor-pointer"
-            />
-            <label htmlFor="remember" className="text-xs text-slate-400 font-medium cursor-pointer select-none">
-              {isAr ? 'تذكر بياناتي على هذا الجهاز' : 'Remember me on this device'}
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="rounded border-slate-700 text-emerald-600 focus:ring-emerald-500 bg-slate-950"
+              />
+              <span>تذكر بياناتي على هذا الجهاز</span>
             </label>
           </div>
 
-          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3.5 rounded-xl transition duration-200 mt-2 flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 disabled:opacity-50 cursor-pointer text-sm"
+            className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 py-3.5 rounded-xl font-black text-sm shadow-lg shadow-emerald-600/20 transition cursor-pointer disabled:opacity-50 mt-2"
           >
-            {loading
-              ? (isAr ? 'جاري التحقق...' : 'Authenticating...')
-              : (isAr ? 'دخول إلى مساحة العمل' : 'Sign In to Workspace')
-            }
+            {loading ? 'جاري التحقق...' : 'دخول إلى مساحة العمل'}
           </button>
         </form>
 
-        {/* Footer */}
-        <div className="mt-10 pt-6 border-t border-slate-800/80 flex flex-col items-center justify-center gap-2">
-          <div className="text-[10px] text-slate-500 uppercase tracking-widest font-semibold">
-            {isAr ? 'مشغل بواسطة محرك' : 'Powered by'}
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-xs border border-emerald-500/30">M</div>
-            <span className="font-extrabold text-slate-200 text-sm tracking-wide">Motion Store</span>
-          </div>
+        <div className="pt-4 border-t border-slate-800/80 text-center">
+          <p className="text-[11px] text-slate-500 flex items-center justify-center gap-1.5 font-mono">
+            <span>مشغل بواسطة محرك</span>
+            <span className="font-bold text-white">Motion Store</span>
+            <span className="w-4 h-4 rounded bg-emerald-500/20 border border-emerald-500/40 text-[9px] font-black text-emerald-400 inline-flex items-center justify-center">M</span>
+          </p>
         </div>
 
       </div>
