@@ -17,6 +17,8 @@ def process_pos_sale(
     items_data: list,
     payments_data: list,
     discount_amount: Decimal = Decimal('0.00'),
+    delivery_fee: Decimal = Decimal('0.00'),
+    previous_balance: Decimal = Decimal('0.00'),
     customer = None,
     notes: str = None
 ) -> SaleInvoice:
@@ -93,7 +95,7 @@ def process_pos_sale(
             'gross_profit': line_gross_profit
         })
 
-    total_amount = subtotal - discount_amount
+    total_amount = subtotal - discount_amount + delivery_fee
     gross_profit = total_amount - total_cogs
 
     # 3. Create Sale Invoice Record
@@ -109,6 +111,8 @@ def process_pos_sale(
         status=SaleStatus.COMPLETED,
         subtotal=subtotal,
         discount_amount=discount_amount,
+        delivery_fee=delivery_fee,
+        previous_balance=previous_balance,
         total_amount=total_amount,
         total_cogs=total_cogs,
         gross_profit=gross_profit,
