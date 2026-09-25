@@ -1,3 +1,5 @@
+from apps.customers.models import Customer
+from apps.payments.models import PaymentMethod
 from apps.users.models import User
 from apps.discounts.models import DiscountRule
 from rest_framework import serializers
@@ -231,3 +233,14 @@ class TreasurySerializer(serializers.ModelSerializer):
         model = Treasury
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+
+class CustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = '__all__'
+
+class PaymentMethodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentMethod
+        fields = '__all__'

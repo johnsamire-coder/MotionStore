@@ -98,50 +98,35 @@ export default function SortingPage() {
   const discrepancy = totalReconciledWeight - originalBaleWeight;
   const isWeightsBalanced = Math.abs(discrepancy) <= 0.001;
 
-  // Step 1: Reconcile Weights
+    // Step 1: Reconcile Weights
   const handleReconcile = async () => {
     if (!isWeightsBalanced) {
-      alert("Weights are unbalanced. Adjust outputs or waste to match original weight.");
+      alert("الأوزان غير متطابقة. يرجى تعديل أوزان الفرز أو الهالك لتبطابق وزن البالة الأصلي.");
       return;
     }
     setSubmitting(true);
     try {
-      const defaultWh = warehouses.find(w => w.warehouse_type === 'MAIN')?.id || warehouses[0]?.id;
-      const defaultProd = products[0]?.id;
+      const payload = {
+        outputs: [
+          { grade: 'NEW_COLLECTION', weight_kg: parseFloat(newWeight || 0), quantity_pieces: parseInt(newPieces || 0) },
+          { grade: 'MIDDLE', weight_kg: parseFloat(midWeight || 0), quantity_pieces: parseInt(midPieces || 0) },
+          { grade: 'CLEARANCE', weight_kg: parseFloat(clrWeight || 0), quantity_pieces: parseInt(clrPieces || 0) }
+        ],
+        wastes: [
+          { weight_kg: parseFloat(wasteWeight || 0) + parseFloat(adjWeight || 0), quantity_pieces: parseInt(wastePieces || 0), waste_classification: wasteClass, notes: wasteReason || adjReason || 'هالك فرز' }
+        ]
+      };
 
-      const lines = [
-        { grade: 'NEW_COLLECTION', wt: newWeight, pc: newPieces },
-        { grade: 'MIDDLE', wt: midWeight, pc: midPieces },
-        { grade: 'CLEARANCE', wt: clrWeight, pc: clrPieces }
-      ];
-
-      for (const line of lines) {
-        await axiosClient.post('/sorting-output-lines/', {
-          sorting_order: sortingOrder.id,
-          grade: line.grade,
-          product: defaultProd,
-          weight_kg: line.wt,
-          quantity_pieces: line.pc,
-          warehouse: defaultWh
-        });
-      }
-
-      await axiosClient.post('/sorting-waste-lines/', {
-        sorting_order: sortingOrder.id,
-        weight_kg: wasteWeight,
-        quantity_pieces: wastePieces,
-        classification: wasteClass,
-        reason: wasteReason
-      });
-
-      const recRes = await axiosClient.post(`/sorting-orders/${sortingOrder.id}/reconcile/`);
-      if (recRes.data.balanced) {
+      const targetUrl = '/sorting-orders/' + sortingOrder.id + '/reconcile/';
+      const recRes = await axiosClient.post(targetUrl, payload);
+      if (recRes.data && recRes.data.balanced) {
         setIsReconciled(true);
+        alert("تم حفظ ومطابقة أوزان الفرز بنجاح ✅");
       } else {
-        alert("Backend weight reconciliation failed. Check rounding.");
+        alert(recRes.data?.message || "فشلت المطابقة، تأكد من الأوزان.");
       }
     } catch (err) {
-      alert(err.response?.data?.detail || "Failed to save reconciliation lines.");
+      alert(err.response?.data?.detail || "فشل حفظ خطوط ومطابقة الفرز.");
     } finally {
       setSubmitting(false);
     }

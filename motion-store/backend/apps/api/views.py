@@ -85,6 +85,21 @@ class SupplierViewSet(BaseTenantViewSet):
             
         return super().create(request, *args, **kwargs)
 
+
+from apps.customers.models import Customer
+from apps.payments.models import PaymentMethod
+from apps.purchasing.models import PurchaseInvoice, PurchaseLineItem, PurchaseItemType, InvoiceStatus
+from apps.raw_lots.models import RawLot, RawLotStatus
+from apps.products.models import Product
+
+class CustomerViewSet(BaseTenantViewSet):
+    model = Customer
+    serializer_class = CustomerSerializer
+
+class PaymentMethodViewSet(BaseTenantViewSet):
+    model = PaymentMethod
+    serializer_class = PaymentMethodSerializer
+
 class PurchaseInvoiceViewSet(BaseTenantViewSet):
     model = PurchaseInvoice
     serializer_class = PurchaseInvoiceSerializer
@@ -94,58 +109,196 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
         data = request.data
         from django.utils import timezone
         import uuid
-        
-        # 1. Create Invoice
+        from decimal import Decimal
+
+        supplier_id = data.get('supplier_id')
+        warehouse_id = data.get('warehouse_id')
+        freight_cost = Decimal(str(data.get('freight_cost', '0.00')))
+
+        inv_num = f"PINV-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
+
         invoice = PurchaseInvoice.objects.create(
             tenant=tenant,
-            supplier_id=data.get('supplier_id'),
-            warehouse_id=data.get('warehouse_id'),
-            invoice_number=f"PINV-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}",
+            supplier_id=supplier_id,
+            warehouse_id=warehouse_id,
+            invoice_number=inv_num,
             invoice_date=timezone.now().date(),
-            freight_cost=data.get('freight_cost', 0),
-            total_amount=0 # Will update after items
+            status=InvoiceStatus.CONFIRMED,
+            additional_costs=freight_cost,
+            subtotal=Decimal('0.00'),
+            total_cost=freight_cost
         )
-        
-        total_cost = float(data.get('freight_cost', 0))
-        
-        # 2. Create Line Items
-        items = data.get('items', [])
-        for item in items:
-            qty = float(item.get('quantity', 1))
-            price = float(item.get('unit_price', 0))
-            line_total = qty * price
-            total_cost += line_total
-            
-            PurchaseLineItem.objects.create(
+
+        subtotal = Decimal('0.00')
+        items_data = data.get('items', [])
+
+        for idx, item in enumerate(items_data):
+            prod_id = item.get('product_id')
+            cat_id = item.get('category_id')
+            desc = item.get('description', '')
+
+            if prod_id and not desc:
+                p_obj = Product.objects.filter(id=prod_id).first()
+                if p_obj:
+                    desc = p_obj.name
+                    if not cat_id and p_obj.category_id:
+                        cat_id = p_obj.category_id
+
+            if not desc:
+                desc = 'بند مشتريات'
+
+            qty_pcs = int(item.get('quantity', 1))
+            weight_kg = Decimal(str(item.get('weight_kg', '0.000')))
+            unit_cost = Decimal(str(item.get('unit_price', '0.00')))
+
+            line_total = (weight_kg * unit_cost) if weight_kg > 0 else (Decimal(str(qty_pcs)) * unit_cost)
+            subtotal += line_total
+
+            item_type = PurchaseItemType.FINISHED_GOODS if prod_id else PurchaseItemType.RAW_BALE
+
+            line = PurchaseLineItem.objects.create(
                 tenant=tenant,
                 invoice=invoice,
-                product_id=item.get('product_id'),
-                description=item.get('description', ''),
-                quantity=qty,
-                weight_kg=item.get('weight_kg', 0),
-                unit_price=price,
-                total_price=line_total
+                item_type=item_type,
+                category_id=cat_id if cat_id else None,
+                description=desc,
+                weight_kg=weight_kg,
+                quantity_pieces=qty_pcs,
+                unit_cost=unit_cost,
+                total_cost=line_total
             )
-            
-        # 3. Update Invoice Total
-        invoice.total_amount = total_cost
+
+            # If RAW_BALE, create RawLot automatically for the Sorting Hub
+            if item_type == PurchaseItemType.RAW_BALE or not prod_id:
+                lot_code = f"LOT-{inv_num}-{idx+1}"
+                RawLot.objects.create(
+                    tenant=tenant,
+                    lot_code=lot_code,
+                    purchase_invoice=invoice,
+                    purchase_line_item=line,
+                    supplier_id=supplier_id,
+                    warehouse_id=warehouse_id,
+                    category_id=cat_id if cat_id else None,
+                    original_weight_kg=weight_kg,
+                    original_quantity_pieces=qty_pcs,
+                    purchase_cost=line_total,
+                    status=RawLotStatus.RECEIVED,
+                    received_date=timezone.now().date(),
+                    notes=f"Auto-created from Invoice #{inv_num} ({desc})"
+                )
+
+        invoice.subtotal = subtotal
+        invoice.total_cost = subtotal + freight_cost
         invoice.save()
-        
-        return Response({'status': 'success', 'invoice_id': str(invoice.id), 'total_amount': total_cost})
+
+        return Response({
+            'id': str(invoice.id),
+            'invoice_number': invoice.invoice_number,
+            'total_amount': str(invoice.total_cost),
+            'status': 'success'
+        }, status=201)
+
 
 class RawLotViewSet(BaseTenantViewSet):
     model = RawLot
     serializer_class = RawLotSerializer
 
+
+
+
 class SortingOrderViewSet(BaseTenantViewSet):
     model = SortingOrder
     serializer_class = SortingOrderSerializer
 
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        from apps.sorting.models import SortingOrder
+        from django.utils import timezone
+        import uuid
+
+        raw_lot_id = request.data.get('raw_lot')
+        existing_order = SortingOrder.objects.filter(tenant=tenant, raw_lot_id=raw_lot_id).first()
+        if existing_order:
+            serializer = self.get_serializer(existing_order)
+            return Response(serializer.data, status=200)
+
+        order_code = request.data.get('order_code') or f"SRT-{uuid.uuid4().hex[:6].upper()}"
+        order = SortingOrder.objects.create(
+            tenant=tenant,
+            raw_lot_id=raw_lot_id,
+            order_code=order_code,
+            sorting_date=timezone.now().date(),
+            status='DRAFT',
+            notes=request.data.get('notes', 'بدء عملية الفرز')
+        )
+        serializer = self.get_serializer(order)
+        return Response(serializer.data, status=201)
+
     @action(detail=True, methods=['post'])
     def reconcile(self, request, pk=None):
         order = self.get_object()
+        tenant = self.get_tenant()
+        from apps.sorting.models import SortingOutputLine, SortingWasteLine
+        from apps.products.models import Product, Category
+        from apps.warehouses.models import Warehouse
+        
+        category, _ = Category.objects.get_or_create(tenant=tenant, name="أصناف مفروزة عامة")
+
+        # Get target warehouse from raw lot or default main warehouse
+        target_wh = None
+        if hasattr(order, 'raw_lot') and order.raw_lot and order.raw_lot.warehouse:
+            target_wh = order.raw_lot.warehouse
+        if not target_wh:
+            target_wh = Warehouse.objects.filter(tenant=tenant, warehouse_type='MAIN').first()
+        if not target_wh:
+            target_wh = Warehouse.objects.filter(tenant=tenant).first()
+
+        data = request.data
+        outputs = data.get('outputs', [])
+        wastes = data.get('wastes', [])
+
+        SortingOutputLine.objects.filter(sorting_order=order).delete()
+        SortingWasteLine.objects.filter(sorting_order=order).delete()
+
+        for out in outputs:
+            grade = out.get('grade')
+            weight = float(out.get('weight_kg', 0))
+            pcs = int(out.get('quantity_pieces', 0))
+            if weight > 0 or pcs > 0:
+                grade_name = "كريمة" if grade == "NEW_COLLECTION" else ("وسط" if grade == "MIDDLE" else "تصفيات")
+                prod, _ = Product.objects.get_or_create(
+                    tenant=tenant,
+                    category=category,
+                    name=f"استوك فرز - {grade_name}",
+                    defaults={'code': f"SORT-{grade}"}
+                )
+                SortingOutputLine.objects.create(
+                    tenant=tenant,
+                    sorting_order=order,
+                    product=prod,
+                    warehouse=target_wh,
+                    grade=grade,
+                    weight_kg=weight,
+                    quantity_pieces=pcs
+                )
+
+        for wst in wastes:
+            w_weight = float(wst.get('weight_kg', 0))
+            w_pcs = int(wst.get('quantity_pieces', 0))
+            w_class = wst.get('waste_classification', 'NORMAL')
+            if w_weight > 0 or w_pcs > 0:
+                SortingWasteLine.objects.create(
+                    tenant=tenant,
+                    sorting_order=order,
+                    weight_kg=w_weight,
+                    quantity_pieces=w_pcs,
+                    classification=w_class,
+                    reason=wst.get('notes', 'هالك فرز')
+                )
+
         is_balanced = order.reconcile()
-        return Response({'balanced': is_balanced, 'status': order.reconciliation_status})
+        return Response({'balanced': is_balanced, 'status': order.reconciliation_status, 'message': 'تم حفظ ومطابقة أوزان الفرز بنجاح'})
+
 
     @action(detail=True, methods=['post'])
     def calculate_costing(self, request, pk=None):
@@ -473,10 +626,3 @@ class TreasuryViewSet(BaseTenantViewSet):
 from apps.customers.models import Customer
 from apps.payments.models import PaymentMethod
 
-class CustomerViewSet(BaseTenantViewSet):
-    queryset = Customer.objects.all()
-    serializer_class = type('CustomerSerializer', (serializers.ModelSerializer,), {'Meta': type('Meta', (), {'model': Customer, 'fields': '__all__'})})
-
-class PaymentMethodViewSet(BaseTenantViewSet):
-    queryset = PaymentMethod.objects.all()
-    serializer_class = type('PaymentMethodSerializer', (serializers.ModelSerializer,), {'Meta': type('Meta', (), {'model': PaymentMethod, 'fields': '__all__'})})
