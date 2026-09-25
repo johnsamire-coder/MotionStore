@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from apps.tenants.models import TenantAwareModel
 
@@ -9,9 +10,27 @@ class GradeChoice(models.TextChoices):
 
 
 class UnitOfMeasure(models.TextChoices):
-    PIECE = 'PIECE', 'By Piece (بالقطعة)'
-    KG = 'KG', 'By Weight / KG (بالوزن / كجم)'
-    BOTH = 'BOTH', 'Piece + Weight Tracked (بالقطعة مع وزن فعلي)'
+    PIECE = 'PIECE', 'قطعة / عدد'
+    KG = 'KG', 'كيلو / كجم'
+    BOTH = 'BOTH', 'قطعة + وزن'
+    BALE = 'BALE', 'باله'
+    DOZEN = 'DOZEN', 'دسته'
+    CARTON = 'CARTON', 'كرتونه'
+    SACK = 'SACK', 'شيكارة'
+    BARREL = 'BARREL', 'برميل'
+    BOX = 'BOX', 'علبة'
+    JAR = 'JAR', 'برطمان'
+    JERRYCAN = 'JERRYCAN', 'جركن'
+    LITER = 'LITER', 'لتر'
+    BAG = 'BAG', 'كيس'
+    TANK = 'TANK', 'تنك'
+    BUNDLE = 'BUNDLE', 'هبط'
+    SET = 'SET', 'مجموعة'
+    EMPTY = 'EMPTY', 'فوارغ'
+    CARD = 'CARD', 'كارت'
+    TOTE = 'TOTE', 'شنطة'
+    LIST = 'LIST', 'لسته'
+    OTHER = 'OTHER', 'غير محدد'
 
 
 class Category(TenantAwareModel):
@@ -41,14 +60,69 @@ class Product(TenantAwareModel):
         on_delete=models.PROTECT,
         related_name="products"
     )
-    name = models.CharField(max_length=255, verbose_name="Product Name")
-    code = models.CharField(max_length=100, blank=True, null=True, verbose_name="Internal SKU / Code")
-    barcode = models.CharField(max_length=100, blank=True, null=True, db_index=True, verbose_name="Barcode / EAN")
+    name = models.CharField(max_length=255, verbose_name="Product Name (اسم الصنف)")
+    code = models.CharField(max_length=100, blank=True, null=True, verbose_name="Internal SKU / Code (الكود)")
+    barcode = models.CharField(max_length=100, blank=True, null=True, db_index=True, verbose_name="Barcode / EAN (الباركود)")
+    wholesale_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="Wholesale Code (كود الجملة)")
     unit_of_measure = models.CharField(
-        max_length=20,
+        max_length=30,
         choices=UnitOfMeasure.choices,
         default=UnitOfMeasure.PIECE,
-        verbose_name="Default Unit of Measure"
+        verbose_name="Default Unit of Measure (وحدة القياس)"
+    )
+    purchase_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Purchase Price (سعر الشراء)"
+    )
+    retail_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Retail Price (سعر البيع القطاعي)"
+    )
+    wholesale_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Wholesale Price (سعر بيع الجملة)"
+    )
+    special_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Special Price (سعر بيع خاص)"
+    )
+    carton_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Carton Price (سعر الكرتونة / الشيكارة)"
+    )
+    carton_capacity = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        default=Decimal('1.000'),
+        verbose_name="Carton Capacity (سعة الكرتونة)"
+    )
+    min_stock_level = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        default=Decimal('0.000'),
+        verbose_name="Min Stock Alert (الحد الأدنى)"
+    )
+    package_type = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Package Type (نوع العبوة)"
+    )
+    opening_balance = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=Decimal('0.000'),
+        verbose_name="Opening Stock (رصيد أول المدة)"
     )
     attributes = models.JSONField(
         default=dict,
