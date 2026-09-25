@@ -40,21 +40,13 @@ export default function SettingsPage() {
     fetchSettingsData();
   }, []);
 
-  useEffect(() => {
-    if (tenant) {
-      setCompanyForm({
-        name: tenant.name || 'Motion Store',
-        logo_base64: tenant.logo_base64 || ''
-      });
-    }
-  }, [tenant]);
-
   const fetchSettingsData = async () => {
     setLoading(true);
     try {
-      const [bRes, wRes] = await Promise.all([
+      const [bRes, wRes, tRes] = await Promise.all([
         axiosClient.get('/branches/'),
-        axiosClient.get('/warehouses/')
+        axiosClient.get('/warehouses/'),
+        axiosClient.get('/tenants/public_info/')
       ]);
       const bList = bRes.data.results || bRes.data || [];
       const wList = wRes.data.results || wRes.data || [];
@@ -62,6 +54,13 @@ export default function SettingsPage() {
       setWarehouses(wList);
       if (bList.length > 0) {
         setWarehouseForm(prev => ({ ...prev, branch: bList[0].id }));
+      }
+
+      if (tRes.data && tRes.data.name) {
+        setCompanyForm({
+          name: tRes.data.name,
+          logo_base64: tRes.data.logo_base64 || ''
+        });
       }
     } catch (err) {
       console.error('Failed to load settings data:', err);
@@ -109,6 +108,7 @@ export default function SettingsPage() {
       }
 
       setSuccessMsg('تم حفظ وتثبيت بيانات المنشأة واللوجو بنجاح ✅');
+      fetchSettingsData();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
       alert('حدث خطأ أثناء حفظ بيانات المنشأة');

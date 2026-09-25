@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useLanguage } from '../context/LanguageContext';
+import axiosClient from '../api/axiosClient';
 import { User, Lock } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, tenant: authTenant } = useAuth();
-  const { t } = useLanguage();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('admin');
@@ -15,25 +14,24 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Get tenant info from localStorage or AuthContext
-  const [tenantInfo, setTenantInfo] = useState(() => {
-    const saved = localStorage.getItem('user_data');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        return parsed.tenant || null;
-      } catch (e) {
-        return null;
-      }
-    }
-    return null;
+  const [brand, setBrand] = useState({
+    name: 'جاكي ستور',
+    logo_base64: null
   });
 
   useEffect(() => {
-    if (authTenant) {
-      setTenantInfo(authTenant);
-    }
-  }, [authTenant]);
+    // Fetch public tenant info without auth token
+    axiosClient.get('/tenants/public_info/')
+      .then(res => {
+        if (res.data && res.data.name) {
+          setBrand({
+            name: res.data.name,
+            logo_base64: res.data.logo_base64
+          });
+        }
+      })
+      .catch(err => console.log('Public brand info fetch:', err));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -49,9 +47,6 @@ export default function LoginPage() {
     }
   };
 
-  const companyName = tenantInfo?.name || 'جاكي ستور';
-  const logoUrl = tenantInfo?.logo_base64;
-
   return (
     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans" dir="rtl">
       {/* Background Ambient Glow */}
@@ -62,19 +57,19 @@ export default function LoginPage() {
         
         {/* Header / Logo Section */}
         <div className="text-center space-y-3">
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-lg overflow-hidden p-1">
-            {logoUrl ? (
-              <img src={logoUrl} alt="Company Logo" className="w-full h-full object-contain" />
+          <div className="w-20 h-20 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto shadow-xl overflow-hidden p-1.5">
+            {brand.logo_base64 ? (
+              <img src={brand.logo_base64} alt="Company Logo" className="w-full h-full object-contain" />
             ) : (
-              <span className="text-2xl font-black text-emerald-400">
-                {companyName.charAt(0)}
+              <span className="text-3xl font-black text-emerald-400">
+                {brand.name.charAt(0)}
               </span>
             )}
           </div>
 
           <div>
             <h1 className="text-2xl font-black text-white tracking-wide">
-              نظام إدارة - {companyName}
+              نظام إدارة - {brand.name}
             </h1>
             <p className="text-xs text-slate-400 mt-1">أدخل بيانات الاعتماد للوصول لمساحة العمل</p>
           </div>
