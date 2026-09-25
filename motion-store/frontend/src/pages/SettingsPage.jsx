@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { Settings, Building2, Store, Warehouse, Upload, Save, CheckCircle2, Plus, Image as ImageIcon, Phone, MapPin } from 'lucide-react';
 
 export default function SettingsPage() {
   const { user, tenant, updateTenant } = useAuth();
+  const { t, lang, isRTL } = useLanguage();
   const [activeTab, setActiveTab] = useState('COMPANY'); // COMPANY | BRANCHES | WAREHOUSES
 
   // Data States
@@ -74,7 +76,7 @@ export default function SettingsPage() {
     const file = e.target.files[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
-        alert('حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 2 ميجابايت');
+        alert(t('settings.logoSizeError'));
         return;
       }
       const reader = new FileReader();
@@ -88,7 +90,7 @@ export default function SettingsPage() {
   // Save Company Profile & Logo
   const handleSaveCompany = async (e) => {
     e.preventDefault();
-    if (!companyForm.name.trim()) return alert('يرجى إدخال اسم المنشأة');
+    if (!companyForm.name.trim()) return alert(t('settings.nameRequired'));
 
     setSaving(true);
     try {
@@ -99,7 +101,6 @@ export default function SettingsPage() {
         logo_base64: companyForm.logo_base64
       });
 
-      // Update AuthContext & localStorage to persist across navigations
       if (updateTenant) {
         updateTenant({
           name: res.data.name,
@@ -107,11 +108,11 @@ export default function SettingsPage() {
         });
       }
 
-      setSuccessMsg('تم حفظ وتثبيت بيانات المنشأة واللوجو بنجاح ✅');
+      setSuccessMsg(t('settings.companySuccess'));
       fetchSettingsData();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
-      alert('حدث خطأ أثناء حفظ بيانات المنشأة');
+      alert(t('settings.companyError'));
     } finally {
       setSaving(false);
     }
@@ -120,7 +121,7 @@ export default function SettingsPage() {
   // Save New Branch
   const handleCreateBranch = async (e) => {
     e.preventDefault();
-    if (!branchForm.name.trim()) return alert('يرجى إدخال اسم الفرع');
+    if (!branchForm.name.trim()) return alert(t('settings.branchNameRequired'));
 
     setSaving(true);
     try {
@@ -135,12 +136,12 @@ export default function SettingsPage() {
         address: branchForm.address
       });
 
-      setSuccessMsg('تم إضافة الفرع الجديد (' + branchForm.name + ') بنجاح ✅');
+      setSuccessMsg(t('settings.branchSuccess'));
       setBranchForm({ name: '', code: '', phone: '', address: '' });
       fetchSettingsData();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
-      alert('فشل إضافة الفرع الجديد');
+      alert(t('settings.branchError'));
     } finally {
       setSaving(false);
     }
@@ -149,7 +150,7 @@ export default function SettingsPage() {
   // Save New Warehouse
   const handleCreateWarehouse = async (e) => {
     e.preventDefault();
-    if (!warehouseForm.name.trim() || !warehouseForm.branch) return alert('أكمل بيانات المخزن والفرع');
+    if (!warehouseForm.name.trim() || !warehouseForm.branch) return alert(t('settings.warehouseNameRequired'));
 
     setSaving(true);
     try {
@@ -160,59 +161,56 @@ export default function SettingsPage() {
         warehouse_type: warehouseForm.warehouse_type
       });
 
-      setSuccessMsg('تم إضافة المخزن الجديد (' + warehouseForm.name + ') بنجاح ✅');
+      setSuccessMsg(t('settings.warehouseSuccess'));
       setWarehouseForm({ name: '', code: '', branch: branches[0]?.id || '', warehouse_type: 'MAIN' });
       fetchSettingsData();
       setTimeout(() => setSuccessMsg(''), 4000);
     } catch (err) {
-      alert('فشل إضافة المخزن الجديد');
+      alert(t('settings.warehouseError'));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans" dir={isRTL ? 'rtl' : 'ltr'}>
       
       {/* Header & Tabs */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
             <Settings className="text-emerald-600" size={22} />
-            شاشة الإعدادات العامة والمنشأة والفروع
+            {t('settings.title')}
           </h1>
-          <p className="text-xs text-slate-500 mt-1">تعديل اسم الشركة واللوجو، إضافة الفروع والمخازن الجديدة وتثبيتها بالكامل</p>
+          <p className="text-xs text-slate-500 mt-1">{t('settings.subtitle')}</p>
         </div>
 
         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
           <button
+            type="button"
             onClick={() => setActiveTab('COMPANY')}
-            className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'COMPANY' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={'px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ' + (activeTab === 'COMPANY' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900')}
           >
             <Building2 size={15} />
-            <span>1. المنشأة واللوجو</span>
+            <span>{t('settings.tabCompany')}</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('BRANCHES')}
-            className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'BRANCHES' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={'px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ' + (activeTab === 'BRANCHES' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900')}
           >
             <Store size={15} />
-            <span>2. إدارة الفروع ({branches.length})</span>
+            <span>{t('settings.tabBranches')} ({branches.length})</span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab('WAREHOUSES')}
-            className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'WAREHOUSES' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={'px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 ' + (activeTab === 'WAREHOUSES' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900')}
           >
             <Warehouse size={15} />
-            <span>3. إدارة المخازن ({warehouses.length})</span>
+            <span>{t('settings.tabWarehouses')} ({warehouses.length})</span>
           </button>
         </div>
       </div>
@@ -229,12 +227,12 @@ export default function SettingsPage() {
         <form onSubmit={handleSaveCompany} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 max-w-2xl space-y-6">
           <h2 className="text-sm font-black text-slate-800 border-b pb-2 flex items-center gap-2">
             <Building2 className="text-emerald-600" size={18} />
-            بيانات المنشأة الرسمية واللوجو
+            {t('settings.companyTitle')}
           </h2>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-1">اسم المنشأة / الشركة الرسمية *</label>
+              <label className="block text-xs font-bold text-slate-600 mb-1">{t('settings.companyName')}</label>
               <input
                 type="text"
                 value={companyForm.name}
@@ -245,7 +243,7 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-600 mb-2">لوجو الشركة (يظهر في القائمة والتقارير المطبوعة):</label>
+              <label className="block text-xs font-bold text-slate-600 mb-2">{t('settings.logoLabel')}</label>
               <div className="flex items-center gap-6 bg-slate-50 p-4 rounded-xl border border-slate-200">
                 <div className="w-24 h-24 rounded-2xl bg-white border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden shadow-inner shrink-0">
                   {companyForm.logo_base64 ? (
@@ -258,10 +256,10 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <label className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-black inline-flex items-center gap-2 cursor-pointer shadow-md transition">
                     <Upload size={15} />
-                    <span>رفع لوجو جديد من الجهاز</span>
+                    <span>{t('settings.uploadLogo')}</span>
                     <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
                   </label>
-                  <p className="text-[11px] text-slate-400">الصيغ المتاحة: PNG, JPG, WEBP — بحد أقصى 2 ميجابايت</p>
+                  <p className="text-[11px] text-slate-400">{t('settings.logoHelp')}</p>
                 </div>
               </div>
             </div>
@@ -273,7 +271,7 @@ export default function SettingsPage() {
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-xl font-black text-sm shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
           >
             <Save size={18} />
-            <span>{saving ? 'جاري الحفظ والربط...' : 'حفظ وتثبيت بيانات المنشأة واللوجو'}</span>
+            <span>{saving ? t('settings.saving') : t('settings.saveCompanyBtn')}</span>
           </button>
         </form>
       )}
@@ -284,15 +282,15 @@ export default function SettingsPage() {
           <form onSubmit={handleCreateBranch} className="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <h2 className="text-sm font-black text-slate-800 border-b pb-2 flex items-center gap-2">
               <Plus className="text-emerald-600" size={18} />
-              إضافة فرع جديد للشركة
+              {t('settings.addBranchTitle')}
             </h2>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">اسم الفرع *</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('settings.branchName')}</label>
                 <input
                   type="text"
-                  placeholder="مثال: فرع الجولف / فرع ألكس"
+                  placeholder={t('settings.branchNamePlaceholder')}
                   value={branchForm.name}
                   onChange={e => setBranchForm({ ...branchForm, name: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
@@ -301,7 +299,7 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">كود الفرع</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('settings.branchCode')}</label>
                 <input
                   type="text"
                   placeholder="BR-02"
@@ -312,7 +310,7 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">رقم تليفون الفرع</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('settings.branchPhone')}</label>
                 <input
                   type="text"
                   placeholder="01507092909"
@@ -323,10 +321,10 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">العنوان التفصيلي</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('settings.branchAddress')}</label>
                 <input
                   type="text"
-                  placeholder="8 أحمد الدرديري - أرض الجولف"
+                  placeholder={t('settings.branchAddressPlaceholder')}
                   value={branchForm.address}
                   onChange={e => setBranchForm({ ...branchForm, address: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs"
@@ -340,7 +338,7 @@ export default function SettingsPage() {
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
             >
               <Plus size={16} />
-              <span>{saving ? 'جاري الحفظ...' : 'حفظ وإضافة الفرع'}</span>
+              <span>{saving ? t('settings.saving') : t('settings.saveBranchBtn')}</span>
             </button>
           </form>
 
@@ -348,17 +346,17 @@ export default function SettingsPage() {
           <div className="lg:col-span-7 bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <h2 className="text-sm font-black text-slate-800 border-b pb-3 flex items-center gap-2">
               <Store className="text-emerald-600" size={18} />
-              قائمة الفروع الحالية للشركة ({branches.length})
+              {t('settings.branchesListTitle')} ({branches.length})
             </h2>
 
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs">
                 <thead className="bg-slate-100 text-slate-700 font-black border-y">
                   <tr>
-                    <th className="p-3">كود الفرع</th>
-                    <th className="p-3">اسم الفرع</th>
-                    <th className="p-3">التليفون</th>
-                    <th className="p-3">العنوان</th>
+                    <th className="p-3">{t('settings.colBranchCode')}</th>
+                    <th className="p-3">{t('settings.colBranchName')}</th>
+                    <th className="p-3">{t('settings.colPhone')}</th>
+                    <th className="p-3">{t('settings.colAddress')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
@@ -383,12 +381,12 @@ export default function SettingsPage() {
           <form onSubmit={handleCreateWarehouse} className="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <h2 className="text-sm font-black text-slate-800 border-b pb-2 flex items-center gap-2">
               <Plus className="text-emerald-600" size={18} />
-              إضافة مخزن جديد
+              {t('settings.addWarehouseTitle')}
             </h2>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">اختر الفرع التابع له المخزن *</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('settings.selectBranch')}</label>
                 <select
                   value={warehouseForm.branch}
                   onChange={e => setWarehouseForm({ ...warehouseForm, branch: e.target.value })}
@@ -402,10 +400,10 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">اسم المخزن *</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('settings.warehouseName')}</label>
                 <input
                   type="text"
-                  placeholder="مثال: مخزن الفرز الرئيسي / مخزن المعرض"
+                  placeholder={t('settings.warehouseNamePlaceholder')}
                   value={warehouseForm.name}
                   onChange={e => setWarehouseForm({ ...warehouseForm, name: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
@@ -414,15 +412,15 @@ export default function SettingsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">نوع المخزن *</label>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('settings.warehouseType')}</label>
                 <select
                   value={warehouseForm.warehouse_type}
                   onChange={e => setWarehouseForm({ ...warehouseForm, warehouse_type: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
                 >
-                  <option value="MAIN">مخزن بيع رئيسي (MAIN)</option>
-                  <option value="SORTING">مخزن فرز واستلام بالات (SORTING)</option>
-                  <option value="TRANSIT">مخزن عبور وتحويلات (TRANSIT)</option>
+                  <option value="MAIN">{t('settings.typeMain')}</option>
+                  <option value="SORTING">{t('settings.typeSorting')}</option>
+                  <option value="TRANSIT">{t('settings.typeTransit')}</option>
                 </select>
               </div>
             </div>
@@ -433,7 +431,7 @@ export default function SettingsPage() {
               className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
             >
               <Plus size={16} />
-              <span>{saving ? 'جاري الحفظ...' : 'حفظ وإضافة المخزن'}</span>
+              <span>{saving ? t('settings.saving') : t('settings.saveWarehouseBtn')}</span>
             </button>
           </form>
 
@@ -441,16 +439,16 @@ export default function SettingsPage() {
           <div className="lg:col-span-7 bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <h2 className="text-sm font-black text-slate-800 border-b pb-3 flex items-center gap-2">
               <Warehouse className="text-emerald-600" size={18} />
-              قائمة المخازن المفعّلة للشركة ({warehouses.length})
+              {t('settings.warehousesListTitle')} ({warehouses.length})
             </h2>
 
             <div className="overflow-x-auto">
               <table className="w-full text-right text-xs">
                 <thead className="bg-slate-100 text-slate-700 font-black border-y">
                   <tr>
-                    <th className="p-3">اسم المخزن</th>
-                    <th className="p-3">نوع المخزن</th>
-                    <th className="p-3">الفرع التابع له</th>
+                    <th className="p-3">{t('settings.colWarehouseName')}</th>
+                    <th className="p-3">{t('settings.colWarehouseType')}</th>
+                    <th className="p-3">{t('settings.colParentBranch')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
@@ -458,7 +456,7 @@ export default function SettingsPage() {
                     <tr key={w.id} className="hover:bg-slate-50">
                       <td className="p-3 font-black text-slate-900">{w.name}</td>
                       <td className="p-3 font-bold text-slate-600">{w.warehouse_type}</td>
-                      <td className="p-3 text-slate-500 font-bold">{w.branch_name || 'الفرع الرئيسي'}</td>
+                      <td className="p-3 text-slate-500 font-bold">{w.branch_name || t('settings.mainBranchFallback')}</td>
                     </tr>
                   ))}
                 </tbody>
