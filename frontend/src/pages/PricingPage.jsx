@@ -1,7 +1,7 @@
 ﻿import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { 
-  PlusCircle, Save, Tag, RefreshCw, CheckCircle2, AlertCircle, Layers, DollarSign
+  PlusCircle, Save, Tag, RefreshCw, CheckCircle2, AlertCircle, Layers, DollarSign, Plus
 } from 'lucide-react';
 
 export default function PricingPage() {
@@ -9,6 +9,10 @@ export default function PricingPage() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+
+  // New Category State
+  const [showAddCat, setShowAddCat] = useState(false);
+  const [newCatName, setNewCatName] = useState('');
 
   // Manager Form State
   const [prodName, setProdName] = useState('');
@@ -40,9 +44,37 @@ export default function PricingPage() {
 
       setProducts(prodData);
       setCategories(catData);
-      if (catData.length > 0) setProdCat(catData[0].id);
+      if (catData.length > 0) {
+        setProdCat(catData[0].id);
+      }
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    if (!newCatName.trim()) return;
+
+    try {
+      setLoading(true);
+      const res = await axiosClient.post('/products/categories/', {
+        name: newCatName.trim(),
+        code: `CAT-${Math.floor(100 + Math.random()*900)}`,
+        is_active: true
+      });
+
+      const createdCat = res.data;
+      setCategories(prev => [...prev, createdCat]);
+      setProdCat(createdCat.id);
+      setNewCatName('');
+      setShowAddCat(false);
+      setMessage({ type: 'success', text: `تم إضافة تصنيف: ${createdCat.name}` });
+    } catch (err) {
+      console.error(err);
+      setMessage({ type: 'error', text: 'حدث خطأ أثناء إضافة التصنيف' });
     } finally {
       setLoading(false);
     }
@@ -152,27 +184,60 @@ export default function PricingPage() {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">الكود (اختياري)</label>
+                <label className="block font-bold text-slate-700 mb-1">الكود (مثال: 8776)</label>
                 <input 
                   type="text" 
                   value={prodCode}
                   onChange={(e) => setProdCode(e.target.value)}
-                  placeholder="مثال: 8776"
-                  className="w-full border border-slate-300 rounded p-2 text-xs font-mono"
+                  placeholder="اكتب كود الصنف..."
+                  className="w-full border border-slate-300 rounded p-2 text-xs font-mono font-bold bg-amber-50"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">التصنيف الرئيسي</label>
-                <select 
-                  value={prodCat}
-                  onChange={(e) => setProdCat(e.target.value)}
-                  className="w-full border border-slate-300 rounded p-2 text-xs bg-white font-semibold"
-                >
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="font-bold text-slate-700">التصنيف الرئيسي</label>
+                  <button 
+                    type="button"
+                    onClick={() => setShowAddCat(!showAddCat)}
+                    className="text-emerald-700 font-bold hover:underline text-[11px] flex items-center gap-0.5"
+                  >
+                    <Plus className="w-3 h-3" /> تصنيف جديد
+                  </button>
+                </div>
+
+                {showAddCat ? (
+                  <div className="flex gap-1">
+                    <input 
+                      type="text"
+                      value={newCatName}
+                      onChange={(e) => setNewCatName(e.target.value)}
+                      placeholder="اسم التصنيف الجديد..."
+                      className="w-full border rounded p-1 text-xs"
+                    />
+                    <button 
+                      type="button" 
+                      onClick={handleCreateCategory}
+                      className="bg-emerald-700 text-white px-2 py-1 rounded font-bold"
+                    >
+                      حفظ
+                    </button>
+                  </div>
+                ) : (
+                  <select 
+                    value={prodCat}
+                    onChange={(e) => setProdCat(e.target.value)}
+                    className="w-full border border-slate-300 rounded p-2 text-xs bg-white font-semibold"
+                  >
+                    {categories.length === 0 ? (
+                      <option value="">لا توجد تصنيفات - اضغط إضافة تصنيف</option>
+                    ) : (
+                      categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
+                    )}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -205,7 +270,6 @@ export default function PricingPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-200 bg-slate-50">
                     
-                    {/* ✨ NEW COLLECTION */}
                     <tr>
                       <td className="p-2 font-bold text-amber-900 bg-amber-100/60">✨ كريمة (New)</td>
                       <td className="p-1 border-x text-center">
@@ -226,7 +290,6 @@ export default function PricingPage() {
                       </td>
                     </tr>
 
-                    {/* 📦 MIDDLE GRADE */}
                     <tr>
                       <td className="p-2 font-bold text-blue-900 bg-blue-100/60">📦 وسط (Middle)</td>
                       <td className="p-1 border-x text-center">
@@ -247,7 +310,6 @@ export default function PricingPage() {
                       </td>
                     </tr>
 
-                    {/* 🏷️ CLEARANCE */}
                     <tr>
                       <td className="p-2 font-bold text-rose-900 bg-rose-100/60">🏷️ تصفيات (Clearance)</td>
                       <td className="p-1 border-x text-center">
@@ -307,7 +369,7 @@ export default function PricingPage() {
               <tbody className="divide-y divide-slate-100">
                 {products.map((p, idx) => (
                   <tr key={idx} className="hover:bg-slate-50">
-                    <td className="p-2 border-x font-mono text-slate-500">{p.code || '---'}</td>
+                    <td className="p-2 border-x font-mono text-slate-500 font-bold">{p.code || '---'}</td>
                     <td className="p-2 border-x font-bold text-slate-800">{p.name}</td>
                     <td className="p-2 border-x text-center font-bold text-emerald-700">
                       {parseFloat(p.selling_price || p.price || 100).toFixed(2)} ج.م
