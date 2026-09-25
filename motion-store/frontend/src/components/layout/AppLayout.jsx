@@ -19,8 +19,8 @@ import {
   Tag,
   DollarSign,
   RotateCcw,
-  Users,
-  ShieldCheck
+  ShieldCheck,
+  Users
 } from 'lucide-react';
 
 export default function AppLayout() {
@@ -100,8 +100,8 @@ export default function AppLayout() {
     { name: t('nav.shifts'), to: '/shifts', icon: Clock },
     { name: t('nav.treasury'), to: '/treasury', icon: Vault },
     { name: t('nav.reports'), to: '/reports', icon: FileSpreadsheet },
-    { name: 'إدارة الصلاحيات', to: '/permissions', icon: Users,
-  ShieldCheck },
+    { name: 'إدارة الموظفين', to: '/users', icon: Users },
+    { name: 'إدارة الصلاحيات', to: '/permissions', icon: ShieldCheck },
     { name: t('nav.settings'), to: '/settings', icon: Settings },
   ];
 
@@ -210,3 +210,4 @@ export default function AppLayout() {
     </div>
   );
 }
+
