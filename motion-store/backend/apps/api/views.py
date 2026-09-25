@@ -1,3 +1,5 @@
+from apps.users.models import RolePermission
+from apps.users.serializers import RolePermissionSerializer
 from apps.discounts.models import DiscountRule
 from apps.returns.models import SalesReturn
 from apps.treasury.models import TreasuryTransaction
@@ -361,3 +363,12 @@ class PriceHistoryViewSet(BaseTenantViewSet):
 class DiscountRuleViewSet(BaseTenantViewSet):
     model = DiscountRule
     serializer_class = DiscountRuleSerializer
+
+class RolePermissionViewSet(viewsets.ModelViewSet):
+    # This is a system-wide configuration, not tenant-isolated (or can be tenant-isolated if you prefer, but usually global for the app)
+    queryset = RolePermission.objects.all()
+    serializer_class = RolePermissionSerializer
+    
+    def get_permissions(self):
+        # Only ADMIN should edit permissions, but anyone can read to know their own limits
+        return super().get_permissions()

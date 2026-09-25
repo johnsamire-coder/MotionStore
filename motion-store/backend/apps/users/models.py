@@ -33,3 +33,18 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
+
+
+class RolePermission(models.Model):
+    role = models.CharField(max_length=50, choices=User.ROLE_CHOICES, db_index=True, unique=True)
+    allowed_screens = models.JSONField(
+        default=list, 
+        help_text="List of frontend route paths allowed for this role. Example: ['/pos', '/reports']"
+    )
+    
+    class Meta:
+        db_table = "role_permissions"
+        verbose_name_plural = "Role Permissions"
+
+    def __str__(self):
+        return f"{self.get_role_display()} Permissions"

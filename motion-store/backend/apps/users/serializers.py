@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from apps.users.models import User
+from apps.users.models import User, RolePermission
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
@@ -44,3 +44,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
     def get_assigned_branches(self, obj):
         return [{'id': str(b.id), 'name': b.name} for b in obj.assigned_branches.all()]
+
+class RolePermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RolePermission
+        fields = '__all__'
