@@ -25,8 +25,13 @@ export default function SettingsPage() {
   const [editingBranch, setEditingBranch] = useState(null);
   const [editingWarehouse, setEditingWarehouse] = useState(null);
 
-  // Tab 1: Company Profile Form
+  // Tab 1: Company Profile Form & Saved Baseline
   const [companyForm, setCompanyForm] = useState({
+    name: tenant?.name || 'Motion Store',
+    logo_base64: tenant?.logo_base64 || ''
+  });
+
+  const [savedCompanyForm, setSavedCompanyForm] = useState({
     name: tenant?.name || 'Motion Store',
     logo_base64: tenant?.logo_base64 || ''
   });
@@ -62,10 +67,12 @@ export default function SettingsPage() {
       }
 
       if (tRes.data && tRes.data.name) {
-        setCompanyForm({
+        const info = {
           name: tRes.data.name,
           logo_base64: tRes.data.logo_base64 || ''
-        });
+        };
+        setCompanyForm(info);
+        setSavedCompanyForm(info);
       }
     } catch (err) {
       console.error('Failed to load settings data:', err);
@@ -116,31 +123,47 @@ export default function SettingsPage() {
     }
   };
 
-  // Save Company Profile
+  // Check if company name or logo has changed from baseline
+  const hasCompanyChanged = 
+    companyForm.name.trim() !== savedCompanyForm.name.trim() ||
+    companyForm.logo_base64 !== savedCompanyForm.logo_base64;
+
+  // Save Company Profile with Manager Password Requirement
   const handleSaveCompany = async (e) => {
     e.preventDefault();
     if (!companyForm.name.trim()) return alert(t('settings.nameRequired'));
+    if (!hasCompanyChanged) return;
 
-    setSaving(true);
-    try {
-      const tenantId = tenant?.id || localStorage.getItem('tenant_id');
-      const res = await axiosClient.patch('/tenants/' + tenantId + '/', {
-        name: companyForm.name.trim(),
-        logo_base64: companyForm.logo_base64
-      });
+    requireSecurityVerification(async () => {
+      setSaving(true);
+      try {
+        const tenantId = tenant?.id || localStorage.getItem('tenant_id');
+        const res = await axiosClient.patch('/tenants/' + tenantId + '/', {
+          name: companyForm.name.trim(),
+          logo_base64: companyForm.logo_base64
+        });
 
-      if (updateTenant) {
-        updateTenant({ name: res.data.name, logo_base64: res.data.logo_base64 });
+        const updatedInfo = {
+          name: res.data.name,
+          logo_base64: res.data.logo_base64
+        };
+
+        if (updateTenant) {
+          updateTenant(updatedInfo);
+        }
+
+        setCompanyForm(updatedInfo);
+        setSavedCompanyForm(updatedInfo);
+
+        setSuccessMsg(t('settings.companySuccess'));
+        fetchSettingsData();
+        setTimeout(() => setSuccessMsg(''), 4000);
+      } catch (err) {
+        alert(t('settings.companyError'));
+      } finally {
+        setSaving(false);
       }
-
-      setSuccessMsg(t('settings.companySuccess'));
-      fetchSettingsData();
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      alert(t('settings.companyError'));
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   // Create Branch
@@ -354,11 +377,19 @@ export default function SettingsPage() {
 
           <button
             type="submit"
-            disabled={saving}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-xl font-black text-sm shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+            disabled={!hasCompanyChanged || saving}
+            className={'w-full py-3.5 rounded-xl font-black text-sm shadow-md transition flex items-center justify-center gap-2 ' + (
+              hasCompanyChanged
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer animate-pulse'
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+            )}
           >
             <Save size={18} />
-            <span>{saving ? t('settings.saving') : t('settings.saveCompanyBtn')}</span>
+            <span>
+              {saving
+                ? t('settings.saving')
+                : (hasCompanyChanged ? t('settings.saveCompanyBtn') : 'محفوظ ✓')}
+            </span>
           </button>
         </form>
       )}
