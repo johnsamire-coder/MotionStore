@@ -39,31 +39,31 @@ class MotionStoreEndToEndMasterFlowTest(TestCase):
         set_current_tenant(self.tenant)
         self.accounts = init_standard_chart_of_accounts(self.tenant)
 
-        self.company = Company.objects.create(name="Motion Enterprise", currency="EGP")
-        self.branch = Branch.objects.create(company=self.company, name="Cairo Branch")
-        self.sorting_wh = Warehouse.objects.create(branch=self.branch, name="Sorting Hub", warehouse_type="SORTING")
-        self.retail_wh = Warehouse.objects.create(branch=self.branch, name="Retail Store", warehouse_type="MAIN")
-        self.safe = Treasury.objects.create(name="Main Safe", branch=self.branch, treasury_type=TreasuryType.MAIN_SAFE)
-        self.drawer = Treasury.objects.create(name="POS Drawer", branch=self.branch, treasury_type=TreasuryType.POS_DRAWER)
-        self.pm_cash = PaymentMethod.objects.create(name="Cash", method_type=PaymentMethodType.CASH, treasury=self.drawer)
+        self.company = Company.objects.create(tenant=self.tenant, name="Motion Enterprise", currency="EGP")
+        self.branch = Branch.objects.create(tenant=self.tenant, company=self.company, name="Cairo Branch")
+        self.sorting_wh = Warehouse.objects.create(tenant=self.tenant, branch=self.branch, name="Sorting Hub", warehouse_type="SORTING")
+        self.retail_wh = Warehouse.objects.create(tenant=self.tenant, branch=self.branch, name="Retail Store", warehouse_type="MAIN")
+        self.safe = Treasury.objects.create(tenant=self.tenant, name="Main Safe", branch=self.branch, treasury_type=TreasuryType.MAIN_SAFE)
+        self.drawer = Treasury.objects.create(tenant=self.tenant, name="POS Drawer", branch=self.branch, treasury_type=TreasuryType.POS_DRAWER)
+        self.pm_cash = PaymentMethod.objects.create(tenant=self.tenant, name="Cash", method_type=PaymentMethodType.CASH, treasury=self.drawer)
 
         self.user = User.objects.create_user(username="lead_cashier", password="Pass2026Password", role="CASHIER", tenant=self.tenant)
-        self.terminal = POSTerminal.objects.create(name="POS 1", code="POS-01", branch=self.branch, default_warehouse=self.retail_wh, cash_drawer=self.drawer)
+        self.terminal = POSTerminal.objects.create(tenant=self.tenant, name="POS 1", code="POS-01", branch=self.branch, default_warehouse=self.retail_wh, cash_drawer=self.drawer)
 
-        self.category = Category.objects.create(name="Apparel", code="APP")
-        self.product = Product.objects.create(category=self.category, name="Assorted Thrift Garments", unit_of_measure=UnitOfMeasure.BOTH)
+        self.category = Category.objects.create(tenant=self.tenant, name="Apparel", code="APP")
+        self.product = Product.objects.create(tenant=self.tenant, category=self.category, name="Assorted Thrift Garments", unit_of_measure=UnitOfMeasure.BOTH)
 
     def test_complete_bale_lifecycle_and_accounting_flow(self):
         # === PHASE 1: SUPPLIER & PURCHASE ===
-        supplier = Supplier.objects.create(name="Global European Bales", code="SUP-EUR")
-        invoice = PurchaseInvoice.objects.create(
+        supplier = Supplier.objects.create(tenant=self.tenant, name="Global European Bales", code="SUP-EUR")
+        invoice = PurchaseInvoice.objects.create(tenant=self.tenant, 
             supplier=supplier,
             warehouse=self.sorting_wh,
             invoice_number="PINV-1001",
             invoice_date=datetime.date.today(),
             status=InvoiceStatus.CONFIRMED
         )
-        PurchaseLineItem.objects.create(
+        PurchaseLineItem.objects.create(tenant=self.tenant, 
             invoice=invoice,
             item_type=PurchaseItemType.RAW_BALE,
             description="100KG Mixed Bale",
@@ -76,7 +76,7 @@ class MotionStoreEndToEndMasterFlowTest(TestCase):
         self.assertEqual(invoice.total_cost, Decimal('10000.00'))
 
         # === PHASE 2: RAW BALE RECEIVING ===
-        raw_lot = RawLot.objects.create(
+        raw_lot = RawLot.objects.create(tenant=self.tenant, 
             lot_code="LOT-100-KG",
             purchase_invoice=invoice,
             supplier=supplier,
@@ -88,29 +88,28 @@ class MotionStoreEndToEndMasterFlowTest(TestCase):
         )
 
         # === PHASE 3: SORTING & RECONCILIATION ===
-        order = SortingOrder.objects.create(
+        order = SortingOrder.objects.create(tenant=self.tenant, 
             order_code="SORT-1001",
             raw_lot=raw_lot,
             sorting_date=datetime.date.today()
         )
-        SortingOutputLine.objects.create(sorting_order=order, grade=GradeChoice.NEW_COLLECTION, product=self.product, weight_kg=Decimal('30.000'), warehouse=self.retail_wh)
-        SortingOutputLine.objects.create(sorting_order=order, grade=GradeChoice.MIDDLE, product=self.product, weight_kg=Decimal('50.000'), warehouse=self.retail_wh)
-        SortingOutputLine.objects.create(sorting_order=order, grade=GradeChoice.CLEARANCE, product=self.product, weight_kg=Decimal('10.000'), warehouse=self.retail_wh)
-        SortingWasteLine.objects.create(sorting_order=order, weight_kg=Decimal('10.000'), classification=WasteClassification.NORMAL)
+        SortingOutputLine.objects.create(tenant=self.tenant, sorting_order=order, grade=GradeChoice.NEW_COLLECTION, product=self.product, weight_kg=Decimal('30.000'), warehouse=self.retail_wh)
+        SortingOutputLine.objects.create(tenant=self.tenant, sorting_order=order, grade=GradeChoice.MIDDLE, product=self.product, weight_kg=Decimal('50.000'), warehouse=self.retail_wh)
+        SortingOutputLine.objects.create(tenant=self.tenant, sorting_order=order, grade=GradeChoice.CLEARANCE, product=self.product, weight_kg=Decimal('10.000'), warehouse=self.retail_wh)
+        SortingWasteLine.objects.create(tenant=self.tenant, sorting_order=order, weight_kg=Decimal('10.000'), classification=WasteClassification.NORMAL)
 
         is_balanced = order.reconcile()
         self.assertTrue(is_balanced)
 
         # === PHASE 4: COSTING ENGINE (Method B & Case 2) ===
-        config = CostingConfiguration.objects.create(
-            tenant=self.tenant,
+        config = CostingConfiguration.objects.create(tenant=self.tenant,
             is_active=True,
             method=CostingMethod.COEFFICIENTS,
             waste_treatment=WasteTreatment.SEPARATE
         )
-        CostingParameter.objects.create(configuration=config, grade=GradeChoice.NEW_COLLECTION, coefficient=Decimal('3.00'))
-        CostingParameter.objects.create(configuration=config, grade=GradeChoice.MIDDLE, coefficient=Decimal('1.50'))
-        CostingParameter.objects.create(configuration=config, grade=GradeChoice.CLEARANCE, coefficient=Decimal('0.50'))
+        CostingParameter.objects.create(tenant=self.tenant, configuration=config, grade=GradeChoice.NEW_COLLECTION, coefficient=Decimal('3.00'))
+        CostingParameter.objects.create(tenant=self.tenant, configuration=config, grade=GradeChoice.MIDDLE, coefficient=Decimal('1.50'))
+        CostingParameter.objects.create(tenant=self.tenant, configuration=config, grade=GradeChoice.CLEARANCE, coefficient=Decimal('0.50'))
 
         calc_record = calculate_sorting_costs(order.id)
         self.assertEqual(calc_record.waste_loss_amount, Decimal('1000.00'))
@@ -127,10 +126,10 @@ class MotionStoreEndToEndMasterFlowTest(TestCase):
         self.assertEqual(item_clr.total_weight_kg, Decimal('10.000'))
 
         # === PHASE 6: PRICING & POS SHIFT ===
-        price_list = PriceList.objects.create(name="Retail Prices", is_default=True)
-        PriceListItem.objects.create(price_list=price_list, product=self.product, grade=GradeChoice.NEW_COLLECTION, price_per_kg=Decimal('300.00'))
-        PriceListItem.objects.create(price_list=price_list, product=self.product, grade=GradeChoice.MIDDLE, price_per_kg=Decimal('150.00'))
-        PriceListItem.objects.create(price_list=price_list, product=self.product, grade=GradeChoice.CLEARANCE, price_per_kg=Decimal('50.00'))
+        price_list = PriceList.objects.create(tenant=self.tenant, name="Retail Prices", is_default=True)
+        PriceListItem.objects.create(tenant=self.tenant, price_list=price_list, product=self.product, grade=GradeChoice.NEW_COLLECTION, price_per_kg=Decimal('300.00'))
+        PriceListItem.objects.create(tenant=self.tenant, price_list=price_list, product=self.product, grade=GradeChoice.MIDDLE, price_per_kg=Decimal('150.00'))
+        PriceListItem.objects.create(tenant=self.tenant, price_list=price_list, product=self.product, grade=GradeChoice.CLEARANCE, price_per_kg=Decimal('50.00'))
 
         shift = open_shift(self.terminal.id, self.user, Decimal('500.00'))
 
