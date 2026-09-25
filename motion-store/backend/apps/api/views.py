@@ -89,6 +89,50 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
     model = PurchaseInvoice
     serializer_class = PurchaseInvoiceSerializer
 
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        data = request.data
+        from django.utils import timezone
+        import uuid
+        
+        # 1. Create Invoice
+        invoice = PurchaseInvoice.objects.create(
+            tenant=tenant,
+            supplier_id=data.get('supplier_id'),
+            warehouse_id=data.get('warehouse_id'),
+            invoice_number=f"PINV-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}",
+            invoice_date=timezone.now().date(),
+            freight_cost=data.get('freight_cost', 0),
+            total_amount=0 # Will update after items
+        )
+        
+        total_cost = float(data.get('freight_cost', 0))
+        
+        # 2. Create Line Items
+        items = data.get('items', [])
+        for item in items:
+            qty = float(item.get('quantity', 1))
+            price = float(item.get('unit_price', 0))
+            line_total = qty * price
+            total_cost += line_total
+            
+            PurchaseLineItem.objects.create(
+                tenant=tenant,
+                invoice=invoice,
+                product_id=item.get('product_id'),
+                description=item.get('description', ''),
+                quantity=qty,
+                weight_kg=item.get('weight_kg', 0),
+                unit_price=price,
+                total_price=line_total
+            )
+            
+        # 3. Update Invoice Total
+        invoice.total_amount = total_cost
+        invoice.save()
+        
+        return Response({'status': 'success', 'invoice_id': str(invoice.id), 'total_amount': total_cost})
+
 class RawLotViewSet(BaseTenantViewSet):
     model = RawLot
     serializer_class = RawLotSerializer
@@ -424,3 +468,15 @@ class TenantViewSet(viewsets.ModelViewSet):
 class TreasuryViewSet(BaseTenantViewSet):
     model = Treasury
     serializer_class = TreasurySerializer
+
+
+from apps.customers.models import Customer
+from apps.payments.models import PaymentMethod
+
+class CustomerViewSet(BaseTenantViewSet):
+    queryset = Customer.objects.all()
+    serializer_class = type('CustomerSerializer', (serializers.ModelSerializer,), {'Meta': type('Meta', (), {'model': Customer, 'fields': '__all__'})})
+
+class PaymentMethodViewSet(BaseTenantViewSet):
+    queryset = PaymentMethod.objects.all()
+    serializer_class = type('PaymentMethodSerializer', (serializers.ModelSerializer,), {'Meta': type('Meta', (), {'model': PaymentMethod, 'fields': '__all__'})})

@@ -1,0 +1,2175 @@
+=== MotionStore Inspection Report ===
+Generated: 2026-09-25 16:41:58
+
+=== Git Status ===
+?? motionstore_inspection_report.txt
+
+=== Current Branch ===
+main
+
+=== Current Commit ===
+fb3339d feat(purchasing): complete PurchasingPage UI with 3 purchase modes, quick coding modal, freight absorption, and bilingual support
+
+=== Target Files ===
+
+----- frontend\src\App.jsx -----
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
+import AppLayout from './components/layout/AppLayout';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import POSPage from './pages/POSPage';
+import ExpensesPage from './pages/ExpensesPage';
+import ProductCodingPage from './pages/ProductCodingPage';
+import ReturnsPage from './pages/ReturnsPage';
+import SortingPage from './pages/SortingPage';
+import InventoryPage from './pages/InventoryPage';
+import PurchasingPage from './pages/PurchasingPage';
+import ShiftsPage from './pages/ShiftsPage';
+import TreasuryPage from './pages/TreasuryPage';
+import ReportsPage from './pages/ReportsPage';
+import PermissionsPage from './pages/PermissionsPage';
+import UsersPage from './pages/UsersPage';
+import SettingsPage from './pages/SettingsPage';
+
+const ProtectedRoute = ({ children }) => {
+  const { isAuthenticated, loading } = useAuth();
+  if (loading) return <div className="h-screen flex items-center justify-center text-slate-500">Loading...</div>;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
+};
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+              <Route index element={<DashboardPage />} />
+              <Route path="pos" element={<POSPage />} />
+              <Route path="expenses" element={<ExpensesPage />} />
+              <Route path="coding" element={<ProductCodingPage />} />
+              <Route path="returns" element={<ReturnsPage />} />
+              <Route path="sorting" element={<SortingPage />} />
+              <Route path="inventory" element={<InventoryPage />} />
+              <Route path="purchasing" element={<PurchasingPage />} />
+              <Route path="shifts" element={<ShiftsPage />} />
+              <Route path="treasury" element={<TreasuryPage />} />
+              <Route path="reports" element={<ReportsPage />} />
+              <Route path="users" element={<UsersPage />} />
+              <Route path="permissions" element={<PermissionsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
+    </LanguageProvider>
+  );
+}
+
+
+----- frontend\src\context\LanguageContext.jsx -----
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { translations } from '../i18n/translations';
+
+const LanguageContext = createContext(null);
+
+export const LanguageProvider = ({ children }) => {
+  const [lang, setLang] = useState(() => localStorage.getItem('app_lang') || 'ar');
+
+  useEffect(() => {
+    localStorage.setItem('app_lang', lang);
+    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    document.documentElement.setAttribute('lang', lang);
+  }, [lang]);
+
+  const toggleLanguage = () => {
+    setLang((prev) => (prev === 'ar' ? 'en' : 'ar'));
+  };
+
+  const t = (path) => {
+    if (!path) return '';
+    const keys = path.split('.');
+
+    // current language
+    let current = translations[lang];
+    for (const k of keys) {
+      if (current && current[k] !== undefined) current = current[k];
+      else {
+        current = null;
+        break;
+      }
+    }
+    if (typeof current === 'string') return current;
+
+    // english fallback
+    let fallback = translations.en;
+    for (const k of keys) {
+      if (fallback && fallback[k] !== undefined) fallback = fallback[k];
+      else {
+        fallback = null;
+        break;
+      }
+    }
+    if (typeof fallback === 'string') return fallback;
+
+    // last-key humanize fallback
+    const last = keys[keys.length - 1] || path;
+    return last.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase());
+  };
+
+  return (
+    <LanguageContext.Provider value={{ lang, isRTL: lang === 'ar', toggleLanguage, t }}>
+      {children}
+    </LanguageContext.Provider>
+  );
+};
+
+export const useLanguage = () => useContext(LanguageContext);
+
+
+----- frontend\src\i18n\translations.js -----
+export const translations = {
+  ar: {
+    common: { currency: "ج.م", kg: "كجم", lot: "بالة", pcs: "قطعة", refresh: "تحديث", print: "طباعة", close: "إغلاق", clear: "تفريغ", save: "حفظ", cancel: "إلغاء", all: "الكل", search: "بحث..." },
+    nav: { brand: "موشن ستور", brandSub: "إدارة البالات والمخازن", dashboard: "الرئيسية", pos: "المبيعات (الكاشير)", sorting: "ساحة فرز البالات", inventory: "المخزون والحركات", purchasing: "المشتريات الخام", shifts: "الورديات وتسليم العهدة", treasury: "الخزينة", reports: "التقارير وقائمة الدخل", settings: "الإعدادات والسياسات", logout: "تسجيل الخروج", workspace: "مساحة العمل التشغيلية", onlineEngine: "النظام متصل ويعمل" },
+    login: {
+      title: "نظام إدارة",
+      subtitle: "أدخل بيانات الاعتماد للوصول لمساحة العمل",
+      username: "اسم المستخدم",
+      password: "كلمة المرور",
+      rememberMe: "تذكر بياناتي على هذا الجهاز",
+      submit: "دخول إلى مساحة العمل",
+      error: "اسم المستخدم أو كلمة المرور غير صحيحة",
+      verifying: "جاري التحقق...",
+      poweredBy: "مشغل بواسطة محرك"
+    },
+    dashboard: { title: "الرئيسية التنفيذية", subtitle: "متابعة حية لمردود البالات ومبيعات الكاشير ودفتر أستاذ المخزون", grossSales: "إجمالي المبيعات", grossProfit: "مجمل الربح", activeInventory: "المخزون المتاح", processedBales: "البالات المفروزة", margin: "هامش الربح", reconciledShift: "وردية كاشير مطابقة", ledgerVerified: "رصيد موثق بالدفاتر", weightReconciled: "مطابقة الأوزان 100٪", statusTitle: "حالة التشغيل والسياسات المعتمدة", costingPolicy: "سياسة تكلفة البالات النشطة", accountingLedger: "دفتر القيود المحاسبية", policyDesc: "الطريقة B (المعاملات) / الحالة 2 (فصل الهالك كخسارة)", ledgerDesc: "قيد مزدوج متوازن إجبارياً (مدين = دائن)" },
+    pos: { title: "المبيعات الكاشير", terminal: "محطة البيع", shift: "الوردية", searchPlaceholder: "ابحث باسم الصنف أو القسم...", allGrades: "جميع الدرجات", newCollection: "✨ كريمة / سوبر لوكس (300 ج.م)", middleGrade: "📦 وسط / درجة ثانية (150 ج.م)", clearanceGrade: "🏷️ تصفيات / شعبي (50 ج.م)", inStock: "كجم متاح بالمخزن", perKg: "ج.م/كجم", cartTitle: "سلة المبيعات الحالية", clearCart: "تفريغ السلة", emptyCart: "السلة فارغة. اختر الأصناف من القائمة.", subtotal: "الإجمالي الفرعي:", discount: "الخصم:", netTotal: "الصافي النهائي:", payButton: "ادفع وأكمل البيع", selectPayment: "اختر طريقة السداد", totalDue: "المبلغ المطلوب سداده", confirmReceipt: "تأكيد التحصيل وإصدار الفاتورة", submitting: "جاري تسجيل الفاتورة...", openShiftRequired: "يلزم فتح وردية كاشير", openShiftDesc: "لا توجد وردية مفتوحة على هذا الجهاز. أدخل رصيد الافتتاح لبدء البيع.", openingFloat: "رصيد نقدية الافتتاح (ج.م)", openShiftBtn: "فتح وردية الخزينة", receiptTitle: "تمت عملية البيع بنجاح!", printReceipt: "طباعة الفاتورة (80mm)", newSale: "فاتورة جديدة", noStock: "لا توجد أصناف متاحة تطابق البحث." },
+    sorting: { title: "ساحة فرز البالات ومطابقة الأوزان", subtitle: "طرح أوزان البالة الخام، مطابقة الهالك، وتوزيع التكاليف المالية بـ 3 نقرات", pendingBales: "البالات الخام بانتظار الفرز", startSorting: "بدء فرز البالة", activeWorkspace: "الفرز النشطة", targetWeight: "وزن البالة الأصلي", newCollection: "✨ كريمة / سوبر لوكس", middle: "📦 وسط / درجة ثانية", clearance: "🏷️ تصفيات / شعبي", waste: "🗑️ هالك الفرز / تالف", weightKg: "الوزن (كجم)", countPcs: "عدد القطع", wasteClass: "تصنيف الهالك", normalWaste: "طبيعي / متوقع", abnormalWaste: "استثنائي / زائد", moistureAdj: "وزن تسوية الرطوبة والتبخر (كجم)", adjReason: "سبب التسوية الإلزامي", statusTitle: "مؤشر مطابقة الأوزان", balanced: "متطابق 100%", unbalanced: "غير متطابق", step1: "1. حفظ ومطابقة الأوزان", step2: "2. احتساب توزيع التكلفة", step3: "3. ترحيل للمخزون التام", costingPreview: "معاينة التكاليف الموزعة", noPending: "لا توجد بالات خام بانتظار الفرز" },
+    inventory: { title: "المخزون ودفتر الحركات", subtitle: "الأرصدة الحالية بالمخازن وسجل حركات الأستاذ المخزني غير القابل للتعديل", stockBalances: "أرصدة المخزون", auditLedger: "دفتر أستاذ الحركات", totalStock: "إجمالي المخزون المتاح", totalValuation: "التقييم المالي الإجمالي", allWarehouses: "جميع المخازن", allGrades: "جميع الدرجات", searchPlaceholderBalances: "ابحث باسم الصنف...", searchPlaceholderLedger: "ابحث برقم المستند أو الملاحظات...", costBasisSub: "على أساس التكلفة الموزعة", acrossWhSub: "عبر جميع المخازن الفعالة", avgCostSub: "متوسط التكلفة:", midAndClear: "وسط وتصفيات", midLabel: "وسط", clearLabel: "تصفيات", colProduct: "الصنف والدرجة", colWarehouse: "المخزن", colWeight: "الوزن المتاح", colPieces: "عدد القطع", colCost: "تكلفة الكيلو (COGS)", colTotal: "الإجمالي المالي", colDate: "التاريخ والنوع", colDoc: "المستند المصدري", colChange: "التغيير في الوزن", colRunning: "الرصيد التراكمي", noStockFound: "لا توجد عناصر مخزون تطابق خيارات البحث.", noLedgerFound: "لا توجد حركات مخزنية مسجلة بالمحرك.", gradeNew: "✨ كريمة / سوبر لوكس", gradeMid: "📦 وسط / درجة ثانية", gradeClr: "🏷️ تصفيات / شعبي", txnSortIn: "إدخال فرز", txnSale: "بيع كاشير", txnReturnIn: "مرتجع مبيعات", txnTrfOut: "تحويل صادر", txnTrfIn: "تحويل وارد" },
+    purchasing: {
+      title: "المشتريات وشحنات البالات والاستوك (F1)",
+      subtitle: "تسجيل فواتير الشراء (بالات خام / استوك مكود / شراء مباشر) وتحميل النقل والمصاريف",
+      newSupplier: "مورد جديد (F2)",
+      newInvoice: "فاتورة شراء جديدة (F3)",
+      totalProcurement: "إجمالي المشتريات",
+      registeredSuppliers: "الموردين المسجلين",
+      colInvNumber: "رقم الفاتورة والتاريخ",
+      colSupplier: "المورد",
+      colHub: "مخزن الاستلام",
+      colFreight: "مصاريف الشحن",
+      colTotalCost: "التكلفة الكلية",
+      modalInvTitle: "تسجيل فاتورة مشتريات جديدة",
+      modalSupTitle: "إضافة مورد جديد",
+      baleMode: "📦 شراء بالات خام (للفرز)",
+      stockMode: "👕 شراء استوك مكود (للبيع)",
+      directMode: "🛒 شراء مباشر حر",
+      baleContent: "محتوى/صنف البالة (مثال: أطفالي صيفي ميكس)",
+      baleWeight: "الوزن الموحد للبالة",
+      w40: "40 كجم",
+      w45: "45 كجم",
+      w50: "50 كجم",
+      w80: "80 كجم",
+      w100: "100 كجم",
+      customWeight: "وزن مخصص...",
+      balePrice: "سعر شراء البالة (ج.م)",
+      freightCost: "مصاريف الشحن والنقل (ج.م)",
+      selectSupplier: "اختر المورد *",
+      selectWarehouse: "مخزن الاستلام *",
+      saveInvoice: "حفظ واعتماد الفاتورة (Enter)",
+      saving: "جاري الحفظ...",
+      supplierName: "اسم المورد *",
+      supplierPhone: "رقم التليفون",
+      supplierCompany: "اسم الشركة / العلامة",
+      saveSupplier: "حفظ المورد",
+      invoiceSuccess: "تم حفظ واعتماد الفاتورة بنجاح ✅",
+      supplierSuccess: "تم إضافة المورد بنجاح ✅",
+      errorSubmit: "حدث خطأ أثناء الحفظ",
+      addProduct: "+ إضافة صنف مكود",
+      addDirectItem: "+ إضافة بند حر",
+      product: "اختر الصنف المكود",
+      freeTextItem: "اسم الصنف / البند الحر",
+      qty: "الكمية/الوزن",
+      unitPrice: "سعر الوحدة (ج.م)",
+      total: "الإجمالي",
+      netTotalCalc: "الإجمالي الكلي شامل مصاريف الشحن:"
+    },
+    shifts: { title: "الورديات وتسليم العهد النقدية", subtitle: "متابعة الخزينة الفرعية، مطابقة عد النقدية، واحتساب العجز والزيادة", closeShift: "إغلاق ومطابقة الوردية", activeBanner: "وردية الكاشير النشطة", openingFloat: "رصيد الافتتاح", cashSales: "مبيعات النقدية", expectedCash: "النقدية المتوقعة بالدرج", shiftRecords: "سجل الورديات والمطابقات", colCode: "رقم الوردية والتاريخ", colCashier: "الكاشير", colActual: "النقدية الفعلية", colDiff: "الفارق (عجز/زيادة)", discrepancyShortage: "عجز في الخزينة", discrepancySurplus: "زيادة في الخزينة", discrepancyExact: "مطابق تماماً" },
+    treasury: { title: "الخزائن الرئيسية والصناديق والسيولة", subtitle: "أرصدة الخزائن، التحويلات النقدية بين الصناديق، ودفتر حركات الخزينة", transferBtn: "تحويل نقدي بين الخزائن", currentBalance: "الرصيد الحالي:", ledgerHeader: "دفتر حركات الخزينة المالي", colVault: "الخزينة / الصندوق", colAmount: "المبلغ (ج.م)", colRunning: "الرصيد التراكمي", modalTransferTitle: "تحويل نقدي داخلي بين الخزائن" },
+    reports: { title: "التقارير وقائمة الدخل", subtitle: "قائمة الدخل P&L، مصفوفة ربحية البالات، وتوزع قيم المخزون", pnlTitle: "قائمة الدخل المالي المعتمدة (P&L)", baleYieldTitle: "مصفوفة ربحية ومردود البالات الخام", revenue: "إجمالي إيرادات المبيعات", cogs: "(-) تكلفة البضاعة المباعة (COGS)", grossProfit: "(=) مجمل الربح", wasteLoss: "(-) خسائر هالك الفرز المستقلة", netProfit: "(=) صافي الربح التشغيلي" },
+    settings: {
+      title: "شاشة الإعدادات العامة والمنشأة والفروع",
+      subtitle: "تعديل اسم الشركة واللوجو، إضافة الفروع والمخازن الجديدة وتثبيتها بالكامل",
+      tabCompany: "1. المنشأة واللوجو",
+      tabBranches: "2. إدارة الفروع",
+      tabWarehouses: "3. إدارة المخازن",
+      companyTitle: "بيانات المنشأة الرسمية واللوجو",
+      companyName: "اسم المنشأة / الشركة الرسمية *",
+      logoLabel: "لوجو الشركة (يظهر في القائمة والتقارير المطبوعة):",
+      uploadLogo: "رفع لوجو جديد من الجهاز",
+      logoHelp: "الصيغ المتاحة: PNG, JPG, WEBP — بحد أقصى 2 ميجابايت",
+      logoSizeError: "حجم الصورة كبير جداً، يرجى اختيار صورة أقل من 2 ميجابايت",
+      saveCompanyBtn: "حفظ وتثبيت بيانات المنشأة واللوجو",
+      saving: "جاري الحفظ والربط...",
+      companySuccess: "تم حفظ وتثبيت بيانات المنشأة واللوجو بنجاح ✅",
+      companyError: "حدث خطأ أثناء حفظ بيانات المنشأة",
+      nameRequired: "يرجى إدخال اسم المنشأة",
+      addBranchTitle: "إضافة فرع جديد للشركة",
+      branchName: "اسم الفرع *",
+      branchNamePlaceholder: "مثال: فرع الجولف / فرع ألكس",
+      branchCode: "كود الفرع",
+      branchPhone: "رقم تليفون الفرع",
+      branchAddress: "العنوان التفصيلي",
+      branchAddressPlaceholder: "8 أحمد الدرديري - أرض الجولف",
+      saveBranchBtn: "حفظ وإضافة الفرع",
+      branchSuccess: "تم إضافة الفرع الجديد بنجاح ✅",
+      branchError: "فشل إضافة الفرع الجديد",
+      branchNameRequired: "يرجى إدخال اسم الفرع",
+      branchesListTitle: "قائمة الفروع الحالية للشركة",
+      colBranchCode: "كود الفرع",
+      colBranchName: "اسم الفرع",
+      colPhone: "التليفون",
+      colAddress: "العنوان",
+      colActions: "الإجراءات",
+      edit: "تعديل",
+      delete: "حذف",
+      addWarehouseTitle: "إضافة مخزن جديد",
+      selectBranch: "اختر الفرع التابع له المخزن *",
+      warehouseName: "اسم المخزن *",
+      warehouseNamePlaceholder: "مثال: مخزن الفرز الرئيسي / مخزن المعرض",
+      warehouseType: "نوع المخزن *",
+      typeMain: "مخزن بيع رئيسي (MAIN)",
+      typeSorting: "مخزن فرز واستلام بالات (SORTING)",
+      typeTransit: "مخزن عبور وتحويلات (TRANSIT)",
+      saveWarehouseBtn: "حفظ وإضافة المخزن",
+      warehouseSuccess: "تم إضافة المخزن الجديد بنجاح ✅",
+      warehouseError: "فشل إضافة المخزن الجديد",
+      warehouseNameRequired: "أكمل بيانات المخزن والفرع",
+      warehousesListTitle: "قائمة المخازن المفعّلة للشركة",
+      colWarehouseName: "اسم المخزن",
+      colWarehouseType: "نوع المخزن",
+      colParentBranch: "الفرع التابع له",
+      mainBranchFallback: "الفرع الرئيسي",
+      securityTitle: "تأكيد كلمة سر المدير للحماية",
+      securityDesc: "يرجى إدخال كلمة السر الخاصة بك للتأكيد وحفظ الإجراءات الحساسة:",
+      invalidPass: "كلمة السر غير صحيحة! تم إلغاء الإجراء",
+      editBranchTitle: "تعديل بيانات الفرع",
+      editWarehouseTitle: "تعديل بيانات المخزن",
+      confirmDeleteBranch: "هل أنت متأكد من حذف هذا الفرع؟",
+      confirmDeleteWarehouse: "هل أنت متأكد من حذف هذا المخزن؟"
+    }
+  },
+  en: {
+    common: { currency: "EGP", kg: "KG", lot: "Lot", pcs: "pc", refresh: "Refresh", print: "Print", close: "Close", clear: "Clear", save: "Save", cancel: "Cancel", all: "All", search: "Search..." },
+    nav: { brand: "MOTION STORE", brandSub: "Thrift & Bale Enterprise OS", dashboard: "Dashboard", pos: "Point of Sale (POS)", sorting: "Bale Sorting Hub", inventory: "Finished Inventory", purchasing: "Purchasing & Bales", shifts: "Shifts & Registers", treasury: "Treasuries & Vaults", reports: "Executive Reports & P&L", settings: "System Settings & Policies", logout: "Logout", workspace: "Enterprise Workspace", onlineEngine: "Online Core Engine" },
+    login: {
+      title: "Management System",
+      subtitle: "Enter credentials to access workspace",
+      username: "Username",
+      password: "Password",
+      rememberMe: "Remember me on this device",
+      submit: "Login to Workspace",
+      error: "Invalid username or password",
+      verifying: "Verifying...",
+      poweredBy: "Powered by"
+    },
+    dashboard: { title: "Executive Dashboard", subtitle: "Real-time Bale Yield, POS Sales, and Inventory Ledger Metrics", grossSales: "Gross Sales", grossProfit: "Gross Profit", activeInventory: "Active Inventory", processedBales: "Processed Bales", margin: "Margin", reconciledShift: "Reconciled POS Shift", ledgerVerified: "Ledger-Verified Balance", weightReconciled: "Weight Reconciled 100%", statusTitle: "Core Operating Status", costingPolicy: "Configurable Costing Policy", accountingLedger: "Accounting Ledger", policyDesc: "Method B (Coefficients) / Case 2 (Separate Waste Loss)", ledgerDesc: "Double-Entry Balanced (Dr = Cr)" },
+    pos: { title: "POS Cashier Terminal", terminal: "Terminal", shift: "Shift", searchPlaceholder: "Search garments or categories...", allGrades: "All Grades", newCollection: "✨ New Collection (300 EGP)", middleGrade: "📦 Middle Grade (150 EGP)", clearanceGrade: "🏷️ Clearance (50 EGP)", inStock: "KG in stock", perKg: "EGP/KG", cartTitle: "Current Sales Cart", clearCart: "Clear Cart", emptyCart: "Cart is empty. Select items from the catalog.", subtotal: "Subtotal:", discount: "Discount:", netTotal: "NET TOTAL:", payButton: "Pay & Complete Sale", selectPayment: "Select Payment Method", totalDue: "Total Amount Due", confirmReceipt: "Confirm Payment & Issue Invoice", submitting: "Recording Transaction...", openShiftRequired: "Open Shift Required", openShiftDesc: "No active shift on this terminal. Enter opening float cash to begin selling.", openingFloat: "Opening Float Cash (EGP)", openShiftBtn: "Open Register Shift", receiptTitle: "Sale Completed Successfully!", printReceipt: "Print Receipt (ESC/POS)", newSale: "New Sale", noStock: "No active stock available matching criteria." },
+    sorting: { title: "Bale Sorting & Weight Reconciliation", subtitle: "Dual-unit Physical Weight Matching, Costing Apportionment, and Finished Stock Ledger Posting", pendingBales: "Pending Raw Bales in Storage", startSorting: "Start Sorting Bale", activeWorkspace: "Active Workspace", targetWeight: "Target Bale Weight", newCollection: "✨ New Collection", middle: "📦 Middle Grade", clearance: "🏷️ Clearance / Low", waste: "🗑️ Waste / Damages", weightKg: "Weight (KG)", countPcs: "Piece Count", wasteClass: "Waste Classification", normalWaste: "Normal / Expected", abnormalWaste: "Abnormal / Excess", moistureAdj: "Humidity / Moisture Adjustment (KG)", adjReason: "Mandatory Adjustment Reason", statusTitle: "Weight Reconciliation Status", balanced: "BALANCED 100%", unbalanced: "UNBALANCED", step1: "1. Reconcile & Save Weights", step2: "2. Run Costing Allocation", step3: "3. Post Finished Stock Ledger", costingPreview: "Allocated Costs Preview", noPending: "No pending bales in raw storage" },
+    inventory: { title: "Finished Inventory & Immutable Ledger", subtitle: "Live Multi-Warehouse Balances, Dual-Unit Tracking, and Immutable Audit Journal", stockBalances: "Stock Balances", auditLedger: "Audit Ledger Log", totalStock: "Total Available Stock", totalValuation: "Total Valuation", allWarehouses: "All Warehouses", allGrades: "All Grades", searchPlaceholderBalances: "Search product name...", searchPlaceholderLedger: "Search document ref or notes...", costBasisSub: "Cost Basis Apportioned", acrossWhSub: "Across all active locations", avgCostSub: "Avg Cost:", midAndClear: "Middle & Clearance", midLabel: "Mid", clearLabel: "Clear", colProduct: "Product & Grade", colWarehouse: "Warehouse", colWeight: "Available Weight", colPieces: "Piece Count", colCost: "Unit Cost (COGS)", colTotal: "Total Valuation", colDate: "Date & Type", colDoc: "Source Document", colChange: "Weight Change", colRunning: "Running Balance", noStockFound: "No stock items found matching your criteria.", noLedgerFound: "No ledger transactions recorded.", gradeNew: "✨ New Collection", gradeMid: "📦 Middle Grade", gradeClr: "🏷️ Clearance", txnSortIn: "SORT IN", txnSale: "POS SALE", txnReturnIn: "RETURN IN", txnTrfOut: "TRF OUT", txnTrfIn: "TRF IN" },
+    purchasing: {
+      title: "Purchasing & Procurement (F1)",
+      subtitle: "Record invoices (Raw Bales / Coded Stock / Direct Purchases) with freight absorption",
+      newSupplier: "New Supplier (F2)",
+      newInvoice: "New Purchase Invoice (F3)",
+      totalProcurement: "Total Procurement",
+      registeredSuppliers: "Registered Suppliers",
+      colInvNumber: "Invoice # & Date",
+      colSupplier: "Supplier",
+      colHub: "Receiving Hub",
+      colFreight: "Freight Costs",
+      colTotalCost: "Total Cost",
+      modalInvTitle: "Record New Purchase Invoice",
+      modalSupTitle: "Add New Supplier",
+      baleMode: "📦 Raw Bales (For Sorting)",
+      stockMode: "👕 Coded Stock (For Sales)",
+      directMode: "🛒 Direct Free Purchase",
+      baleContent: "Bale Content / Description (e.g. Summer Kids)",
+      baleWeight: "Standard Bale Weight",
+      w40: "40 KG",
+      w45: "45 KG",
+      w50: "50 KG",
+      w80: "80 KG",
+      w100: "100 KG",
+      customWeight: "Custom Weight...",
+      balePrice: "Bale Purchase Price (EGP)",
+      freightCost: "Freight & Shipping Cost (EGP)",
+      selectSupplier: "Select Supplier *",
+      selectWarehouse: "Receiving Warehouse *",
+      saveInvoice: "Save & Post Invoice (Enter)",
+      saving: "Saving...",
+      supplierName: "Supplier Name *",
+      supplierPhone: "Phone Number",
+      supplierCompany: "Company / Brand",
+      saveSupplier: "Save Supplier",
+      invoiceSuccess: "Invoice saved and posted successfully ✅",
+      supplierSuccess: "Supplier added successfully ✅",
+      errorSubmit: "Error during submission",
+      addProduct: "+ Add Coded Product",
+      addDirectItem: "+ Add Free Item",
+      product: "Select Coded Product",
+      freeTextItem: "Item / Description Name",
+      qty: "Qty / Weight",
+      unitPrice: "Unit Price (EGP)",
+      total: "Total",
+      netTotalCalc: "Total Invoice Cost (Including Freight):"
+    },
+    shifts: { title: "POS Shifts & Register Handovers", subtitle: "Cashier Float Management, Drawer Count Reconciliation, and Variance Audit", closeShift: "Close & Reconcile Active Shift", activeBanner: "Active Register Shift", openingFloat: "Opening Float", cashSales: "Cash Sales", expectedCash: "Expected Cash", shiftRecords: "Shift Records & Audits", colCode: "Shift # & Date", colCashier: "Cashier", colActual: "Actual Count", colDiff: "Discrepancy", discrepancyShortage: "Cash Shortage", discrepancySurplus: "Cash Surplus", discrepancyExact: "Exact Match" },
+    treasury: { title: "Treasury Vaults & Liquidity Management", subtitle: "Multi-Drawer Cash Balancing, Safe Vault Transfers, and Financial Ledger Audit", transferBtn: "Inter-Treasury Transfer", currentBalance: "Current Balance:", ledgerHeader: "Treasury Transactions Ledger", colVault: "Treasury Vault", colAmount: "Amount (EGP)", colRunning: "Running Balance", modalTransferTitle: "Internal Treasury Transfer" },
+    reports: { title: "Executive Financial & Bale Analytics", subtitle: "Real-time Income Statement, Bale Yield Matrix, and Grade-based Stock Valuation", pnlTitle: "Standard Income Statement (P&L)", baleYieldTitle: "Bale Yield & Profitability Matrix", revenue: "Gross Sales Revenue", cogs: "(-) Cost of Goods Sold (COGS)", grossProfit: "(=) Gross Profit", wasteLoss: "(-) Sorting Waste Losses", netProfit: "(=) Net Operating Profit" },
+    settings: {
+      title: "General Settings & Store Profile",
+      subtitle: "Update company profile, logo, manage branches and active warehouses",
+      tabCompany: "1. Store & Logo",
+      tabBranches: "2. Branch Management",
+      tabWarehouses: "3. Warehouse Management",
+      companyTitle: "Official Store Profile & Logo",
+      companyName: "Official Store / Company Name *",
+      logoLabel: "Company Logo (Appears on sidebar and printed reports):",
+      uploadLogo: "Upload New Logo From Device",
+      logoHelp: "Supported formats: PNG, JPG, WEBP — Max size 2MB",
+      logoSizeError: "File too large, please select an image under 2MB",
+      saveCompanyBtn: "Save & Lock Store Profile & Logo",
+      saving: "Saving & Linking...",
+      companySuccess: "Store profile and logo saved successfully ✅",
+      companyError: "Error saving company profile",
+      nameRequired: "Please enter company name",
+      addBranchTitle: "Add New Branch",
+      branchName: "Branch Name *",
+      branchNamePlaceholder: "e.g. Golf Branch / Alex Branch",
+      branchCode: "Branch Code",
+      branchPhone: "Branch Phone",
+      branchAddress: "Detailed Address",
+      branchAddressPlaceholder: "8 Ahmed El-Dardiry - Golf Area",
+      saveBranchBtn: "Save & Add Branch",
+      branchSuccess: "New branch added successfully ✅",
+      branchError: "Failed to add new branch",
+      branchNameRequired: "Please enter branch name",
+      branchesListTitle: "Current Company Branches",
+      colBranchCode: "Branch Code",
+      colBranchName: "Branch Name",
+      colPhone: "Phone",
+      colAddress: "Address",
+      colActions: "Actions",
+      edit: "Edit",
+      delete: "Delete",
+      addWarehouseTitle: "Add New Warehouse",
+      selectBranch: "Select Parent Branch *",
+      warehouseName: "Warehouse Name *",
+      warehouseNamePlaceholder: "e.g. Main Sorting Hub / Showroom Stock",
+      warehouseType: "Warehouse Type *",
+      typeMain: "Main Sales Warehouse (MAIN)",
+      typeSorting: "Sorting & Intake Hub (SORTING)",
+      typeTransit: "Transit Warehouse (TRANSIT)",
+      saveWarehouseBtn: "Save & Add Warehouse",
+      warehouseSuccess: "New warehouse added successfully ✅",
+      warehouseError: "Failed to add new warehouse",
+      warehouseNameRequired: "Please complete warehouse name and branch",
+      warehousesListTitle: "Active Warehouses List",
+      colWarehouseName: "Warehouse Name",
+      colWarehouseType: "Warehouse Type",
+      colParentBranch: "Parent Branch",
+      mainBranchFallback: "Main Branch",
+      securityTitle: "Manager Password Verification",
+      securityDesc: "Please enter your password to authorize this action:",
+      invalidPass: "Invalid Password! Action Canceled",
+      editBranchTitle: "Edit Branch Details",
+      editWarehouseTitle: "Edit Warehouse Details",
+      confirmDeleteBranch: "Are you sure you want to delete this branch?",
+      confirmDeleteWarehouse: "Are you sure you want to delete this warehouse?"
+    }
+  }
+};
+
+
+----- frontend\src\pages\PurchasingPage.jsx -----
+import React, { useState, useEffect } from 'react';
+import axiosClient from '../api/axiosClient';
+import { useLanguage } from '../context/LanguageContext';
+import { Truck, Plus, Save, Users, FileText, CheckCircle2, X, Package, ShoppingBag, Trash2, ShoppingCart, Tag } from 'lucide-react';
+
+export default function PurchasingPage() {
+  const { t, isRTL } = useLanguage();
+  const [invoices, setInvoices] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Modals state
+  const [showInvModal, setShowInvModal] = useState(false);
+  const [showSupModal, setShowSupModal] = useState(false);
+  const [showQuickProdModal, setShowQuickProdModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+
+  // Invoice Mode: BALE | STOCK | DIRECT
+  const [invMode, setInvMode] = useState('BALE');
+
+  // Forms
+  const [supForm, setSupForm] = useState({ name: '', phone: '', company: '' });
+  
+  const [quickProdForm, setQuickProdForm] = useState({
+    name: '',
+    code: '',
+    category: '',
+    unit_of_measure: 'PIECE'
+  });
+
+  const [invForm, setInvForm] = useState({
+    supplier_id: '',
+    warehouse_id: '',
+    freight_cost: '0.00',
+    bale_content: '',
+    bale_weight_type: '50',
+    bale_custom_weight: '',
+    bale_price: '',
+    stock_items: [],
+    direct_items: []
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Keyboard Shortcuts (F2: New Supplier, F3: New Invoice)
+  useEffect(() => {
+    const handleShortcuts = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        setShowSupModal(true);
+      } else if (e.key === 'F3') {
+        e.preventDefault();
+        setShowInvModal(true);
+      }
+    };
+    window.addEventListener('keydown', handleShortcuts);
+    return () => window.removeEventListener('keydown', handleShortcuts);
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [invRes, supRes, whRes, prodRes, catRes] = await Promise.all([
+        axiosClient.get('/purchases/'),
+        axiosClient.get('/suppliers/'),
+        axiosClient.get('/warehouses/'),
+        axiosClient.get('/products/'),
+        axiosClient.get('/categories/')
+      ]);
+      setInvoices(invRes.data.results || invRes.data || []);
+      const sList = supRes.data.results || supRes.data || [];
+      const wList = whRes.data.results || whRes.data || [];
+      const pList = prodRes.data.results || prodRes.data || [];
+      const cList = catRes.data.results || catRes.data || [];
+
+      setSuppliers(sList);
+      setWarehouses(wList);
+      setProducts(pList);
+      setCategories(cList);
+      
+      if (sList.length > 0 && !invForm.supplier_id) {
+        setInvForm(prev => ({ ...prev, supplier_id: sList[0].id }));
+      }
+      if (wList.length > 0 && !invForm.warehouse_id) {
+        setInvForm(prev => ({ ...prev, warehouse_id: wList[0].id }));
+      }
+      if (cList.length > 0 && !quickProdForm.category) {
+        setQuickProdForm(prev => ({ ...prev, category: cList[0].id }));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveSupplier = async (e) => {
+    if (e) e.preventDefault();
+    if (!supForm.name.trim()) return alert(t('purchasing.supplierName') + ' required');
+
+    setSaving(true);
+    try {
+      await axiosClient.post('/suppliers/', supForm);
+      setSuccessMsg(t('purchasing.supplierSuccess'));
+      setSupForm({ name: '', phone: '', company: '' });
+      setShowSupModal(false);
+      fetchData();
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err) {
+      alert(t('purchasing.errorSubmit'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Quick Code New Product into Global Catalog and auto-select in Line Item
+  const handleSaveQuickProduct = async (e) => {
+    if (e) e.preventDefault();
+    if (!quickProdForm.name.trim() || !quickProdForm.category) {
+      return alert(t('purchasing.productName') + ' & ' + t('purchasing.category'));
+    }
+
+    setSaving(true);
+    try {
+      const res = await axiosClient.post('/products/', quickProdForm);
+      const newProd = res.data;
+      
+      setSuccessMsg(t('purchasing.productSuccess'));
+      setQuickProdForm({ name: '', code: '', category: categories[0]?.id || '', unit_of_measure: 'PIECE' });
+      setShowQuickProdModal(false);
+      
+      // Refresh products list
+      const updatedProducts = [...products, newProd];
+      setProducts(updatedProducts);
+
+      // Auto add/select this newly coded product in the active purchase invoice stock items
+      setInvForm(prev => ({
+        ...prev,
+        stock_items: [...prev.stock_items, { product_id: newProd.id, qty: 1, price: 0 }]
+      }));
+
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err) {
+      alert(t('purchasing.errorSubmit'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveInvoice = async (e) => {
+    if (e) e.preventDefault();
+    if (!invForm.supplier_id || !invForm.warehouse_id) {
+      return alert(t('purchasing.selectSupplier') + ' / ' + t('purchasing.selectWarehouse'));
+    }
+
+    setSaving(true);
+    try {
+      const freight = parseFloat(invForm.freight_cost || 0);
+
+      const payload = {
+        supplier_id: invForm.supplier_id,
+        warehouse_id: invForm.warehouse_id,
+        freight_cost: freight,
+        items: []
+      };
+
+      if (invMode === 'BALE') {
+        const w = invForm.bale_weight_type === 'CUSTOM'
+          ? parseFloat(invForm.bale_custom_weight || 0)
+          : parseFloat(invForm.bale_weight_type);
+
+        payload.items.push({
+          product_id: null,
+          description: invForm.bale_content || 'بالة خام',
+          quantity: 1,
+          weight_kg: w,
+          unit_price: parseFloat(invForm.bale_price || 0)
+        });
+      } else if (invMode === 'STOCK') {
+        payload.items = invForm.stock_items.map(item => ({
+          product_id: item.product_id,
+          quantity: parseFloat(item.qty || 1),
+          weight_kg: parseFloat(item.qty || 1),
+          unit_price: parseFloat(item.price || 0)
+        }));
+      } else if (invMode === 'DIRECT') {
+        payload.items = invForm.direct_items.map(item => ({
+          product_id: null,
+          description: item.description || 'بند شراء مباشر',
+          quantity: parseFloat(item.qty || 1),
+          weight_kg: parseFloat(item.qty || 1),
+          unit_price: parseFloat(item.price || 0)
+        }));
+      }
+
+      await axiosClient.post('/purchases/', payload);
+      setSuccessMsg(t('purchasing.invoiceSuccess'));
+      setShowInvModal(false);
+      setInvForm({
+        ...invForm,
+        bale_content: '',
+        bale_price: '',
+        bale_custom_weight: '',
+        freight_cost: '0.00',
+        stock_items: [],
+        direct_items: []
+      });
+      fetchData();
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err) {
+      alert(t('purchasing.errorSubmit'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Coded Stock items actions
+  const addStockItem = () => {
+    setInvForm(prev => ({
+      ...prev,
+      stock_items: [...prev.stock_items, { product_id: products[0]?.id || '', qty: 1, price: 0 }]
+    }));
+  };
+
+  const updateStockItem = (index, field, val) => {
+    const newItems = [...invForm.stock_items];
+    newItems[index][field] = val;
+    setInvForm(prev => ({ ...prev, stock_items: newItems }));
+  };
+
+  const removeStockItem = (index) => {
+    const newItems = [...invForm.stock_items];
+    newItems.splice(index, 1);
+    setInvForm(prev => ({ ...prev, stock_items: newItems }));
+  };
+
+  // Direct Purchase items actions
+  const addDirectItem = () => {
+    setInvForm(prev => ({
+      ...prev,
+      direct_items: [...prev.direct_items, { description: '', qty: 1, price: 0 }]
+    }));
+  };
+
+  const updateDirectItem = (index, field, val) => {
+    const newItems = [...invForm.direct_items];
+    newItems[index][field] = val;
+    setInvForm(prev => ({ ...prev, direct_items: newItems }));
+  };
+
+  const removeDirectItem = (index) => {
+    const newItems = [...invForm.direct_items];
+    newItems.splice(index, 1);
+    setInvForm(prev => ({ ...prev, direct_items: newItems }));
+  };
+
+  // Totals calculations
+  const totalProcurement = invoices.reduce((sum, inv) => sum + parseFloat(inv.total_amount || 0), 0);
+
+  const calculateInvoiceSubtotal = () => {
+    if (invMode === 'BALE') {
+      return parseFloat(invForm.bale_price || 0);
+    } else if (invMode === 'STOCK') {
+      return invForm.stock_items.reduce((sum, i) => sum + ((parseFloat(i.qty) || 0) * (parseFloat(i.price) || 0)), 0);
+    } else if (invMode === 'DIRECT') {
+      return invForm.direct_items.reduce((sum, i) => sum + ((parseFloat(i.qty) || 0) * (parseFloat(i.price) || 0)), 0);
+    }
+    return 0;
+  };
+
+  const currentFreight = parseFloat(invForm.freight_cost || 0);
+  const currentInvoiceTotal = calculateInvoiceSubtotal() + currentFreight;
+
+  return (
+    <div className="space-y-6 font-sans" dir={isRTL ? 'rtl' : 'ltr'}>
+      {/* Top Header & Action Buttons */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <Truck className="text-emerald-600" size={22} />
+            {t('purchasing.title')}
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">{t('purchasing.subtitle')}</p>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSupModal(true)}
+            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+          >
+            <Users size={14}/>
+            <span>{t('purchasing.newSupplier')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowInvModal(true)}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black transition flex items-center gap-1.5 shadow cursor-pointer"
+          >
+            <Plus size={14}/>
+            <span>{t('purchasing.newInvoice')}</span>
+          </button>
+        </div>
+      </div>
+
+      {successMsg && (
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-3 rounded-xl text-sm font-bold flex items-center gap-2">
+          <CheckCircle2 className="text-emerald-600" size={18} />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <span className="text-xs text-slate-500 font-bold block">{t('purchasing.totalProcurement')}</span>
+          <div className="text-2xl font-black text-emerald-900 mt-1">{totalProcurement.toFixed(2)} {t('common.currency')}</div>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <span className="text-xs text-slate-500 font-bold block">{t('purchasing.registeredSuppliers')}</span>
+          <div className="text-2xl font-black text-blue-900 mt-1">{suppliers.length}</div>
+        </div>
+      </div>
+
+      {/* Invoices List Table */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-xs" dir={isRTL ? 'rtl' : 'ltr'}>
+            <thead className="bg-slate-100 text-slate-700 font-black border-y">
+              <tr>
+                <th className="p-3">{t('purchasing.colInvNumber')}</th>
+                <th className="p-3">{t('purchasing.colSupplier')}</th>
+                <th className="p-3">{t('purchasing.colHub')}</th>
+                <th className="p-3">{t('purchasing.colFreight')}</th>
+                <th className="p-3">{t('purchasing.colTotalCost')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {invoices.map(inv => (
+                <tr key={inv.id} className="hover:bg-slate-50">
+                  <td className="p-3 font-mono font-bold text-slate-600">{inv.invoice_number}</td>
+                  <td className="p-3 font-black text-slate-900">{inv.supplier_name || '—'}</td>
+                  <td className="p-3 font-bold text-slate-700">{inv.warehouse_name || '—'}</td>
+                  <td className="p-3 text-rose-600 font-bold">+{parseFloat(inv.freight_cost || 0).toFixed(2)} {t('common.currency')}</td>
+                  <td className="p-3 font-black text-emerald-700 text-sm">{parseFloat(inv.total_amount || 0).toFixed(2)} {t('common.currency')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* MODAL: NEW INVOICE WITH 3 MODES & FREIGHT & QUICK PRODUCT CODING */}
+      {showInvModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleSaveInvoice} className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl border">
+            <div className="flex items-center justify-between border-b pb-3 font-black text-slate-800">
+              <span className="flex items-center gap-1.5"><FileText size={18}/> {t('purchasing.modalInvTitle')}</span>
+              <button type="button" onClick={() => setShowInvModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18}/></button>
+            </div>
+
+            {/* Mode Switcher: 3 Tabs */}
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full gap-1">
+              <button
+                type="button"
+                onClick={() => setInvMode('BALE')}
+                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'BALE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
+              >
+                <Package size={14}/>
+                <span>{t('purchasing.baleMode')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInvMode('STOCK')}
+                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'STOCK' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
+              >
+                <ShoppingBag size={14}/>
+                <span>{t('purchasing.stockMode')}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInvMode('DIRECT')}
+                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'DIRECT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
+              >
+                <ShoppingCart size={14}/>
+                <span>{t('purchasing.directMode')}</span>
+              </button>
+            </div>
+
+            {/* Supplier & Receiving Warehouse */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.selectSupplier')}</label>
+                <select
+                  value={invForm.supplier_id}
+                  onChange={e => setInvForm({...invForm, supplier_id: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
+                  required
+                >
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.selectWarehouse')}</label>
+                <select
+                  value={invForm.warehouse_id}
+                  onChange={e => setInvForm({...invForm, warehouse_id: e.target.value})}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
+                  required
+                >
+                  {warehouses.map(w => <option key={w.id} value={w.id}>{w.name} ({w.warehouse_type})</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* TAB 1: RAW BALE MODE */}
+            {invMode === 'BALE' && (
+              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200 space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.baleContent')}</label>
+                  <input
+                    type="text"
+                    value={invForm.bale_content}
+                    onChange={e => setInvForm({...invForm, bale_content: e.target.value})}
+                    placeholder="مثال: أطفالي صيفي ميكس / حريمي شتوي"
+                    className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.baleWeight')}</label>
+                    <div className="flex gap-2">
+                      <select
+                        value={invForm.bale_weight_type}
+                        onChange={e => setInvForm({...invForm, bale_weight_type: e.target.value})}
+                        className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                      >
+                        <option value="40">{t('purchasing.w40')}</option>
+                        <option value="45">{t('purchasing.w45')}</option>
+                        <option value="50">{t('purchasing.w50')}</option>
+                        <option value="80">{t('purchasing.w80')}</option>
+                        <option value="100">{t('purchasing.w100')}</option>
+                        <option value="CUSTOM">{t('purchasing.customWeight')}</option>
+                      </select>
+                      {invForm.bale_weight_type === 'CUSTOM' && (
+                        <input
+                          type="number" step="0.5" placeholder="KG"
+                          value={invForm.bale_custom_weight}
+                          onChange={e => setInvForm({...invForm, bale_custom_weight: e.target.value})}
+                          className="w-24 bg-white border rounded-lg p-2.5 text-xs font-bold text-center"
+                          required
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.balePrice')}</label>
+                    <input
+                      type="number" step="0.01" placeholder="0.00"
+                      value={invForm.bale_price}
+                      onChange={e => setInvForm({...invForm, bale_price: e.target.value})}
+                      className="w-full bg-white border border-emerald-300 rounded-lg p-2.5 text-sm font-black text-emerald-900"
+                      required
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: CODED STOCK MODE */}
+            {invMode === 'STOCK' && (
+              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200 space-y-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-black text-blue-900">أصناف الاستوك المكودة المتاحة بالمشروع</span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickProdModal(true)}
+                      className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg font-black shadow cursor-pointer flex items-center gap-1"
+                    >
+                      <Tag size={12}/>
+                      <span>{t('purchasing.quickCodeProduct')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={addStockItem}
+                      className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg font-black shadow cursor-pointer"
+                    >
+                      {t('purchasing.addProduct')}
+                    </button>
+                  </div>
+                </div>
+
+                {invForm.stock_items.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">اضغط زر "+ إضافة صنف مكود" أو "➕ تكويد صنف جديد" لاختيار الأصناف</p>
+                ) : (
+                  invForm.stock_items.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
+                      <select
+                        value={item.product_id}
+                        onChange={e => updateStockItem(idx, 'product_id', e.target.value)}
+                        className="flex-1 bg-transparent border-0 outline-none text-xs font-bold text-slate-900"
+                      >
+                        {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.code || 'بدون كود'})</option>)}
+                      </select>
+                      <input
+                        type="number" placeholder={t('purchasing.qty')}
+                        value={item.qty}
+                        onChange={e => updateStockItem(idx, 'qty', e.target.value)}
+                        className="w-16 border rounded p-1 text-xs text-center font-bold"
+                      />
+                      <input
+                        type="number" step="0.01" placeholder={t('purchasing.unitPrice')}
+                        value={item.price}
+                        onChange={e => updateStockItem(idx, 'price', e.target.value)}
+                        className="w-20 border rounded p-1 text-xs text-center font-bold text-blue-800"
+                      />
+                      <button type="button" onClick={() => removeStockItem(idx)} className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"><Trash2 size={14}/></button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* TAB 3: DIRECT FREE PURCHASE MODE */}
+            {invMode === 'DIRECT' && (
+              <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-200 space-y-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-black text-purple-900">بنود الشراء المباشر الحر (بدون تكويد)</span>
+                  <button
+                    type="button"
+                    onClick={addDirectItem}
+                    className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg font-black shadow cursor-pointer"
+                  >
+                    {t('purchasing.addDirectItem')}
+                  </button>
+                </div>
+
+                {invForm.direct_items.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">اضغط زر "+ إضافة بند حر" لإدخال المواد والمشتريات الحرة</p>
+                ) : (
+                  invForm.direct_items.map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
+                      <input
+                        type="text"
+                        placeholder={t('purchasing.freeTextItem')}
+                        value={item.description}
+                        onChange={e => updateDirectItem(idx, 'description', e.target.value)}
+                        className="flex-1 bg-transparent border-0 outline-none text-xs font-bold text-slate-900"
+                      />
+                      <input
+                        type="number" placeholder={t('purchasing.qty')}
+                        value={item.qty}
+                        onChange={e => updateDirectItem(idx, 'qty', e.target.value)}
+                        className="w-16 border rounded p-1 text-xs text-center font-bold"
+                      />
+                      <input
+                        type="number" step="0.01" placeholder={t('purchasing.unitPrice')}
+                        value={item.price}
+                        onChange={e => updateDirectItem(idx, 'price', e.target.value)}
+                        className="w-20 border rounded p-1 text-xs text-center font-bold text-purple-800"
+                      />
+                      <button type="button" onClick={() => removeDirectItem(idx)} className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"><Trash2 size={14}/></button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* FREIGHT COST FIELD IN ALL 3 MODES */}
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-0.5">{t('purchasing.freightCost')}</label>
+                <span className="text-[10px] text-slate-400">تُحمل وتضاف لتكلفة الفاتورة الإجمالية</span>
+              </div>
+              <input
+                type="number" step="0.01" placeholder="0.00"
+                value={invForm.freight_cost}
+                onChange={e => setInvForm({...invForm, freight_cost: e.target.value})}
+                className="w-32 bg-white border border-slate-300 rounded-lg p-2 text-xs font-black text-rose-600 text-center"
+              />
+            </div>
+
+            {/* TOTAL NET COST SUMMARY */}
+            <div className="bg-slate-900 text-white p-3 rounded-xl flex items-center justify-between">
+              <span className="text-xs font-black text-slate-300">{t('purchasing.netTotalCalc')}</span>
+              <span className="text-xl font-black text-emerald-400">{currentInvoiceTotal.toFixed(2)} {t('common.currency')}</span>
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm shadow transition cursor-pointer disabled:opacity-50"
+            >
+              {saving ? t('purchasing.saving') : t('purchasing.saveInvoice')}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: QUICK PRODUCT CODING TO GLOBAL CATALOG */}
+      {showQuickProdModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleSaveQuickProduct} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-emerald-300">
+            <div className="flex items-center justify-between border-b pb-3 font-black text-slate-800">
+              <span className="flex items-center gap-1.5 text-emerald-700"><Tag size={18}/> {t('purchasing.modalQuickProdTitle')}</span>
+              <button type="button" onClick={() => setShowQuickProdModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18}/></button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.productName')}</label>
+                <input
+                  type="text"
+                  placeholder="مثال: تيشرت أوفر سايز زارا"
+                  value={quickProdForm.name}
+                  onChange={e => setQuickProdForm({ ...quickProdForm, name: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.productCode')}</label>
+                <input
+                  type="text"
+                  placeholder="SKU-1001"
+                  value={quickProdForm.code}
+                  onChange={e => setQuickProdForm({ ...quickProdForm, code: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.category')}</label>
+                <select
+                  value={quickProdForm.category}
+                  onChange={e => setQuickProdForm({ ...quickProdForm, category: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                  required
+                >
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.uom')}</label>
+                <select
+                  value={quickProdForm.unit_of_measure}
+                  onChange={e => setQuickProdForm({ ...quickProdForm, unit_of_measure: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                >
+                  <option value="PIECE">قطعة / عدد</option>
+                  <option value="KG">كيلو / كجم</option>
+                  <option value="BOTH">قطعة + وزن</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm shadow transition cursor-pointer"
+            >
+              {saving ? t('purchasing.saving') : t('purchasing.saveProduct')}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: NEW SUPPLIER */}
+      {showSupModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleSaveSupplier} className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl border">
+            <div className="flex items-center justify-between border-b pb-3 font-black text-slate-800">
+              <span className="flex items-center gap-1.5"><Users size={18}/> {t('purchasing.modalSupTitle')}</span>
+              <button type="button" onClick={() => setShowSupModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18}/></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.supplierName')}</label>
+                <input type="text" value={supForm.name} onChange={e => setSupForm({...supForm, name: e.target.value})} className="w-full bg-slate-50 border rounded-lg p-2.5 text-xs font-bold" required />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.supplierPhone')}</label>
+                <input type="text" value={supForm.phone} onChange={e => setSupForm({...supForm, phone: e.target.value})} className="w-full bg-slate-50 border rounded-lg p-2.5 text-xs" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.supplierCompany')}</label>
+                <input type="text" value={supForm.company} onChange={e => setSupForm({...supForm, company: e.target.value})} className="w-full bg-slate-50 border rounded-lg p-2.5 text-xs" />
+              </div>
+            </div>
+            <button type="submit" disabled={saving} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-xl font-black text-sm transition cursor-pointer">
+              {saving ? t('purchasing.saving') : t('purchasing.saveSupplier')}
+            </button>
+          </form>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+
+----- backend\apps\api\views.py -----
+from rest_framework.permissions import AllowAny
+from apps.users.models import RolePermission
+from apps.users.serializers import RolePermissionSerializer
+from apps.discounts.models import DiscountRule
+from apps.returns.models import SalesReturn
+from apps.treasury.models import TreasuryTransaction
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from decimal import Decimal
+from apps.tenants.models import Tenant
+from apps.tenants.context import get_current_tenant
+from apps.companies.models import Company
+from apps.branches.models import Branch
+from apps.warehouses.models import Warehouse
+from apps.products.models import Category, Product
+from apps.suppliers.models import Supplier
+from apps.purchasing.models import PurchaseInvoice
+from apps.raw_lots.models import RawLot
+from apps.sorting.models import SortingOrder
+from apps.costing.services import calculate_sorting_costs
+from apps.inventory.models import StockItem, InventoryTransaction
+from apps.inventory.services import post_sorting_to_inventory
+from apps.pricing.models import PriceList, PriceListItem, PriceHistory
+from apps.pos.models import POSTerminal
+from apps.shifts.models import Shift
+from apps.shifts.services import open_shift, close_shift
+from apps.sales.models import SaleInvoice
+from apps.sales.services import process_pos_sale
+from apps.accounting.models import JournalEntry
+from apps.api.serializers import *
+
+class BaseTenantViewSet(viewsets.ModelViewSet):
+    def get_tenant(self):
+        tenant = getattr(self.request, 'tenant', None) or get_current_tenant()
+        if not tenant and hasattr(self.request, 'user') and self.request.user.is_authenticated:
+            tenant = getattr(self.request.user, 'tenant', None)
+        if not tenant:
+            tenant = Tenant.objects.filter(is_active=True).first()
+        return tenant
+
+    def get_queryset(self):
+        tenant = self.get_tenant()
+        if tenant:
+            return self.model.objects.filter(tenant=tenant)
+        return self.model.objects.all()
+
+    def perform_create(self, serializer):
+        tenant = self.get_tenant()
+        serializer.save(tenant=tenant)
+
+class CompanyViewSet(BaseTenantViewSet):
+    model = Company
+    serializer_class = CompanySerializer
+
+class BranchViewSet(BaseTenantViewSet):
+    model = Branch
+    serializer_class = BranchSerializer
+
+class WarehouseViewSet(BaseTenantViewSet):
+    model = Warehouse
+    serializer_class = WarehouseSerializer
+
+class CategoryViewSet(BaseTenantViewSet):
+    model = Category
+    serializer_class = CategorySerializer
+
+class ProductViewSet(BaseTenantViewSet):
+    model = Product
+    serializer_class = ProductSerializer
+
+class SupplierViewSet(BaseTenantViewSet):
+    model = Supplier
+    serializer_class = SupplierSerializer
+
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        name = request.data.get('name', '').strip()
+        
+        # Check if supplier with same name exists for this tenant
+        existing = Supplier.objects.filter(tenant=tenant, name__iexact=name).first() if tenant else Supplier.objects.filter(name__iexact=name).first()
+        if existing:
+            serializer = self.get_serializer(existing)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        return super().create(request, *args, **kwargs)
+
+class PurchaseInvoiceViewSet(BaseTenantViewSet):
+    model = PurchaseInvoice
+    serializer_class = PurchaseInvoiceSerializer
+
+class RawLotViewSet(BaseTenantViewSet):
+    model = RawLot
+    serializer_class = RawLotSerializer
+
+class SortingOrderViewSet(BaseTenantViewSet):
+    model = SortingOrder
+    serializer_class = SortingOrderSerializer
+
+    @action(detail=True, methods=['post'])
+    def reconcile(self, request, pk=None):
+        order = self.get_object()
+        is_balanced = order.reconcile()
+        return Response({'balanced': is_balanced, 'status': order.reconciliation_status})
+
+    @action(detail=True, methods=['post'])
+    def calculate_costing(self, request, pk=None):
+        order = self.get_object()
+        record = calculate_sorting_costs(order.id)
+        return Response({
+            'status': 'Calculated',
+            'method': record.method_used,
+            'allocated_cost': str(record.total_allocated_cost),
+            'waste_loss': str(record.waste_loss_amount)
+        })
+
+    @action(detail=True, methods=['post'])
+    def post_inventory(self, request, pk=None):
+        order = self.get_object()
+        txns = post_sorting_to_inventory(order.id)
+        return Response({'status': 'Posted', 'entries_created': len(txns)})
+
+class StockItemViewSet(BaseTenantViewSet):
+    model = StockItem
+    serializer_class = StockItemSerializer
+
+class InventoryTransactionViewSet(BaseTenantViewSet):
+    model = InventoryTransaction
+    serializer_class = InventoryTransactionSerializer
+
+class PriceListViewSet(BaseTenantViewSet):
+    model = PriceList
+    serializer_class = PriceListSerializer
+
+class POSTerminalViewSet(BaseTenantViewSet):
+    model = POSTerminal
+    serializer_class = POSTerminalSerializer
+
+class ShiftViewSet(BaseTenantViewSet):
+    model = Shift
+    serializer_class = ShiftSerializer
+
+    @action(detail=False, methods=['post'])
+    def open(self, request):
+        shift = open_shift(
+            terminal_id=request.data['terminal_id'],
+            cashier=request.user,
+            opening_cash=Decimal(str(request.data.get('opening_cash', '0.00'))),
+            notes=request.data.get('notes')
+        )
+        return Response(ShiftSerializer(shift).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def close(self, request, pk=None):
+        shift = close_shift(
+            shift_id=pk,
+            actual_cash=Decimal(str(request.data['actual_cash'])),
+            notes=request.data.get('notes')
+        )
+        return Response(ShiftSerializer(shift).data)
+
+class SaleInvoiceViewSet(BaseTenantViewSet):
+    model = SaleInvoice
+    serializer_class = SaleInvoiceSerializer
+
+    @action(detail=False, methods=['post'])
+    def checkout(self, request):
+        # Resolve customer if sent
+        customer_id = request.data.get('customer_id')
+        customer_obj = None
+        if customer_id:
+            from apps.customers.models import Customer
+            customer_obj = Customer.objects.filter(id=customer_id).first()
+
+        invoice = process_pos_sale(
+            shift_id=request.data['shift_id'],
+            cashier=request.user,
+            items_data=request.data['items'],
+            payments_data=request.data['payments'],
+            discount_amount=Decimal(str(request.data.get('discount_amount', '0.00'))),
+            delivery_fee=Decimal(str(request.data.get('delivery_fee', '0.00'))),
+            previous_balance=Decimal(str(request.data.get('previous_balance', '0.00'))),
+            customer=customer_obj,
+            notes=request.data.get('notes')
+        )
+        return Response(SaleInvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
+
+class JournalEntryViewSet(BaseTenantViewSet):
+    model = JournalEntry
+    serializer_class = JournalEntrySerializer
+
+
+
+class PurchaseLineItemViewSet(BaseTenantViewSet):
+    model = PurchaseLineItem
+    serializer_class = PurchaseLineItemSerializer
+
+class TreasuryTransactionViewSet(BaseTenantViewSet):
+    model = TreasuryTransaction
+    serializer_class = TreasuryTransactionSerializer
+
+    def perform_create(self, serializer):
+        tenant = self.get_tenant()
+        instance = serializer.save(tenant=tenant)
+        # Update treasury balance automatically
+        treasury = instance.treasury
+        if instance.transaction_type in ['DEPOSIT', 'TRANSFER_IN']:
+            treasury.current_balance += instance.amount
+        else:
+            treasury.current_balance -= abs(instance.amount)
+        treasury.save()
+
+class SalesReturnViewSet(BaseTenantViewSet):
+    model = SalesReturn
+    serializer_class = SalesReturnSerializer
+
+class PriceListItemViewSet(BaseTenantViewSet):
+    model = PriceListItem
+    serializer_class = PriceListItemSerializer
+
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        from apps.pricing.models import PriceList, PriceHistory
+        from apps.branches.models import Branch
+
+        branch_id = request.data.get('branch_id')
+        branch = Branch.objects.filter(tenant=tenant, id=branch_id).first() if branch_id else None
+
+        price_list = PriceList.objects.filter(tenant=tenant, branch=branch, is_default=True).first()
+        if not price_list:
+            price_list = PriceList.objects.filter(tenant=tenant, is_default=True).first()
+        if not price_list:
+            price_list = PriceList.objects.create(tenant=tenant, branch=branch, name="القائمة الرئيسية", is_default=True)
+
+        product_id = request.data.get('product')
+        grade = request.data.get('grade')
+        price_per_kg = Decimal(str(request.data.get('price_per_kg', '0.00')))
+        price_per_piece = Decimal(str(request.data.get('price_per_piece', '0.00')))
+
+        query = {'tenant': tenant, 'price_list': price_list, 'grade': grade}
+        if product_id:
+            query['product_id'] = product_id
+        else:
+            query['product__isnull'] = True
+
+        old_item = PriceListItem.objects.filter(**query).first()
+        old_price = Decimal('0.00')
+        if old_item:
+            old_price = old_item.price_per_kg if price_per_kg > 0 else (old_item.price_per_piece or Decimal('0.00'))
+
+        item, created = PriceListItem.objects.update_or_create(
+            tenant=tenant,
+            price_list=price_list,
+            product_id=product_id if product_id else None,
+            grade=grade,
+            defaults={
+                'price_per_kg': price_per_kg,
+                'price_per_piece': price_per_piece,
+                'is_active': True
+            }
+        )
+
+        new_price = price_per_kg if price_per_kg > 0 else price_per_piece
+        pricing_type = 'KG' if price_per_kg > 0 else 'PIECE'
+
+        if created or old_price != new_price:
+            PriceHistory.objects.create(
+                tenant=tenant,
+                branch=branch,
+                product_id=product_id if product_id else None,
+                grade=grade,
+                pricing_type=pricing_type,
+                old_price=old_price,
+                new_price=new_price,
+                changed_by=request.user if request.user.is_authenticated else None,
+                notes='تحديث سعر فردي'
+            )
+
+        return Response({'status': 'success', 'new_price': str(new_price), 'old_price': str(old_price)})
+
+    serializer_class = PriceListItemSerializer
+
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        from apps.pricing.models import PriceList, PriceHistory
+        from apps.branches.models import Branch
+
+        branch_id = request.data.get('branch_id')
+        branch = Branch.objects.filter(tenant=tenant, id=branch_id).first() if branch_id else None
+
+        price_list = PriceList.objects.filter(tenant=tenant, branch=branch, is_default=True).first()
+        if not price_list:
+            price_list = PriceList.objects.filter(tenant=tenant, is_default=True).first()
+        if not price_list:
+            price_list = PriceList.objects.create(tenant=tenant, branch=branch, name="القائمة الرئيسية", is_default=True)
+
+        product_id = request.data.get('product')
+        grade = request.data.get('grade')
+        price_per_kg = Decimal(str(request.data.get('price_per_kg', '0.00')))
+        price_per_piece = Decimal(str(request.data.get('price_per_piece', '0.00')))
+
+        query = {'tenant': tenant, 'price_list': price_list, 'grade': grade}
+        if product_id:
+            query['product_id'] = product_id
+        else:
+            query['product__isnull'] = True
+
+        old_item = PriceListItem.objects.filter(**query).first()
+        old_price = Decimal('0.00')
+        if old_item:
+            old_price = old_item.price_per_kg if price_per_kg > 0 else (old_item.price_per_piece or Decimal('0.00'))
+
+        item, created = PriceListItem.objects.update_or_create(
+            tenant=tenant,
+            price_list=price_list,
+            product_id=product_id if product_id else None,
+            grade=grade,
+            defaults={
+                'price_per_kg': price_per_kg,
+                'price_per_piece': price_per_piece,
+                'is_active': True
+            }
+        )
+
+        new_price = price_per_kg if price_per_kg > 0 else price_per_piece
+        pricing_type = 'KG' if price_per_kg > 0 else 'PIECE'
+
+        if created or old_price != new_price:
+            PriceHistory.objects.create(
+                tenant=tenant,
+                branch=branch,
+                product_id=product_id if product_id else None,
+                grade=grade,
+                pricing_type=pricing_type,
+                old_price=old_price,
+                new_price=new_price,
+                changed_by=request.user if request.user.is_authenticated else None,
+                notes='تحديث سعر فردي'
+            )
+
+        return Response({'status': 'success', 'new_price': str(new_price), 'old_price': str(old_price)})
+
+    serializer_class = PriceListItemSerializer
+
+    def perform_create(self, serializer):
+        tenant = self.get_tenant()
+        instance = serializer.save(tenant=tenant)
+        # Record history log
+        PriceHistory.objects.create(
+            tenant=tenant,
+            product=instance.product,
+            grade=instance.grade,
+            pricing_type='KG' if instance.price_per_kg > 0 else 'PIECE',
+            old_price=Decimal('0.00'),
+            new_price=instance.price_per_kg or instance.price_per_piece or Decimal('0.00'),
+            changed_by=self.request.user if self.request.user.is_authenticated else None,
+            notes='تسجيل سعر جديد'
+        )
+
+class PriceHistoryViewSet(BaseTenantViewSet):
+    model = PriceHistory
+    serializer_class = PriceHistorySerializer
+
+class DiscountRuleViewSet(BaseTenantViewSet):
+    model = DiscountRule
+    serializer_class = DiscountRuleSerializer
+
+class RolePermissionViewSet(viewsets.ModelViewSet):
+    # This is a system-wide configuration, not tenant-isolated (or can be tenant-isolated if you prefer, but usually global for the app)
+    queryset = RolePermission.objects.all()
+    serializer_class = RolePermissionSerializer
+    
+    def get_permissions(self):
+        # Only ADMIN should edit permissions, but anyone can read to know their own limits
+        return super().get_permissions()
+
+
+
+class UserViewSet(BaseTenantViewSet):
+    model = User
+    serializer_class = UserManagementSerializer
+
+    def perform_create(self, serializer):
+        tenant = self.get_tenant()
+        password = self.request.data.get('password', '123456')
+        user_inst = serializer.save(tenant=tenant)
+        user_inst.set_password(password)
+        user_inst.save()
+
+    def perform_update(self, serializer):
+        user_inst = serializer.save()
+        password = self.request.data.get('password')
+        if password and password.trim():
+            user_inst.set_password(password)
+            user_inst.save()
+
+    @action(detail=True, methods=['post'])
+    def change_password(self, request, pk=None):
+        user_inst = self.get_object()
+        new_password = request.data.get('new_password')
+        if not new_password:
+            return Response({'detail': 'New password is required'}, status=status.HTTP_400_BAD_REQUEST)
+        user_inst.set_password(new_password)
+        user_inst.save()
+        return Response({'status': 'password updated successfully'})
+
+
+class TenantViewSet(viewsets.ModelViewSet):
+    queryset = Tenant.objects.all()
+    serializer_class = TenantSerializer
+
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
+    def public_info(self, request):
+        tenant = Tenant.objects.filter(is_active=True).first()
+        if not tenant:
+            return Response({'name': 'جاكي ستور', 'logo_base64': None})
+        return Response({
+            'id': str(tenant.id),
+            'name': tenant.name,
+            'logo_base64': tenant.logo_base64
+        })
+
+
+class TreasuryViewSet(BaseTenantViewSet):
+    model = Treasury
+    serializer_class = TreasurySerializer
+
+
+----- backend\apps\api\serializers.py -----
+from apps.users.models import User
+from apps.discounts.models import DiscountRule
+from rest_framework import serializers
+from apps.tenants.models import Tenant
+from apps.companies.models import Company
+from apps.branches.models import Branch
+from apps.warehouses.models import Warehouse
+from apps.products.models import Category, Product
+from apps.suppliers.models import Supplier
+from apps.purchasing.models import PurchaseInvoice, PurchaseLineItem
+from apps.raw_lots.models import RawLot
+from apps.sorting.models import SortingOrder, SortingOutputLine, SortingWasteLine
+from apps.costing.models import CostingConfiguration, CostingParameter
+from apps.inventory.models import StockItem, InventoryTransaction
+from apps.pricing.models import PriceList, PriceListItem, PriceHistory
+
+from apps.treasury.models import Treasury, TreasuryTransaction
+from apps.pos.models import POSTerminal
+from apps.shifts.models import Shift
+from apps.sales.models import SaleInvoice, SaleLineItem
+from apps.returns.models import SalesReturn, SalesReturnLineItem
+from apps.accounting.models import Account, JournalEntry
+
+class TenantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tenant
+        fields = '__all__'
+
+class CompanySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Company
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class BranchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Branch
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class WarehouseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Warehouse
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class CategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Category
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class ProductSerializer(serializers.ModelSerializer):
+    category_name = serializers.ReadOnlyField(source='category.name')
+    class Meta:
+        model = Product
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SupplierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Supplier
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'code', 'created_at', 'updated_at']
+        extra_kwargs = {'tenant': {'required': False, 'allow_null': True}}
+        validators = []
+
+    class Meta:
+        model = Supplier
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'code', 'created_at', 'updated_at']
+
+class PurchaseLineItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PurchaseLineItem
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class PurchaseInvoiceSerializer(serializers.ModelSerializer):
+    items = PurchaseLineItemSerializer(many=True, read_only=True)
+    supplier_name = serializers.ReadOnlyField(source='supplier.name')
+    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
+    class Meta:
+        model = PurchaseInvoice
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class RawLotSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.ReadOnlyField(source='supplier.name')
+    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
+    class Meta:
+        model = RawLot
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SortingOutputLineSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    class Meta:
+        model = SortingOutputLine
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SortingWasteLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SortingWasteLine
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SortingOrderSerializer(serializers.ModelSerializer):
+    output_lines = SortingOutputLineSerializer(many=True, read_only=True)
+    waste_lines = SortingWasteLineSerializer(many=True, read_only=True)
+    class Meta:
+        model = SortingOrder
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class StockItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
+    class Meta:
+        model = StockItem
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class InventoryTransactionSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
+    class Meta:
+        model = InventoryTransaction
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class PriceListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PriceList
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class PriceListItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    class Meta:
+        model = PriceListItem
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class POSTerminalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = POSTerminal
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class ShiftSerializer(serializers.ModelSerializer):
+    cashier_username = serializers.ReadOnlyField(source='cashier.username')
+    class Meta:
+        model = Shift
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SaleLineItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    class Meta:
+        model = SaleLineItem
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SaleInvoiceSerializer(serializers.ModelSerializer):
+    lines = SaleLineItemSerializer(many=True, read_only=True)
+    cashier_username = serializers.ReadOnlyField(source='cashier.username')
+    branch_name = serializers.ReadOnlyField(source='branch.name')
+    class Meta:
+        model = SaleInvoice
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class JournalEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = JournalEntry
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class TreasuryTransactionSerializer(serializers.ModelSerializer):
+    treasury_name = serializers.ReadOnlyField(source='treasury.name')
+    class Meta:
+        model = TreasuryTransaction
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SalesReturnLineItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    class Meta:
+        model = SalesReturnLineItem
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SalesReturnSerializer(serializers.ModelSerializer):
+    lines = SalesReturnLineItemSerializer(many=True, read_only=True)
+    cashier_username = serializers.ReadOnlyField(source='cashier.username')
+    original_invoice_number = serializers.ReadOnlyField(source='original_sale_invoice.invoice_number')
+    class Meta:
+        model = SalesReturn
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class PriceHistorySerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    changed_by_username = serializers.ReadOnlyField(source='changed_by.username')
+    grade_display = serializers.CharField(source='get_grade_display', read_only=True)
+    class Meta:
+        model = PriceHistory
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class DiscountRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DiscountRule
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class UserManagementSerializer(serializers.ModelSerializer):
+    tenant_name = serializers.ReadOnlyField(source='tenant.name')
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    password = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'role', 'role_display', 'tenant', 'tenant_name', 'assigned_branches', 'is_active', 'password', 'date_joined']
+        read_only_fields = ['id', 'tenant', 'date_joined']
+
+class TreasurySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Treasury
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+
+----- backend\apps\api\urls.py -----
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from apps.api.views import *
+
+router = DefaultRouter()
+router.register(r"companies", CompanyViewSet, basename="companies")
+router.register(r"branches", BranchViewSet, basename="branches")
+router.register(r"warehouses", WarehouseViewSet, basename="warehouses")
+router.register(r"categories", CategoryViewSet, basename="categories")
+router.register(r"products", ProductViewSet, basename="products")
+router.register(r"suppliers", SupplierViewSet, basename="suppliers")
+router.register(r"purchases", PurchaseInvoiceViewSet, basename="purchases")
+router.register(r"purchase-line-items", PurchaseLineItemViewSet, basename="purchase-line-items")
+router.register(r"raw-lots", RawLotViewSet, basename="raw-lots")
+router.register(r"sorting-orders", SortingOrderViewSet, basename="sorting-orders")
+router.register(r"stock-items", StockItemViewSet, basename="stock-items")
+router.register(r"inventory-ledger", InventoryTransactionViewSet, basename="inventory-ledger")
+router.register(r"price-lists", PriceListViewSet, basename="price-lists")
+router.register(r"price-list-items", PriceListItemViewSet, basename="price-list-items")
+router.register(r"price-history", PriceHistoryViewSet, basename="price-history")
+router.register(r"discount-rules", DiscountRuleViewSet, basename="discount-rules")
+router.register(r"role-permissions", RolePermissionViewSet, basename="role-permissions")
+router.register(r"users", UserViewSet, basename="users")
+router.register(r"tenants", TenantViewSet, basename="tenants")
+router.register(r"treasuries", TreasuryViewSet, basename="treasuries")
+router.register(r"pos-terminals", POSTerminalViewSet, basename="pos-terminals")
+router.register(r"shifts", ShiftViewSet, basename="shifts")
+router.register(r"sales", SaleInvoiceViewSet, basename="sales")
+router.register(r"journal-entries", JournalEntryViewSet, basename="journal-entries")
+router.register(r"treasury-transactions", TreasuryTransactionViewSet, basename="treasury-transactions")
+router.register(r"returns", SalesReturnViewSet, basename="returns")
+
+urlpatterns = [
+    path("", include(router.urls)),
+]
+
+
+----- backend\apps\products\models.py -----
+from decimal import Decimal
+from django.db import models
+from apps.tenants.models import TenantAwareModel
+
+class GradeChoice(models.TextChoices):
+    NEW_COLLECTION = 'NEW_COLLECTION', 'New Collection (كريمة / سوبر لوكس)'
+    MIDDLE = 'MIDDLE', 'Middle (وسط / درجة ثانية)'
+    CLEARANCE = 'CLEARANCE', 'Clearance (تصفيات / شعبي)'
+    WASTE = 'WASTE', 'Waste (تالف / هالك فرز)'
+
+
+class UnitOfMeasure(models.TextChoices):
+    PIECE = 'PIECE', 'قطعة / عدد'
+    KG = 'KG', 'كيلو / كجم'
+    BOTH = 'BOTH', 'قطعة + وزن'
+    BALE = 'BALE', 'باله'
+    DOZEN = 'DOZEN', 'دسته'
+    CARTON = 'CARTON', 'كرتونه'
+    SACK = 'SACK', 'شيكارة'
+    BARREL = 'BARREL', 'برميل'
+    BOX = 'BOX', 'علبة'
+    JAR = 'JAR', 'برطمان'
+    JERRYCAN = 'JERRYCAN', 'جركن'
+    LITER = 'LITER', 'لتر'
+    BAG = 'BAG', 'كيس'
+    TANK = 'TANK', 'تنك'
+    BUNDLE = 'BUNDLE', 'هبط'
+    SET = 'SET', 'مجموعة'
+    EMPTY = 'EMPTY', 'فوارغ'
+    CARD = 'CARD', 'كارت'
+    TOTE = 'TOTE', 'شنطة'
+    LIST = 'LIST', 'لسته'
+    OTHER = 'OTHER', 'غير محدد'
+
+
+class Category(TenantAwareModel):
+    name = models.CharField(max_length=255, verbose_name="Category Name")
+    code = models.CharField(max_length=50, blank=True, null=True, verbose_name="Category Code")
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "categories"
+        verbose_name_plural = "categories"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "name"],
+                name="unique_category_name_per_tenant"
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class Product(TenantAwareModel):
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.PROTECT,
+        related_name="products"
+    )
+    name = models.CharField(max_length=255, verbose_name="Product Name (اسم الصنف)")
+    code = models.CharField(max_length=100, blank=True, null=True, verbose_name="Internal SKU / Code (الكود)")
+    barcode = models.CharField(max_length=100, blank=True, null=True, db_index=True, verbose_name="Barcode / EAN (الباركود)")
+    wholesale_code = models.CharField(max_length=100, blank=True, null=True, verbose_name="Wholesale Code (كود الجملة)")
+    unit_of_measure = models.CharField(
+        max_length=30,
+        choices=UnitOfMeasure.choices,
+        default=UnitOfMeasure.PIECE,
+        verbose_name="Default Unit of Measure (وحدة القياس)"
+    )
+    purchase_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Purchase Price (سعر الشراء)"
+    )
+    retail_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Retail Price (سعر البيع القطاعي)"
+    )
+    wholesale_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Wholesale Price (سعر بيع الجملة)"
+    )
+    special_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Special Price (سعر بيع خاص)"
+    )
+    carton_price = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Carton Price (سعر الكرتونة / الشيكارة)"
+    )
+    carton_capacity = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        default=Decimal('1.000'),
+        verbose_name="Carton Capacity (سعة الكرتونة)"
+    )
+    min_stock_level = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        default=Decimal('0.000'),
+        verbose_name="Min Stock Alert (الحد الأدنى)"
+    )
+    package_type = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name="Package Type (نوع العبوة)"
+    )
+    opening_balance = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=Decimal('0.000'),
+        verbose_name="Opening Stock (رصيد أول المدة)"
+    )
+    attributes = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Product Attributes (Size, Color, Gender, Season)"
+    )
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "products"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "barcode"],
+                condition=models.Q(barcode__isnull=False),
+                name="unique_non_null_barcode_per_tenant"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.category.name})"
+
+
+----- backend\apps\purchasing\models.py -----
+from decimal import Decimal
+from django.db import models
+from apps.tenants.models import TenantAwareModel
+
+class InvoiceStatus(models.TextChoices):
+    DRAFT = 'DRAFT', 'Draft (مسودة)'
+    CONFIRMED = 'CONFIRMED', 'Confirmed (مؤكدة)'
+    RECEIVED = 'RECEIVED', 'Received / Goods In (مستلمة بالمخزن)'
+    CANCELLED = 'CANCELLED', 'Cancelled (ملغاة)'
+
+
+class PurchaseItemType(models.TextChoices):
+    RAW_BALE = 'RAW_BALE', 'Raw Bale / Lot (بالة خام للفرز)'
+    FINISHED_GOODS = 'FINISHED_GOODS', 'Direct Finished Goods (بضاعة جاهزة)'
+
+
+class PurchaseInvoice(TenantAwareModel):
+    supplier = models.ForeignKey(
+        'suppliers.Supplier',
+        on_delete=models.PROTECT,
+        related_name="purchase_invoices"
+    )
+    warehouse = models.ForeignKey(
+        'warehouses.Warehouse',
+        on_delete=models.PROTECT,
+        related_name="purchase_invoices",
+        help_text="Receiving Warehouse / Sorting Area"
+    )
+    invoice_number = models.CharField(max_length=100, db_index=True, verbose_name="Supplier Invoice #")
+    invoice_date = models.DateField()
+    status = models.CharField(
+        max_length=20,
+        choices=InvoiceStatus.choices,
+        default=InvoiceStatus.DRAFT,
+        db_index=True
+    )
+    subtotal = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    additional_costs = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Freight, customs, transport costs to be absorbed"
+    )
+    total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = "purchase_invoices"
+        ordering = ["-invoice_date", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tenant", "supplier", "invoice_number"],
+                name="unique_invoice_per_supplier_and_tenant"
+            )
+        ]
+
+    def __str__(self):
+        return f"INV #{self.invoice_number} - {self.supplier.name} ({self.get_status_display()})"
+
+    def recalculate_totals(self):
+        """ Recalculates subtotal and total cost based on line items with strict Decimal precision """
+        item_total = sum((item.total_cost for item in self.items.all()), Decimal('0.00'))
+        self.subtotal = Decimal(str(item_total))
+        add_costs = Decimal(str(self.additional_costs or '0.00'))
+        self.total_cost = self.subtotal + add_costs
+        self.save()
+
+
+class PurchaseLineItem(TenantAwareModel):
+    invoice = models.ForeignKey(
+        PurchaseInvoice,
+        on_delete=models.CASCADE,
+        related_name="items"
+    )
+    item_type = models.CharField(
+        max_length=20,
+        choices=PurchaseItemType.choices,
+        default=PurchaseItemType.RAW_BALE
+    )
+    description = models.CharField(max_length=255, verbose_name="Item / Bale Description")
+    category = models.ForeignKey(
+        'products.Category',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="purchase_items",
+        help_text="Target category of the bale (e.g. Mixed Summer, Jackets, etc.)"
+    )
+    weight_kg = models.DecimalField(
+        max_digits=12,
+        decimal_places=3,
+        default=Decimal('0.000'),
+        help_text="Total Weight in KG (دقة 3 خانات عشرية)"
+    )
+    quantity_pieces = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Estimated or counted piece count if applicable"
+    )
+    unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+
+    class Meta:
+        db_table = "purchase_line_items"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.description} ({self.weight_kg} KG) - {self.total_cost} EGP"
+
+    def save(self, *args, **kwargs):
+        if not self.total_cost and self.unit_cost and self.weight_kg:
+            self.total_cost = Decimal(str(self.unit_cost)) * Decimal(str(self.weight_kg))
+        super().save(*args, **kwargs)
+
+
+----- backend\apps\customers\models.py -----
+from decimal import Decimal
+from django.db import models
+from apps.tenants.models import TenantAwareModel
+
+class Customer(TenantAwareModel):
+    name = models.CharField(max_length=255, verbose_name="Customer Name")
+    phone = models.CharField(max_length=50, blank=True, null=True, db_index=True)
+    email = models.EmailField(blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    credit_balance = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Outstanding receivable balance (deferred sales)"
+    )
+    credit_limit = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Maximum allowed credit (0 = cash only)"
+    )
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = "customers"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.phone or 'No phone'})"
+
+
+----- backend\apps\payments\models.py -----
+from django.db import models
+from apps.tenants.models import TenantAwareModel
+
+class PaymentMethodType(models.TextChoices):
+    CASH = 'CASH', 'Cash (نقدي)'
+    ELECTRONIC = 'ELECTRONIC', 'Electronic / Card / Wallet (فيزا / محفظة إلكترونية)'
+    CREDIT = 'CREDIT', 'Credit / Deferred (آجل على العميل)'
+
+
+class PaymentMethod(TenantAwareModel):
+    name = models.CharField(max_length=255, verbose_name="Payment Method Name")
+    method_type = models.CharField(
+        max_length=20,
+        choices=PaymentMethodType.choices,
+        default=PaymentMethodType.CASH
+    )
+    treasury = models.ForeignKey(
+        'treasury.Treasury',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_methods",
+        help_text="Target treasury that receives funds from this method"
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "payment_methods"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_method_type_display()})"
+
+
+----- backend\config\urls.py -----
+from django.contrib import admin
+from django.urls import path, include
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView
+)
+
+urlpatterns = [
+    path("admin/", admin.site.urls),
+    
+    # OpenAPI 3.0 Documentation Endpoints
+    path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
+    path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path("api/redoc/", SpectacularRedocView.as_view(url_name="schema"), name="redoc"),
+    
+    # REST API Endpoints
+    path("api/v1/auth/", include("apps.users.urls")),
+    path("api/v1/", include("apps.api.urls")),
+]
+
