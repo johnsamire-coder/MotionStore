@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import axiosClient from '../api/axiosClient';
-import { User, Lock, Globe } from 'lucide-react';
+import { User, Lock, Globe, Store } from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -50,32 +50,33 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
-      {/* Background Ambient Glow */}
-      <div className="absolute w-[500px] h-[500px] bg-emerald-600/10 rounded-full blur-3xl pointer-events-none -top-40 -right-40" />
-      <div className="absolute w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none -bottom-20 -left-20" />
-
+    <div 
+      className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden font-sans bg-cover bg-center"
+      style={{
+        backgroundImage: `linear-gradient(to bottom, rgba(15, 23, 42, 0.75), rgba(15, 23, 42, 0.85)), url('https://images.unsplash.com/photo-1441986300917-64674bd600d8?q=80&w=1600&auto=format&fit=crop')`
+      }}
+      dir={lang === 'ar' ? 'rtl' : 'ltr'}
+    >
       {/* Language Switcher Button (Top Left/Right) */}
       <button
         onClick={toggleLanguage}
         type="button"
-        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-4 py-2 bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl text-xs font-bold transition shadow-lg cursor-pointer"
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-4 py-2 bg-white/90 hover:bg-white text-slate-800 border border-white/20 rounded-xl text-xs font-black transition shadow-xl cursor-pointer backdrop-blur-md"
       >
-        <Globe size={16} className="text-emerald-400" />
+        <Globe size={16} className="text-emerald-600" />
         <span>{lang === 'ar' ? 'English (EN)' : 'العربية (AR)'}</span>
       </button>
 
-      <div className="bg-slate-900/90 border border-slate-800 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6 z-10">
+      {/* Main Login Card - Lighter & Fresh Glassmorphic */}
+      <div className="bg-slate-900/85 border border-slate-700/60 backdrop-blur-2xl rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6 z-10">
         
-        {/* Header / Logo Section */}
+        {/* Header / Dynamic Logo Section */}
         <div className="text-center space-y-3">
-          <div className="w-20 h-20 rounded-2xl bg-slate-800/80 border border-slate-700 flex items-center justify-center mx-auto shadow-xl overflow-hidden p-1.5">
+          <div className="w-20 h-20 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center mx-auto shadow-inner overflow-hidden p-2 backdrop-blur-sm">
             {brand.logo_base64 ? (
               <img src={brand.logo_base64} alt="Company Logo" className="w-full h-full object-contain" />
             ) : (
-              <span className="text-3xl font-black text-emerald-400">
-                {brand.name.charAt(0)}
-              </span>
+              <Store size={36} className="text-emerald-400" />
             )}
           </div>
 
@@ -83,12 +84,12 @@ export default function LoginPage() {
             <h1 className="text-2xl font-black text-white tracking-wide">
               نظام إدارة - {brand.name}
             </h1>
-            <p className="text-xs text-slate-400 mt-1">أدخل بيانات الاعتماد للوصول لمساحة العمل</p>
+            <p className="text-xs text-slate-300 font-bold mt-1">أدخل بيانات الاعتماد للوصول لمساحة العمل</p>
           </div>
         </div>
 
         {error && (
-          <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl text-xs font-bold text-center">
+          <div className="bg-rose-500/20 border border-rose-500/40 text-rose-300 p-3 rounded-xl text-xs font-bold text-center">
             {error}
           </div>
         )}
@@ -96,34 +97,34 @@ export default function LoginPage() {
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">اسم المستخدم</label>
+            <label className="block text-xs font-bold text-slate-200 mb-1">اسم المستخدم</label>
             <div className="relative">
-              <User size={16} className="absolute right-3 top-3.5 text-slate-500" />
+              <User size={16} className="absolute right-3.5 top-3.5 text-slate-400" />
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pr-10 pl-4 py-3 text-sm font-bold text-white placeholder-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+                className="w-full bg-slate-950/80 border border-slate-700 rounded-xl pr-10 pl-4 py-3 text-sm font-black text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1">كلمة المرور</label>
+            <label className="block text-xs font-bold text-slate-200 mb-1">كلمة المرور</label>
             <div className="relative">
-              <Lock size={16} className="absolute right-3 top-3.5 text-slate-500" />
+              <Lock size={16} className="absolute right-3.5 top-3.5 text-slate-400" />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950/70 border border-slate-800 rounded-xl pr-10 pl-4 py-3 text-sm font-bold text-white placeholder-slate-600 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+                className="w-full bg-slate-950/80 border border-slate-700 rounded-xl pr-10 pl-4 py-3 text-sm font-black text-white placeholder-slate-500 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
                 required
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-xs text-slate-400">
+          <div className="flex items-center justify-between text-xs text-slate-300 font-bold">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -138,17 +139,17 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-slate-950 py-3.5 rounded-xl font-black text-sm shadow-lg shadow-emerald-600/20 transition cursor-pointer disabled:opacity-50 mt-2"
+            className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 py-3.5 rounded-xl font-black text-sm shadow-xl shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50 mt-2"
           >
             {loading ? 'جاري التحقق...' : 'دخول إلى مساحة العمل'}
           </button>
         </form>
 
-        <div className="pt-4 border-t border-slate-800/80 text-center">
-          <p className="text-[11px] text-slate-500 flex items-center justify-center gap-1.5 font-mono">
+        <div className="pt-4 border-t border-slate-800 text-center">
+          <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5 font-mono">
             <span>مشغل بواسطة محرك</span>
             <span className="font-bold text-white">Motion Store</span>
-            <span className="w-4 h-4 rounded bg-emerald-500/20 border border-emerald-500/40 text-[9px] font-black text-emerald-400 inline-flex items-center justify-center">M</span>
+            <span className="w-4 h-4 rounded bg-emerald-500/30 border border-emerald-400/50 text-[9px] font-black text-emerald-400 inline-flex items-center justify-center">M</span>
           </p>
         </div>
 
