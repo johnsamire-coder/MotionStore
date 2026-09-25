@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
@@ -6,6 +6,9 @@ import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import POSPage from './pages/POSPage';
+import ExpensesPage from './pages/ExpensesPage';
+import ProductCodingPage from './pages/ProductCodingPage';
+import ReturnsPage from './pages/ReturnsPage';
 import SortingPage from './pages/SortingPage';
 import InventoryPage from './pages/InventoryPage';
 import PurchasingPage from './pages/PurchasingPage';
@@ -30,6 +33,9 @@ export default function App() {
             <Route path="/" element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route index element={<DashboardPage />} />
               <Route path="pos" element={<POSPage />} />
+              <Route path="expenses" element={<ExpensesPage />} />
+              <Route path="coding" element={<ProductCodingPage />} />
+              <Route path="returns" element={<ReturnsPage />} />
               <Route path="sorting" element={<SortingPage />} />
               <Route path="inventory" element={<InventoryPage />} />
               <Route path="purchasing" element={<PurchasingPage />} />

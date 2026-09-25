@@ -1,29 +1,64 @@
-import React from 'react';
-import { Outlet, NavLink } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { 
-  ShoppingCart, 
-  Layers, 
-  Package, 
-  Truck, 
-  Clock, 
-  BarChart3, 
-  Vault, 
-  LogOut, 
+import {
+  ShoppingCart,
+  Layers,
+  Package,
+  Truck,
+  Clock,
+  BarChart3,
+  Vault,
+  LogOut,
   Store,
   FileSpreadsheet,
   Settings,
-  Globe
+  Globe,
+  Tag,
+  DollarSign,
+  RotateCcw
 } from 'lucide-react';
 
 export default function AppLayout() {
   const { user, tenant, logout } = useAuth();
   const { t, lang, isRTL, toggleLanguage } = useLanguage();
+  const navigate = useNavigate();
+
+  // Global F-Key Listener (F1 - F10)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'F1') { e.preventDefault(); navigate('/purchasing'); }
+      else if (e.key === 'F2') { e.preventDefault(); navigate('/pos'); }
+      else if (e.key === 'F3') { e.preventDefault(); navigate('/expenses'); }
+      else if (e.key === 'F4') { e.preventDefault(); navigate('/coding'); }
+      else if (e.key === 'F7') { e.preventDefault(); navigate('/treasury'); }
+      else if (e.key === 'F8') { e.preventDefault(); navigate('/inventory'); }
+      else if (e.key === 'F9') { e.preventDefault(); navigate('/shifts'); }
+      else if (e.key === 'F10') { e.preventDefault(); navigate('/returns'); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate]);
+
+  const ribbonItems = [
+    { name: 'مشتريات F1', to: '/purchasing', icon: Truck, bg: 'hover:bg-blue-700' },
+    { name: 'مبيعات F2', to: '/pos', icon: ShoppingCart, bg: 'hover:bg-emerald-700' },
+    { name: 'مصروفات F3', to: '/expenses', icon: DollarSign, bg: 'hover:bg-rose-700' },
+    { name: 'تكويد F4', to: '/coding', icon: Tag, bg: 'hover:bg-purple-700' },
+    { name: 'الخزينة F7', to: '/treasury', icon: Vault, bg: 'hover:bg-amber-700' },
+    { name: 'المخزون F8', to: '/inventory', icon: Package, bg: 'hover:bg-cyan-700' },
+    { name: 'الورديات F9', to: '/shifts', icon: Clock, bg: 'hover:bg-indigo-700' },
+    { name: 'مرتجعات F10', to: '/returns', icon: RotateCcw, bg: 'hover:bg-orange-700' },
+    { name: 'التقارير', to: '/reports', icon: BarChart3, bg: 'hover:bg-slate-700' },
+  ];
 
   const navigation = [
     { name: t('nav.dashboard'), to: '/', icon: BarChart3 },
-    { name: t('nav.pos'), to: '/pos', icon: ShoppingCart },
+    { name: 'شاشة المبيعات (F2)', to: '/pos', icon: ShoppingCart },
+    { name: 'شاشة المصروفات (F3)', to: '/expenses', icon: DollarSign },
+    { name: 'تكويد الأصناف (F4)', to: '/coding', icon: Tag },
+    { name: 'مرتجعات المبيعات (F10)', to: '/returns', icon: RotateCcw },
     { name: t('nav.sorting'), to: '/sorting', icon: Layers },
     { name: t('nav.inventory'), to: '/inventory', icon: Package },
     { name: t('nav.purchasing'), to: '/purchasing', icon: Truck },
@@ -35,18 +70,19 @@ export default function AppLayout() {
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans" dir={isRTL ? 'rtl' : 'ltr'}>
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col border-x border-slate-800">
-        <div className="h-16 flex items-center gap-3 px-6 bg-slate-950 border-b border-slate-800">
+      {/* Sidebar */}
+      <aside className="w-60 bg-slate-900 text-slate-300 flex flex-col border-x border-slate-800">
+        <div className="h-14 flex items-center gap-3 px-5 bg-slate-950 border-b border-slate-800">
           <div className="w-8 h-8 rounded bg-emerald-500 flex items-center justify-center text-slate-950 font-black text-base">
             {isRTL ? 'م' : 'M'}
           </div>
-          <div>
-            <h1 className="font-bold text-white tracking-wide text-sm">{t('nav.brand')}</h1>
-            <p className="text-[11px] text-slate-400 truncate max-w-[140px]">{tenant?.name || t('nav.brandSub')}</p>
+          <div className="truncate">
+            <h1 className="font-bold text-white tracking-wide text-xs">{tenant?.name || 'Motion Store'}</h1>
+            <p className="text-[10px] text-emerald-400 font-mono">v1.0.0 PRO</p>
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
             const Icon = item.icon;
             return (
@@ -54,33 +90,29 @@ export default function AppLayout() {
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs font-bold transition-colors ${
-                    isActive
-                      ? 'bg-emerald-600 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                  }`
+                  lex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors 
                 }
               >
-                <Icon size={16} />
+                <Icon size={15} />
                 <span>{item.name}</span>
               </NavLink>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between">
-          <div className="flex items-center gap-2.5 truncate">
-            <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 text-xs font-semibold">
+        <div className="p-3 border-t border-slate-800 bg-slate-950/50 flex items-center justify-between">
+          <div className="flex items-center gap-2 truncate">
+            <div className="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-slate-300 text-xs font-semibold">
               {user?.username?.substring(0, 2).toUpperCase()}
             </div>
             <div className="truncate">
               <p className="text-xs font-bold text-white truncate">{user?.username}</p>
-              <p className="text-[10px] text-emerald-400 font-mono tracking-wider">{user?.role}</p>
+              <p className="text-[10px] text-emerald-400 font-mono">{user?.role}</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={logout}
-            className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
+            className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded transition cursor-pointer"
             title={t('nav.logout')}
           >
             <LogOut size={16} />
@@ -88,31 +120,44 @@ export default function AppLayout() {
         </div>
       </aside>
 
+      {/* Main Content Area with Top Ribbon Bar */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <Store size={16} className="text-emerald-600" />
-            <span className="font-bold text-slate-800">{tenant?.name || t('nav.brand')}</span>
-            <span>/</span>
-            <span className="text-slate-600 text-xs">{t('nav.workspace')}</span>
+        {/* TOP RIBBON BAR (AL-RUMAIS STYLE) */}
+        <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center justify-between gap-2 overflow-x-auto shadow-md">
+          <div className="flex items-center gap-1.5 flex-nowrap">
+            {ribbonItems.map((btn) => {
+              const Icon = btn.icon;
+              return (
+                <NavLink
+                  key={btn.to}
+                  to={btn.to}
+                  className={({ isActive }) =>
+                    lex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black transition whitespace-nowrap 
+                  }
+                >
+                  <Icon size={14} />
+                  <span>{btn.name}</span>
+                </NavLink>
+              );
+            })}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <button
               onClick={toggleLanguage}
-              className="flex items-center gap-2 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400 rounded-xl text-xs font-black transition cursor-pointer shadow-md"
+              className="flex items-center gap-1.5 px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold border border-slate-700 transition"
             >
-              <Globe size={16} />
-              <span>{lang === 'ar' ? 'English (EN)' : 'العربية (AR)'}</span>
+              <Globe size={14} />
+              <span>{lang === 'ar' ? 'EN' : 'عربي'}</span>
             </button>
-
-            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
-              ● {t('nav.onlineEngine')}
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-800">
+              ● متصل
             </span>
           </div>
-        </header>
+        </div>
 
-        <div className="flex-1 overflow-y-auto p-8">
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-100">
           <Outlet />
         </div>
       </main>
