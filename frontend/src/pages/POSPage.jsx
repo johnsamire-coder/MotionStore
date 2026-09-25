@@ -201,6 +201,29 @@ export default function POSPage() {
     onQuickSearch: handleFocusSearch
   });
 
+  
+  // Quick Code Lookup: type code + Enter => add product to cart immediately
+  const handleCodeKeyDown = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+
+    const code = (searchCode || '').trim();
+    if (!code) return;
+
+    const found = products.find(p =>
+      (p.code && String(p.code).toLowerCase() === code.toLowerCase()) ||
+      (p.barcode && String(p.barcode).toLowerCase() === code.toLowerCase())
+    );
+
+    if (found) {
+      handleAddToCart(found);
+      setSearchCode('');
+      setMessage({ type: 'success', text: `تم إضافة: ${found.name}` });
+    } else {
+      setMessage({ type: 'error', text: `لا يوجد صنف بالكود: ${code}` });
+    }
+  };
+
   const filteredProducts = products.filter(p => {
     const matchCat = !selectedCategory || p.category === selectedCategory || p.category_id === selectedCategory;
     const matchName = !searchQuery || p.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -273,8 +296,10 @@ export default function POSPage() {
                 type="text" 
                 value={searchCode}
                 onChange={(e) => setSearchCode(e.target.value)}
-                placeholder="كود..."
-                className="w-full border border-slate-300 rounded p-1 text-xs"
+                onKeyDown={handleCodeKeyDown}
+                placeholder="اكتب الكود + Enter"
+                autoComplete="off"
+                className="w-full border border-slate-300 rounded p-1 text-xs font-mono font-bold bg-yellow-50 focus:bg-white focus:ring-2 focus:ring-amber-500"
               />
             </div>
             <div className="col-span-5">
