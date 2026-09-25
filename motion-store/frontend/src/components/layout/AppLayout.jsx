@@ -60,40 +60,42 @@ export default function AppLayout() {
     return allowedScreens.includes(path);
   };
 
-  // Global F-Key Listener
+  // Global Alt+Number Navigation Listener
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'F1' && isAllowed('/purchasing')) { e.preventDefault(); navigate('/purchasing'); }
-      else if (e.key === 'F2' && isAllowed('/pos')) { e.preventDefault(); navigate('/pos'); }
-      else if (e.key === 'F3' && isAllowed('/expenses')) { e.preventDefault(); navigate('/expenses'); }
-      else if (e.key === 'F4' && isAllowed('/coding')) { e.preventDefault(); navigate('/coding'); }
-      else if (e.key === 'F7' && isAllowed('/treasury')) { e.preventDefault(); navigate('/treasury'); }
-      else if (e.key === 'F8' && isAllowed('/inventory')) { e.preventDefault(); navigate('/inventory'); }
-      else if (e.key === 'F9' && isAllowed('/shifts')) { e.preventDefault(); navigate('/shifts'); }
-      else if (e.key === 'F10' && isAllowed('/returns')) { e.preventDefault(); navigate('/returns'); }
+      if (e.altKey) {
+        if (e.key === '1' && isAllowed('/purchasing')) { e.preventDefault(); navigate('/purchasing'); }
+        else if (e.key === '2' && isAllowed('/pos')) { e.preventDefault(); navigate('/pos'); }
+        else if (e.key === '3' && isAllowed('/expenses')) { e.preventDefault(); navigate('/expenses'); }
+        else if (e.key === '4' && isAllowed('/coding')) { e.preventDefault(); navigate('/coding'); }
+        else if (e.key === '7' && isAllowed('/treasury')) { e.preventDefault(); navigate('/treasury'); }
+        else if (e.key === '8' && isAllowed('/inventory')) { e.preventDefault(); navigate('/inventory'); }
+        else if (e.key === '9' && isAllowed('/shifts')) { e.preventDefault(); navigate('/shifts'); }
+        else if (e.key === '0' && isAllowed('/returns')) { e.preventDefault(); navigate('/returns'); }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigate, allowedScreens, user]);
 
   const allRibbonItems = [
-    { name: 'مشتريات F1', to: '/purchasing', icon: Truck },
-    { name: 'مبيعات F2', to: '/pos', icon: ShoppingCart },
-    { name: 'مصروفات F3', to: '/expenses', icon: DollarSign },
-    { name: 'تكويد F4', to: '/coding', icon: Tag },
-    { name: 'الخزينة F7', to: '/treasury', icon: Vault },
-    { name: 'المخزون F8', to: '/inventory', icon: Package },
-    { name: 'الورديات F9', to: '/shifts', icon: Clock },
-    { name: 'مرتجعات F10', to: '/returns', icon: RotateCcw },
+    { name: 'مشتريات Alt+1', to: '/purchasing', icon: Truck },
+    { name: 'مبيعات Alt+2', to: '/pos', icon: ShoppingCart },
+    { name: 'مصروفات Alt+3', to: '/expenses', icon: DollarSign },
+    { name: 'تكويد Alt+4', to: '/coding', icon: Tag },
+    { name: 'الخزينة Alt+7', to: '/treasury', icon: Vault },
+    { name: 'المخزون Alt+8', to: '/inventory', icon: Package },
+    { name: 'الورديات Alt+9', to: '/shifts', icon: Clock },
+    { name: 'مرتجعات Alt+0', to: '/returns', icon: RotateCcw },
     { name: 'التقارير', to: '/reports', icon: BarChart3 },
   ];
 
   const allNavigation = [
     { name: t('nav.dashboard'), to: '/', icon: BarChart3 },
-    { name: 'شاشة المبيعات (F2)', to: '/pos', icon: ShoppingCart },
-    { name: 'شاشة المصروفات (F3)', to: '/expenses', icon: DollarSign },
-    { name: 'تكويد الأصناف (F4)', to: '/coding', icon: Tag },
-    { name: 'مرتجعات المبيعات (F10)', to: '/returns', icon: RotateCcw },
+    { name: 'شاشة المبيعات (Alt+2)', to: '/pos', icon: ShoppingCart },
+    { name: 'شاشة المصروفات (Alt+3)', to: '/expenses', icon: DollarSign },
+    { name: 'تكويد الأصناف (Alt+4)', to: '/coding', icon: Tag },
+    { name: 'مرتجعات المبيعات (Alt+0)', to: '/returns', icon: RotateCcw },
     { name: t('nav.sorting'), to: '/sorting', icon: Layers },
     { name: t('nav.inventory'), to: '/inventory', icon: Package },
     { name: t('nav.purchasing'), to: '/purchasing', icon: Truck },
