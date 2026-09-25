@@ -56,15 +56,16 @@ export default function PricingPage() {
 
   const handleCreateCategory = async (e) => {
     e.preventDefault();
-    if (!newCatName.trim()) return;
+    if (!newCatName.trim()) {
+      setMessage({ type: 'error', text: 'يرجى كتابة اسم التصنيف أولاً' });
+      return;
+    }
 
     try {
       setLoading(true);
       const res = await axiosClient.post('/products/categories/', {
         name: newCatName.trim(),
-        code: `CAT-${Math.floor(1000 + Math.random()*9000)}`,
-        description: 'تصنيف مخصص',
-        is_active: true
+        code: `CAT-${Math.floor(1000 + Math.random()*9000)}`
       });
 
       const createdCat = res.data;
@@ -72,11 +73,14 @@ export default function PricingPage() {
       setProdCat(createdCat.id);
       setNewCatName('');
       setShowAddCat(false);
-      setMessage({ type: 'success', text: `تم إضافة تصنيف: ${createdCat.name || newCatName}` });
+      setMessage({ type: 'success', text: `تم إضافة تصنيف: ${createdCat.name || newCatName} بنجاح!` });
     } catch (err) {
-      console.error("Cat Error:", err.response?.data || err.message);
-      const errDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-      setMessage({ type: 'error', text: `تفاصيل الخطأ: ${errDetail}` });
+      console.error("Cat Error:", err);
+      // Clean Arabic Error Message
+      let cleanMsg = 'تعذر إضافة التصنيف، يرجى المحاولة بكلمة أخرى أو التأكد من الاسم.';
+      if (err.response?.data?.name) cleanMsg = 'اسم التصنيف موجود مسبقاً، اختر اسماً آخر.';
+      if (err.response?.data?.detail) cleanMsg = 'غير مسموح بالإجراء أو انتهت الجلسة.';
+      setMessage({ type: 'error', text: cleanMsg });
     } finally {
       setLoading(false);
     }
@@ -95,7 +99,6 @@ export default function PricingPage() {
 
     try {
       setLoading(true);
-      // 1. Create Product
       const prodPayload = {
         name: prodName,
         code: prodCode || `COD-${Math.floor(1000 + Math.random()*9000)}`,
@@ -108,7 +111,6 @@ export default function PricingPage() {
       const prodRes = await axiosClient.post('/products/', prodPayload);
       const createdProd = prodRes.data;
 
-      // 2. Setup Price List Items for all 3 Grades
       const priceListItems = [
         { grade: 'NEW', price_per_kg: parseFloat(prices.NEW_KG), price_per_piece: parseFloat(prices.NEW_PC) },
         { grade: 'MIDDLE', price_per_kg: parseFloat(prices.MIDDLE_KG), price_per_piece: parseFloat(prices.MIDDLE_PC) },
@@ -127,7 +129,6 @@ export default function PricingPage() {
 
       setMessage({ type: 'success', text: `تم تكويد وتسعير الصنف (${prodName}) بنجاح وإرساله للكاشير!` });
       
-      // Reset Form
       setProdName('');
       setProdCode('');
       fetchInitialData();
@@ -154,7 +155,7 @@ export default function PricingPage() {
         </div>
 
         {message.text && (
-          <div className={`px-4 py-2 rounded text-xs font-bold ${
+          <div className={`px-4 py-2 rounded text-xs font-bold shadow ${
             message.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
           }`}>
             {message.text}
