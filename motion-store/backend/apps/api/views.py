@@ -214,6 +214,130 @@ class PriceListItemViewSet(BaseTenantViewSet):
     model = PriceListItem
     serializer_class = PriceListItemSerializer
 
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        from apps.pricing.models import PriceList, PriceHistory
+        from apps.branches.models import Branch
+
+        branch_id = request.data.get('branch_id')
+        branch = Branch.objects.filter(tenant=tenant, id=branch_id).first() if branch_id else None
+
+        price_list = PriceList.objects.filter(tenant=tenant, branch=branch, is_default=True).first()
+        if not price_list:
+            price_list = PriceList.objects.filter(tenant=tenant, is_default=True).first()
+        if not price_list:
+            price_list = PriceList.objects.create(tenant=tenant, branch=branch, name="القائمة الرئيسية", is_default=True)
+
+        product_id = request.data.get('product')
+        grade = request.data.get('grade')
+        price_per_kg = Decimal(str(request.data.get('price_per_kg', '0.00')))
+        price_per_piece = Decimal(str(request.data.get('price_per_piece', '0.00')))
+
+        query = {'tenant': tenant, 'price_list': price_list, 'grade': grade}
+        if product_id:
+            query['product_id'] = product_id
+        else:
+            query['product__isnull'] = True
+
+        old_item = PriceListItem.objects.filter(**query).first()
+        old_price = Decimal('0.00')
+        if old_item:
+            old_price = old_item.price_per_kg if price_per_kg > 0 else (old_item.price_per_piece or Decimal('0.00'))
+
+        item, created = PriceListItem.objects.update_or_create(
+            tenant=tenant,
+            price_list=price_list,
+            product_id=product_id if product_id else None,
+            grade=grade,
+            defaults={
+                'price_per_kg': price_per_kg,
+                'price_per_piece': price_per_piece,
+                'is_active': True
+            }
+        )
+
+        new_price = price_per_kg if price_per_kg > 0 else price_per_piece
+        pricing_type = 'KG' if price_per_kg > 0 else 'PIECE'
+
+        if created or old_price != new_price:
+            PriceHistory.objects.create(
+                tenant=tenant,
+                branch=branch,
+                product_id=product_id if product_id else None,
+                grade=grade,
+                pricing_type=pricing_type,
+                old_price=old_price,
+                new_price=new_price,
+                changed_by=request.user if request.user.is_authenticated else None,
+                notes='تحديث سعر فردي'
+            )
+
+        return Response({'status': 'success', 'new_price': str(new_price), 'old_price': str(old_price)})
+
+    serializer_class = PriceListItemSerializer
+
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        from apps.pricing.models import PriceList, PriceHistory
+        from apps.branches.models import Branch
+
+        branch_id = request.data.get('branch_id')
+        branch = Branch.objects.filter(tenant=tenant, id=branch_id).first() if branch_id else None
+
+        price_list = PriceList.objects.filter(tenant=tenant, branch=branch, is_default=True).first()
+        if not price_list:
+            price_list = PriceList.objects.filter(tenant=tenant, is_default=True).first()
+        if not price_list:
+            price_list = PriceList.objects.create(tenant=tenant, branch=branch, name="القائمة الرئيسية", is_default=True)
+
+        product_id = request.data.get('product')
+        grade = request.data.get('grade')
+        price_per_kg = Decimal(str(request.data.get('price_per_kg', '0.00')))
+        price_per_piece = Decimal(str(request.data.get('price_per_piece', '0.00')))
+
+        query = {'tenant': tenant, 'price_list': price_list, 'grade': grade}
+        if product_id:
+            query['product_id'] = product_id
+        else:
+            query['product__isnull'] = True
+
+        old_item = PriceListItem.objects.filter(**query).first()
+        old_price = Decimal('0.00')
+        if old_item:
+            old_price = old_item.price_per_kg if price_per_kg > 0 else (old_item.price_per_piece or Decimal('0.00'))
+
+        item, created = PriceListItem.objects.update_or_create(
+            tenant=tenant,
+            price_list=price_list,
+            product_id=product_id if product_id else None,
+            grade=grade,
+            defaults={
+                'price_per_kg': price_per_kg,
+                'price_per_piece': price_per_piece,
+                'is_active': True
+            }
+        )
+
+        new_price = price_per_kg if price_per_kg > 0 else price_per_piece
+        pricing_type = 'KG' if price_per_kg > 0 else 'PIECE'
+
+        if created or old_price != new_price:
+            PriceHistory.objects.create(
+                tenant=tenant,
+                branch=branch,
+                product_id=product_id if product_id else None,
+                grade=grade,
+                pricing_type=pricing_type,
+                old_price=old_price,
+                new_price=new_price,
+                changed_by=request.user if request.user.is_authenticated else None,
+                notes='تحديث سعر فردي'
+            )
+
+        return Response({'status': 'success', 'new_price': str(new_price), 'old_price': str(old_price)})
+
+    serializer_class = PriceListItemSerializer
+
     def perform_create(self, serializer):
         tenant = self.get_tenant()
         instance = serializer.save(tenant=tenant)

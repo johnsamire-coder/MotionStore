@@ -11,8 +11,7 @@ class PriceList(TenantAwareModel):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="price_lists",
-        help_text="Optional: branch specific price list (null = global default)"
+        related_name="price_lists"
     )
     is_default = models.BooleanField(default=False, verbose_name="Is Global Default")
     is_active = models.BooleanField(default=True)
@@ -34,6 +33,8 @@ class PriceListItem(TenantAwareModel):
     product = models.ForeignKey(
         'products.Product',
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="price_list_items"
     )
     grade = models.CharField(
@@ -59,21 +60,25 @@ class PriceListItem(TenantAwareModel):
 
     class Meta:
         db_table = "price_list_items"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["price_list", "product", "grade"],
-                name="unique_product_grade_per_pricelist"
-            )
-        ]
 
     def __str__(self):
-        return f"{self.product.name} [{self.get_grade_display()}] -> {self.price_per_kg} EGP/KG"
+        prod_name = self.product.name if self.product else "عام (وزن)"
+        return f"{prod_name} [{self.get_grade_display()}] -> {self.price_per_kg} EGP/KG"
 
 
 class PriceHistory(TenantAwareModel):
+    branch = models.ForeignKey(
+        'branches.Branch',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="price_history"
+    )
     product = models.ForeignKey(
         'products.Product',
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name="price_history"
     )
     grade = models.CharField(
@@ -102,4 +107,5 @@ class PriceHistory(TenantAwareModel):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.product.name} [{self.grade}] ({self.pricing_type}): {self.old_price} -> {self.new_price} EGP"
+        prod_name = self.product.name if self.product else "عام"
+        return f"{prod_name} [{self.grade}] ({self.pricing_type}): {self.old_price} -> {self.new_price} EGP"
