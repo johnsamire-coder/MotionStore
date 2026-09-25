@@ -72,10 +72,11 @@ export default function PricingPage() {
       setProdCat(createdCat.id);
       setNewCatName('');
       setShowAddCat(false);
-      setMessage({ type: 'success', text: `تم إضافة تصنيف: ${createdCat.name}` });
+      setMessage({ type: 'success', text: `تم إضافة تصنيف: ${createdCat.name || newCatName}` });
     } catch (err) {
-      console.error(err);
-      setMessage({ type: 'error', text: 'حدث خطأ أثناء إضافة التصنيف' });
+      console.error("Cat Error:", err.response?.data || err.message);
+      const errDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+      setMessage({ type: 'error', text: `تفاصيل الخطأ: ${errDetail}` });
     } finally {
       setLoading(false);
     }
