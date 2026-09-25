@@ -1,3 +1,5 @@
+from apps.returns.models import SalesReturn
+from apps.treasury.models import TreasuryTransaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -188,3 +190,22 @@ class JournalEntryViewSet(BaseTenantViewSet):
 class PurchaseLineItemViewSet(BaseTenantViewSet):
     model = PurchaseLineItem
     serializer_class = PurchaseLineItemSerializer
+
+class TreasuryTransactionViewSet(BaseTenantViewSet):
+    model = TreasuryTransaction
+    serializer_class = TreasuryTransactionSerializer
+
+    def perform_create(self, serializer):
+        tenant = self.get_tenant()
+        instance = serializer.save(tenant=tenant)
+        # Update treasury balance automatically
+        treasury = instance.treasury
+        if instance.transaction_type in ['DEPOSIT', 'TRANSFER_IN']:
+            treasury.current_balance += instance.amount
+        else:
+            treasury.current_balance -= abs(instance.amount)
+        treasury.save()
+
+class SalesReturnViewSet(BaseTenantViewSet):
+    model = SalesReturn
+    serializer_class = SalesReturnSerializer

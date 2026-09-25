@@ -16,7 +16,7 @@ from apps.treasury.models import Treasury, TreasuryTransaction
 from apps.pos.models import POSTerminal
 from apps.shifts.models import Shift
 from apps.sales.models import SaleInvoice, SaleLineItem
-from apps.returns.models import SalesReturn
+from apps.returns.models import SalesReturn, SalesReturnLineItem
 from apps.accounting.models import Account, JournalEntry
 
 class TenantSerializer(serializers.ModelSerializer):
@@ -173,5 +173,28 @@ class SaleInvoiceSerializer(serializers.ModelSerializer):
 class JournalEntrySerializer(serializers.ModelSerializer):
     class Meta:
         model = JournalEntry
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class TreasuryTransactionSerializer(serializers.ModelSerializer):
+    treasury_name = serializers.ReadOnlyField(source='treasury.name')
+    class Meta:
+        model = TreasuryTransaction
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SalesReturnLineItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    class Meta:
+        model = SalesReturnLineItem
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class SalesReturnSerializer(serializers.ModelSerializer):
+    lines = SalesReturnLineItemSerializer(many=True, read_only=True)
+    cashier_username = serializers.ReadOnlyField(source='cashier.username')
+    original_invoice_number = serializers.ReadOnlyField(source='original_sale_invoice.invoice_number')
+    class Meta:
+        model = SalesReturn
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']

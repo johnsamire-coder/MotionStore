@@ -20,6 +20,8 @@ router.register(r"pos-terminals", POSTerminalViewSet, basename="pos-terminals")
 router.register(r"shifts", ShiftViewSet, basename="shifts")
 router.register(r"sales", SaleInvoiceViewSet, basename="sales")
 router.register(r"journal-entries", JournalEntryViewSet, basename="journal-entries")
+router.register(r"treasury-transactions", TreasuryTransactionViewSet, basename="treasury-transactions")
+router.register(r"returns", SalesReturnViewSet, basename="returns")
 
 urlpatterns = [
     path("", include(router.urls)),
