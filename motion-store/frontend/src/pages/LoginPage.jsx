@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import axiosClient from '../api/axiosClient';
-import { User, Lock } from 'lucide-react';
+import { User, Lock, Globe } from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { lang, toggleLanguage } = useLanguage();
   const navigate = useNavigate();
 
   const [username, setUsername] = useState('admin');
@@ -48,10 +50,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans" dir="rtl">
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden font-sans" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Background Ambient Glow */}
       <div className="absolute w-[500px] h-[500px] bg-emerald-600/10 rounded-full blur-3xl pointer-events-none -top-40 -right-40" />
       <div className="absolute w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-3xl pointer-events-none -bottom-20 -left-20" />
+
+      {/* Language Switcher Button (Top Left/Right) */}
+      <button
+        onClick={toggleLanguage}
+        type="button"
+        className="absolute top-6 left-6 z-20 flex items-center gap-2 px-4 py-2 bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-800 rounded-xl text-xs font-bold transition shadow-lg cursor-pointer"
+      >
+        <Globe size={16} className="text-emerald-400" />
+        <span>{lang === 'ar' ? 'English (EN)' : 'العربية (AR)'}</span>
+      </button>
 
       <div className="bg-slate-900/90 border border-slate-800 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full shadow-2xl space-y-6 z-10">
         
