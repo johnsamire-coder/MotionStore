@@ -57,7 +57,7 @@ export default function PricingPage() {
   };
 
   // Action 1: Save Product Coding ONLY
-    const handleSaveProductOnly = async (e) => {
+      const handleSaveProductOnly = async (e) => {
     e.preventDefault();
     if (!prodName.trim()) {
       setMessage({ type: 'error', text: 'يرجى كتابة اسم الصنف / الاستوك' });
@@ -66,15 +66,15 @@ export default function PricingPage() {
 
     try {
       setLoading(true);
-      // Clean Payload without extra/unsupported fields
+      const autoCode = prodCode.trim() || `COD-${Math.floor(1000 + Math.random()*9000)}`;
       const prodPayload = {
         name: prodName.trim(),
-        code: prodCode.trim() || `COD-${Math.floor(1000 + Math.random()*9000)}`,
+        code: autoCode,
+        barcode: autoCode,
         unit_of_measure: prodUom || 'PIECE',
         is_active: true
       };
 
-      // Only attach category if a valid string ID exists
       if (prodCat && prodCat !== "" && prodCat !== "null") {
         prodPayload.category = prodCat;
       }
@@ -82,7 +82,7 @@ export default function PricingPage() {
       const res = await axiosClient.post('/products/', prodPayload);
       const createdProd = res.data;
 
-      setMessage({ type: 'success', text: `تم تكويد الصنف (${createdProd.name}) بنجاح! يمكنك الآن الانطلاق لتسعيره.` });
+      setMessage({ type: 'success', text: `تم تكويد الصنف (${createdProd.name}) بنجاح! يمكنك الآن الانتقال لتسعيره.` });
       setProdName('');
       setProdCode('');
       fetchInitialData();
@@ -92,8 +92,8 @@ export default function PricingPage() {
       if (err.response?.data) {
         const d = err.response.data;
         if (d.code) errMsg = `الكود مستخدم مسبقاً: ${d.code[0]}`;
+        else if (d.barcode) errMsg = `الباركوود مستخدم مسبقاً: ${d.barcode[0]}`;
         else if (d.name) errMsg = `اسم الصنف غير صالح: ${d.name[0]}`;
-        else if (d.category) errMsg = `التصنيف المحدد غير صالح: ${d.category[0]}`;
         else errMsg = JSON.stringify(d);
       }
       setMessage({ type: 'error', text: `فشل الحفظ: ${errMsg}` });

@@ -1,4 +1,5 @@
-﻿from rest_framework import serializers
+﻿import uuid
+from rest_framework import serializers
 
 from apps.products.models import Category, Product
 from apps.suppliers.models import Supplier
@@ -19,10 +20,18 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ('tenant', 'id', 'created_at', 'updated_at')
 
 class ProductSerializer(serializers.ModelSerializer):
+    barcode = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all(), required=False, allow_null=True)
+
     class Meta:
         model = Product
         fields = '__all__'
         read_only_fields = ('tenant', 'id', 'created_at', 'updated_at')
+
+    def validate(self, attrs):
+        if not attrs.get('barcode'):
+            attrs['barcode'] = attrs.get('code') or f"BC-{uuid.uuid4().hex[:8].upper()}"
+        return attrs
 
 class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
