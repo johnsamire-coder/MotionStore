@@ -20,6 +20,7 @@ router.register(r"price-list-items", PriceListItemViewSet, basename="price-list-
 router.register(r"price-history", PriceHistoryViewSet, basename="price-history")
 router.register(r"discount-rules", DiscountRuleViewSet, basename="discount-rules")
 router.register(r"role-permissions", RolePermissionViewSet, basename="role-permissions")
+router.register(r"users", UserViewSet, basename="users")
 router.register(r"pos-terminals", POSTerminalViewSet, basename="pos-terminals")
 router.register(r"shifts", ShiftViewSet, basename="shifts")
 router.register(r"sales", SaleInvoiceViewSet, basename="sales")

@@ -372,3 +372,33 @@ class RolePermissionViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         # Only ADMIN should edit permissions, but anyone can read to know their own limits
         return super().get_permissions()
+
+
+
+class UserViewSet(BaseTenantViewSet):
+    model = User
+    serializer_class = UserManagementSerializer
+
+    def perform_create(self, serializer):
+        tenant = self.get_tenant()
+        password = self.request.data.get('password', '123456')
+        user_inst = serializer.save(tenant=tenant)
+        user_inst.set_password(password)
+        user_inst.save()
+
+    def perform_update(self, serializer):
+        user_inst = serializer.save()
+        password = self.request.data.get('password')
+        if password and password.trim():
+            user_inst.set_password(password)
+            user_inst.save()
+
+    @action(detail=True, methods=['post'])
+    def change_password(self, request, pk=None):
+        user_inst = self.get_object()
+        new_password = request.data.get('new_password')
+        if not new_password:
+            return Response({'detail': 'New password is required'}, status=status.HTTP_400_BAD_REQUEST)
+        user_inst.set_password(new_password)
+        user_inst.save()
+        return Response({'status': 'password updated successfully'})

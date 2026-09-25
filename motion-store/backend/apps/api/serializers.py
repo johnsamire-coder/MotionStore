@@ -1,3 +1,4 @@
+from apps.users.models import User
 from apps.discounts.models import DiscountRule
 from rest_framework import serializers
 from apps.tenants.models import Tenant
@@ -214,3 +215,13 @@ class DiscountRuleSerializer(serializers.ModelSerializer):
         model = DiscountRule
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class UserManagementSerializer(serializers.ModelSerializer):
+    tenant_name = serializers.ReadOnlyField(source='tenant.name')
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    password = serializers.CharField(write_only=True, required=False)
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'email', 'role', 'role_display', 'tenant', 'tenant_name', 'assigned_branches', 'is_active', 'password', 'date_joined']
+        read_only_fields = ['id', 'tenant', 'date_joined']
