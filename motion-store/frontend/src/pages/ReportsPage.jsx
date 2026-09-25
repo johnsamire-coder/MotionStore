@@ -1,300 +1,465 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
-import { 
-  BarChart3, 
-  TrendingUp, 
-  DollarSign, 
-  Layers, 
-  Package, 
-  Download, 
-  RotateCcw,
-  ArrowUpRight,
-  PieChart,
-  FileSpreadsheet
-} from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { FileSpreadsheet, Printer, Search, Calendar, Package, TrendingUp, DollarSign, Scale, Layers, Trash2, ArrowUpRight, ArrowDownLeft, Store, RefreshCw } from 'lucide-react';
 
 export default function ReportsPage() {
-  const { t, isRTL } = useLanguage();
+  const { t } = useLanguage();
+  const { tenant } = useAuth();
 
-  const [loading, setLoading] = useState(true);
-  const [salesSummary, setSalesSummary] = useState(null);
-  const [incomeStatement, setIncomeStatement] = useState(null);
-  const [baleReports, setBaleReports] = useState([]);
-  const [inventorySummary, setInventorySummary] = useState(null);
+  // Active Report Category
+  const [activeReport, setActiveReport] = useState('ITEM_LEDGER'); // ITEM_LEDGER | SALES_DAILY | CASHIER_PERF | GRADE_SALES | PROFIT_LOSS | EXPENSES | WASTE
+
+  // Filter States
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Data States
+  const [products, setProducts] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [inventoryLedger, setInventoryLedger] = useState([]);
+  const [salesInvoices, setSalesInvoices] = useState([]);
+  const [treasuryTransactions, setTreasuryTransactions] = useState([]);
+  const [sortingOrders, setSortingOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    loadReports();
+    loadBaseData();
   }, []);
 
-  const loadReports = async () => {
+  const loadBaseData = async () => {
     setLoading(true);
     try {
-      const salesRes = await axiosClient.get('/sales/');
-      const invoices = salesRes.data.results || salesRes.data || [];
-      
-      const totalRev = invoices.reduce((acc, i) => acc + parseFloat(i.total_amount || 0), 0);
-      const totalCogs = invoices.reduce((acc, i) => acc + parseFloat(i.total_cogs || 0), 0);
-      const totalProfit = invoices.reduce((acc, i) => acc + parseFloat(i.gross_profit || 0), 0);
-      const marginPct = totalRev > 0 ? (totalProfit / totalRev) * 100 : 0;
+      const [pRes, legRes, sRes, tRes, sortRes] = await Promise.all([
+        axiosClient.get('/products/'),
+        axiosClient.get('/inventory-ledger/'),
+        axiosClient.get('/sales/'),
+        axiosClient.get('/treasury-transactions/'),
+        axiosClient.get('/sorting-orders/')
+      ]);
 
-      setSalesSummary({
-        total_invoices: invoices.length,
-        total_revenue: totalRev,
-        total_cogs: totalCogs,
-        gross_profit: totalProfit,
-        gross_margin_percentage: marginPct.toFixed(2)
-      });
+      const pList = pRes.data.results || pRes.data || [];
+      const legList = legRes.data.results || legRes.data || [];
+      const sList = sRes.data.results || sRes.data || [];
+      const tList = tRes.data.results || tRes.data || [];
+      const sortList = sortRes.data.results || sortRes.data || [];
 
-      const wasteRes = await axiosClient.get('/waste-records/');
-      const wastes = wasteRes.data.results || wasteRes.data || [];
-      const totalWasteLoss = wastes.reduce((acc, w) => acc + parseFloat(w.allocated_cost || 0), 0);
-      const netOperating = totalProfit - totalWasteLoss;
+      setProducts(pList);
+      setInventoryLedger(legList);
+      setSalesInvoices(sList);
+      setTreasuryTransactions(tList);
+      setSortingOrders(sortList);
 
-      setIncomeStatement({
-        revenue: totalRev,
-        cogs: totalCogs,
-        gross_profit: totalProfit,
-        waste_loss: totalWasteLoss,
-        net_operating_profit: netOperating
-      });
-
-      const lotsRes = await axiosClient.get('/raw-lots/');
-      const lots = lotsRes.data.results || lotsRes.data || [];
-
-      const mappedBales = lots.map(l => ({
-        id: l.id,
-        lot_code: l.lot_code,
-        supplier: l.supplier_name || 'Global Exporters',
-        purchase_cost: parseFloat(l.purchase_cost || 0),
-        weight_kg: parseFloat(l.original_weight_kg || 0),
-        sold_revenue: totalRev,
-        realized_cogs: totalCogs,
-        realized_profit: totalProfit,
-        remaining_stock_kg: 55.000,
-        remaining_stock_val: 6235.31
-      }));
-      setBaleReports(mappedBales);
-
-      const stockRes = await axiosClient.get('/stock-items/');
-      const stocks = stockRes.data.results || stockRes.data || [];
-
-      const byGrade = {
-        NEW_COLLECTION: { wt: 0, val: 0 },
-        MIDDLE: { wt: 0, val: 0 },
-        CLEARANCE: { wt: 0, val: 0 }
-      };
-
-      stocks.forEach(s => {
-        if (byGrade[s.grade]) {
-          byGrade[s.grade].wt += parseFloat(s.total_weight_kg || 0);
-          byGrade[s.grade].val += parseFloat(s.current_total_value || 0);
-        }
-      });
-
-      setInventorySummary({
-        total_weight: stocks.reduce((acc, s) => acc + parseFloat(s.total_weight_kg || 0), 0),
-        total_valuation: stocks.reduce((acc, s) => acc + parseFloat(s.current_total_value || 0), 0),
-        by_grade: byGrade
-      });
-
+      if (pList.length > 0 && !selectedProduct) {
+        setSelectedProduct(pList[0]);
+      }
     } catch (err) {
-      console.error("Failed to load reports:", err);
+      console.error('Data fetch error:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
+  // Filtered Item Ledger for Selected Product & Date Range
+  const filteredItemLedger = inventoryLedger.filter(tx => {
+    const txDate = tx.created_at ? tx.created_at.split('T')[0] : '';
+    const matchesProduct = selectedProduct ? (tx.product === selectedProduct.id || tx.product_name === selectedProduct.name) : true;
+    const matchesDate = txDate >= startDate && txDate <= endDate;
+    return matchesProduct && matchesDate;
+  });
+
+  // Ledger Summary Aggregations
+  const totalInKg = filteredItemLedger.reduce((sum, tx) => sum + (parseFloat(tx.weight_change_kg) > 0 ? parseFloat(tx.weight_change_kg) : 0), 0);
+  const totalOutKg = filteredItemLedger.reduce((sum, tx) => sum + (parseFloat(tx.weight_change_kg) < 0 ? Math.abs(parseFloat(tx.weight_change_kg)) : 0), 0);
+  const totalInPcs = filteredItemLedger.reduce((sum, tx) => sum + (parseInt(tx.quantity_change_pieces) > 0 ? parseInt(tx.quantity_change_pieces) : 0), 0);
+  const totalOutPcs = filteredItemLedger.reduce((sum, tx) => sum + (parseInt(tx.quantity_change_pieces) < 0 ? Math.abs(parseInt(tx.quantity_change_pieces)) : 0), 0);
+
+  // Sales Reports Aggregations
+  const filteredSales = salesInvoices.filter(s => {
+    const sDate = s.invoice_date_time ? s.invoice_date_time.split('T')[0] : '';
+    return sDate >= startDate && sDate <= endDate;
+  });
+
+  const totalSalesAmount = filteredSales.reduce((sum, s) => sum + parseFloat(s.total_amount || 0), 0);
+  const totalCOGS = filteredSales.reduce((sum, s) => sum + parseFloat(s.total_cogs || 0), 0);
+  const totalGrossProfit = totalSalesAmount - totalCOGS;
+
+  // Expenses Aggregations
+  const filteredExpenses = treasuryTransactions.filter(t => {
+    const tDate = t.created_at ? t.created_at.split('T')[0] : '';
+    return t.transaction_type === 'WITHDRAWAL' && tDate >= startDate && tDate <= endDate;
+  });
+
+  const totalExpensesAmount = filteredExpenses.reduce((sum, e) => sum + Math.abs(parseFloat(e.amount || 0)), 0);
+  const netProfit = totalGrossProfit - totalExpensesAmount;
+
+  // Export CSV Excel
+  const exportExcel = () => {
+    let headers = [];
+    let rows = [];
+
+    if (activeReport === 'ITEM_LEDGER') {
+      headers = ['التاريخ والوقت', 'نوع الحركة', 'التغيير كجم', 'التغيير قطعة', 'الرصيد الجاري', 'المستند / البيان'];
+      rows = filteredItemLedger.map(tx => [
+        new Date(tx.created_at).toLocaleString('ar-EG'),
+        tx.transaction_type,
+        tx.weight_change_kg,
+        tx.quantity_change_pieces,
+        tx.running_balance_kg,
+        `"${tx.notes || tx.source_document_id || ''}"`
+      ]);
+    } else {
+      headers = ['التاريخ والوقت', 'رقم الفاتورة / المستند', 'الكاشير / المستخدم', 'إجمالي المبلغ', 'التكلفة COGS', 'مجمل الربح'];
+      rows = filteredSales.map(s => [
+        new Date(s.invoice_date_time).toLocaleString('ar-EG'),
+        s.invoice_number,
+        s.cashier_username || 'كاشير',
+        s.total_amount,
+        s.total_cogs,
+        s.gross_profit
+      ]);
+    }
+
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `تقرير_${activeReport}_${startDate}_إلى_${endDate}.csv`;
+    link.click();
+  };
 
   return (
-    <div className="space-y-8" dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 font-sans print:m-0 print:p-0">
+      
+      {/* PDF Official Print Header */}
+      <div className="hidden print:block text-center border-b-2 border-slate-900 pb-4 mb-6">
+        <div className="flex justify-between items-center px-4">
+          <div className="text-right">
+            <h1 className="text-2xl font-black text-slate-900">{tenant?.name || 'شركة Motion Store لتجارة البالات'}</h1>
+            <p className="text-xs text-slate-600 font-bold">تقرير تفصيلي موثق من المحرك المحاسبي المالي</p>
+          </div>
+          <div className="text-left text-xs font-mono text-slate-500">
+            <p>تاريخ الطباعة: {new Date().toLocaleDateString('ar-EG')}</p>
+            <p>الفترة المالية: من {startDate} إلى {endDate}</p>
+          </div>
+        </div>
+        <h2 className="text-lg font-black text-slate-800 mt-4 bg-slate-100 py-1">
+          {activeReport === 'ITEM_LEDGER' ? `كشف حركة صنف تفصيلي [${selectedProduct?.name || 'جميع الأصناف'}]` : 'تقرير الأداء المالي والأرباح والخسائر'}
+        </h2>
+      </div>
+
+      {/* Screen Header & Top Filters */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('reports.title')}</h2>
-          <p className="text-sm text-slate-500">{t('reports.subtitle')}</p>
+          <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
+            <FileSpreadsheet className="text-emerald-600" size={22} />
+            مطبخ التقارير التنفيذية الشاملة
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">كشف حركة الأصناف، يوميات المبيعات، أداء الكاشيرية، وقائمة الأرباح والخسائر P&L</p>
         </div>
 
         <div className="flex items-center gap-3">
-          <button onClick={loadReports} className="p-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 rounded-xl transition shadow-xs cursor-pointer">
-            <RotateCcw size={16} />
+          <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-300 text-xs font-bold">
+            <span>من:</span>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-white border rounded p-1" />
+            <span>إلى:</span>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-white border rounded p-1" />
+          </div>
+
+          <button
+            type="button"
+            onClick={exportExcel}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-xs font-black flex items-center gap-1.5 shadow transition cursor-pointer"
+          >
+            <FileSpreadsheet size={15} />
+            <span>إكسيل</span>
           </button>
-          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer">
-            <Download size={14} /> {t('common.print')} التقارير
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-lg text-xs font-black flex items-center gap-1.5 shadow transition cursor-pointer"
+          >
+            <Printer size={15} />
+            <span>طباعة PDF</span>
           </button>
         </div>
       </div>
 
-      {/* Financial KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('reports.revenue')}</span>
-          <div className="text-2xl font-black text-slate-900">
-            {salesSummary?.total_revenue.toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span>
-          </div>
-          <p className="text-xs text-emerald-600 font-semibold mt-2 flex items-center gap-1">
-            <ArrowUpRight size={13} /> ({salesSummary?.total_invoices}) فواتير مبيعات
-          </p>
-        </div>
+      {/* Report Categories Bar */}
+      <div className="flex bg-white p-2 rounded-xl border border-slate-200 shadow-sm overflow-x-auto gap-2 print:hidden">
+        <button
+          type="button"
+          onClick={() => setActiveReport('ITEM_LEDGER')}
+          className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            activeReport === 'ITEM_LEDGER' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <Package size={15} />
+          <span>⭐ 1. حركة صنف (Item Ledger)</span>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('reports.cogs')}</span>
-          <div className="text-2xl font-black text-rose-600">
-            {salesSummary?.total_cogs.toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span>
-          </div>
-          <p className="text-xs text-slate-500 mt-2">
-            التكلفة الموزعة من الدفاتر
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveReport('SALES_DAILY')}
+          className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            activeReport === 'SALES_DAILY' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <TrendingUp size={15} />
+          <span>2. يومية المبيعات</span>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('reports.grossProfit')}</span>
-          <div className="text-2xl font-black text-emerald-600">
-            {salesSummary?.gross_profit.toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span>
-          </div>
-          <p className="text-xs text-emerald-700 mt-2 font-bold">
-            هامش الربح: {salesSummary?.gross_margin_percentage}٪
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveReport('PROFIT_LOSS')}
+          className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            activeReport === 'PROFIT_LOSS' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <DollarSign size={15} />
+          <span>3. قائمة الدخل (P&L)</span>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('reports.netProfit')}</span>
-          <div className="text-2xl font-black text-indigo-600">
-            {incomeStatement?.net_operating_profit.toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span>
-          </div>
-          <p className="text-xs text-indigo-700 mt-2 font-medium">
-            بعد خصم خسائر الهالك
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => setActiveReport('EXPENSES')}
+          className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+            activeReport === 'EXPENSES' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-100'
+          }`}
+        >
+          <DollarSign size={15} />
+          <span>4. المصروفات والمنصرف</span>
+        </button>
       </div>
 
-      {/* Income Statement Table & Stock Breakdown Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Income Statement */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-              <FileSpreadsheet size={18} className="text-emerald-600" /> {t('reports.pnlTitle')}
+      {/* ==================== 1. ITEM LEDGER REPORT (⭐) ==================== */}
+      {activeReport === 'ITEM_LEDGER' && (
+        <div className="space-y-6">
+          {/* Product Selector */}
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center justify-between gap-4 print:hidden">
+            <div className="flex items-center gap-3 w-full max-w-xl">
+              <label className="text-xs font-black text-slate-700 whitespace-nowrap">اختر الصنف المراد عرض حركة حسابه:</label>
+              <select
+                value={selectedProduct?.id || ''}
+                onChange={e => {
+                  const p = products.find(prod => prod.id === e.target.value);
+                  setSelectedProduct(p);
+                }}
+                className="w-full bg-slate-50 border border-emerald-300 rounded-xl p-2.5 text-xs font-black text-slate-900 focus:ring-2 focus:ring-emerald-500"
+              >
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.category_name || 'عام'})</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="button"
+              onClick={loadBaseData}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <RefreshCw size={14} />
+              <span>تحديث الكشف</span>
+            </button>
+          </div>
+
+          {/* Ledger Stat Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200 text-right">
+              <span className="text-[11px] text-emerald-700 font-bold block">إجمالي الوارد (دخول مخزني)</span>
+              <span className="text-xl font-black text-emerald-900">+{totalInKg.toFixed(3)} كجم</span>
+              <span className="text-xs text-emerald-600 block mt-0.5">({totalInPcs} قطعة)</span>
+            </div>
+
+            <div className="bg-rose-50 p-4 rounded-xl border border-rose-200 text-right">
+              <span className="text-[11px] text-rose-700 font-bold block">إجمالي المنصرف (مبيعات)</span>
+              <span className="text-xl font-black text-rose-900">-{totalOutKg.toFixed(3)} كجم</span>
+              <span className="text-xs text-rose-600 block mt-0.5">({totalOutPcs} قطعة)</span>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-200 text-right">
+              <span className="text-[11px] text-blue-700 font-bold block">صافي الحركة في الفترة</span>
+              <span className="text-xl font-black text-blue-900">{(totalInKg - totalOutKg).toFixed(3)} كجم</span>
+            </div>
+
+            <div className="bg-slate-900 text-white p-4 rounded-xl shadow-md text-right">
+              <span className="text-[11px] text-slate-400 font-bold block">الرصيد الحالي بالمخزن</span>
+              <span className="text-2xl font-black text-emerald-400">
+                {filteredItemLedger.length > 0 ? parseFloat(filteredItemLedger[0].running_balance_kg || 0).toFixed(3) : '0.000'} كجم
+              </span>
+            </div>
+          </div>
+
+          {/* Ledger Movements Table */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h3 className="text-xs font-black text-slate-800 border-b pb-3 mb-4">
+              سجل دفتر أستاذ حركات الصنف: [{selectedProduct?.name || '—'}]
             </h3>
-            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">قيود قياسية موثقة</span>
-          </div>
 
-          <div className="space-y-3 text-xs">
-            <div className="flex justify-between items-center p-3 bg-slate-50 rounded-xl">
-              <span className="font-bold text-slate-800 text-sm">{t('reports.revenue')}</span>
-              <span className="font-extrabold text-slate-900 text-sm font-mono">{incomeStatement?.revenue.toFixed(2)} {t('common.currency')}</span>
-            </div>
-
-            <div className="flex justify-between items-center px-4 py-2 text-rose-700">
-              <span className="font-medium">{t('reports.cogs')}</span>
-              <span className="font-bold font-mono">-{incomeStatement?.cogs.toFixed(2)} {t('common.currency')}</span>
-            </div>
-
-            <div className="flex justify-between items-center p-3 bg-emerald-50/50 border border-emerald-100 rounded-xl">
-              <span className="font-black text-emerald-900 text-sm">{t('reports.grossProfit')}</span>
-              <span className="font-black text-emerald-700 text-sm font-mono">{incomeStatement?.gross_profit.toFixed(2)} {t('common.currency')}</span>
-            </div>
-
-            <div className="flex justify-between items-center px-4 py-2 text-rose-700">
-              <span className="font-medium">{t('reports.wasteLoss')}</span>
-              <span className="font-bold font-mono">-{incomeStatement?.waste_loss.toFixed(2)} {t('common.currency')}</span>
-            </div>
-
-            <div className="flex justify-between items-center p-4 bg-slate-900 text-white rounded-xl">
-              <span className="font-black text-base tracking-wide">{t('reports.netProfit')}</span>
-              <span className="font-black text-lg text-emerald-400 font-mono">{incomeStatement?.net_operating_profit.toFixed(2)} {t('common.currency')}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Grade-based Stock Valuation Breakdown */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-6 space-y-6">
-          <div className="border-b border-slate-100 pb-3 flex items-center gap-2">
-            <PieChart size={18} className="text-emerald-600" />
-            <h3 className="font-bold text-slate-900 text-sm">تقييم المخزون المتاح</h3>
-          </div>
-
-          <div className="space-y-4 text-xs">
-            <div className="p-3.5 bg-indigo-50/40 border border-indigo-100 rounded-xl space-y-1">
-              <div className="flex justify-between font-bold text-indigo-900">
-                <span>✨ كريمة / سوبر لوكس</span>
-                <span>{inventorySummary?.by_grade.NEW_COLLECTION.val.toFixed(2)} {t('common.currency')}</span>
-              </div>
-              <p className="text-[11px] text-indigo-700">{inventorySummary?.by_grade.NEW_COLLECTION.wt.toFixed(3)} {t('common.kg')} متاح</p>
-            </div>
-
-            <div className="p-3.5 bg-blue-50/40 border border-blue-100 rounded-xl space-y-1">
-              <div className="flex justify-between font-bold text-blue-900">
-                <span>📦 وسط / درجة ثانية</span>
-                <span>{inventorySummary?.by_grade.MIDDLE.val.toFixed(2)} {t('common.currency')}</span>
-              </div>
-              <p className="text-[11px] text-blue-700">{inventorySummary?.by_grade.MIDDLE.wt.toFixed(3)} {t('common.kg')} متاح</p>
-            </div>
-
-            <div className="p-3.5 bg-amber-50/40 border border-amber-100 rounded-xl space-y-1">
-              <div className="flex justify-between font-bold text-amber-900">
-                <span>🏷️ تصفيات / شعبي</span>
-                <span>{inventorySummary?.by_grade.CLEARANCE.val.toFixed(2)} {t('common.currency')}</span>
-              </div>
-              <p className="text-[11px] text-amber-700">{inventorySummary?.by_grade.CLEARANCE.wt.toFixed(3)} {t('common.kg')} متاح</p>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex justify-between items-baseline font-bold text-slate-900">
-              <span>إجمالي قيمة المخزون:</span>
-              <span className="text-base text-emerald-700 font-black">{inventorySummary?.total_valuation.toFixed(2)} {t('common.currency')}</span>
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-100 text-slate-700 font-black border-y">
+                  <tr>
+                    <th className="p-3">التاريخ والوقت</th>
+                    <th className="p-3">نوع الحركة</th>
+                    <th className="p-3 text-center">التغيير بالوزن (كجم)</th>
+                    <th className="p-3 text-center">التغيير بالقطع</th>
+                    <th className="p-3 text-left">الرصيد الجاري (كجم)</th>
+                    <th className="p-3">المستند / البيان</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium">
+                  {filteredItemLedger.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-10 text-slate-400">لا توجد حركات مخزنية مسجلة لهذا الصنف في هذه الفترة</td>
+                    </tr>
+                  ) : (
+                    filteredItemLedger.map(tx => {
+                      const isPositive = parseFloat(tx.weight_change_kg) > 0;
+                      return (
+                        <tr key={tx.id} className="hover:bg-slate-50 transition">
+                          <td className="p-3 font-mono text-slate-500">{new Date(tx.created_at).toLocaleString('ar-EG')}</td>
+                          <td className="p-3 font-bold">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                              isPositive ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {isPositive ? <ArrowDownLeft size={12}/> : <ArrowUpRight size={12}/>}
+                              {tx.transaction_type === 'SORTING_INPUT' ? 'وارد فرز بالة' : (tx.transaction_type === 'SALE' ? 'صرف مبيعات' : tx.transaction_type)}
+                            </span>
+                          </td>
+                          <td className={`p-3 text-center font-black ${isPositive ? 'text-emerald-700' : 'text-rose-600'}`}>
+                            {isPositive ? `+${parseFloat(tx.weight_change_kg).toFixed(3)}` : parseFloat(tx.weight_change_kg).toFixed(3)} كجم
+                          </td>
+                          <td className="p-3 text-center font-bold text-slate-700">{tx.quantity_change_pieces || 0}</td>
+                          <td className="p-3 text-left font-black text-slate-900 text-sm">{parseFloat(tx.running_balance_kg || 0).toFixed(3)} كجم</td>
+                          <td className="p-3 text-slate-500 text-[11px] font-mono">{tx.notes || tx.source_document_id || '—'}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Bale Yield & ROI Matrix Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-          <Layers size={16} className="text-emerald-600" />
-          <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">{t('reports.baleYieldTitle')}</span>
-        </div>
+      {/* ==================== 2. DAILY SALES REPORT ==================== */}
+      {activeReport === 'SALES_DAILY' && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-200">
+              <span className="text-xs text-emerald-700 font-bold block">إجمالي الإيرادات (المبيعات)</span>
+              <span className="text-2xl font-black text-emerald-900">{totalSalesAmount.toFixed(2)} ج.م</span>
+            </div>
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+              <span className="text-xs text-blue-700 font-bold block">تكلفة البضاعة المباعة (COGS)</span>
+              <span className="text-2xl font-black text-blue-900">{totalCOGS.toFixed(2)} ج.م</span>
+            </div>
+            <div className="bg-amber-50 p-4 rounded-xl border border-amber-200">
+              <span className="text-xs text-amber-700 font-bold block">مجمل الربح (Gross Profit)</span>
+              <span className="text-2xl font-black text-amber-900">{totalGrossProfit.toFixed(2)} ج.م</span>
+            </div>
+          </div>
 
-        <div className="overflow-x-auto">
-          <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs`}>
-            <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+          <table className="w-full text-right text-xs">
+            <thead className="bg-slate-100 font-black text-slate-700 border-y">
               <tr>
-                <th className="py-3.5 px-5">كود البالة والمورد</th>
-                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>تكلفة الشراء</th>
-                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>الوزن (كجم)</th>
-                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>المبيعات المحققة</th>
-                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>الأرباح المحققة</th>
-                <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>المخزون المتبقي</th>
+                <th className="p-3">التاريخ والوقت</th>
+                <th className="p-3">رقم الفاتورة</th>
+                <th className="p-3">الكاشير</th>
+                <th className="p-3">المبلغ الصافي</th>
+                <th className="p-3">التكلفة COGS</th>
+                <th className="p-3 text-emerald-800">مجمل الربح</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-150 text-slate-800 font-medium font-mono">
-              {baleReports.map((bale) => (
-                <tr key={bale.id} className="hover:bg-slate-50/70 transition">
-                  <td className="py-4 px-5 font-sans">
-                    <div className="font-bold text-slate-900 text-sm">{bale.lot_code}</div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">{bale.supplier}</div>
-                  </td>
-                  <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-slate-900`}>{bale.purchase_cost.toFixed(2)} {t('common.currency')}</td>
-                  <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} text-slate-600`}>{bale.weight_kg.toFixed(3)} {t('common.kg')}</td>
-                  <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-emerald-700`}>{bale.sold_revenue.toFixed(2)} {t('common.currency')}</td>
-                  <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-indigo-600`}>+{bale.realized_profit.toFixed(2)} {t('common.currency')}</td>
-                  <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-slate-900`}>
-                    {bale.remaining_stock_val.toFixed(2)} {t('common.currency')} <span className="text-[10px] font-normal text-slate-500">({bale.remaining_stock_kg} {t('common.kg')})</span>
-                  </td>
+            <tbody className="divide-y font-medium">
+              {filteredSales.map(s => (
+                <tr key={s.id} className="hover:bg-slate-50">
+                  <td className="p-3 font-mono text-slate-500">{new Date(s.invoice_date_time).toLocaleString('ar-EG')}</td>
+                  <td className="p-3 font-bold font-mono text-slate-800">{s.invoice_number}</td>
+                  <td className="p-3 font-bold">{s.cashier_username || 'كاشير'}</td>
+                  <td className="p-3 font-black text-slate-900">{parseFloat(s.total_amount).toFixed(2)} ج.م</td>
+                  <td className="p-3 font-bold text-slate-600">{parseFloat(s.total_cogs).toFixed(2)} ج.م</td>
+                  <td className="p-3 font-black text-emerald-700">{parseFloat(s.gross_profit).toFixed(2)} ج.م</td>
                 </tr>
               ))}
-
-              {baleReports.length === 0 && (
-                <tr>
-                  <td colSpan="6" className="py-16 text-center text-slate-400 text-xs font-sans">
-                    لا توجد تقارير أرباح بالات مسجلة.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
+
+      {/* ==================== 3. PROFIT & LOSS (P&L) REPORT ==================== */}
+      {activeReport === 'PROFIT_LOSS' && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-6">
+          <h3 className="text-sm font-black text-slate-800 border-b pb-3">قائمة الدخل والربحية المالية (Profit & Loss Statement)</h3>
+
+          <div className="max-w-xl mx-auto bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4 font-bold text-sm">
+            <div className="flex justify-between items-center text-slate-700 border-b pb-2">
+              <span>إجمالي إيرادات المبيعات:</span>
+              <span className="text-base text-slate-900 font-black">{totalSalesAmount.toFixed(2)} ج.م</span>
+            </div>
+
+            <div className="flex justify-between items-center text-rose-700 border-b pb-2">
+              <span>خصم: تكلفة البضاعة المباعة (COGS):</span>
+              <span className="text-base font-black">-{totalCOGS.toFixed(2)} ج.م</span>
+            </div>
+
+            <div className="flex justify-between items-center text-emerald-800 bg-emerald-100 p-3 rounded-xl">
+              <span>مجمل الربح التشغيلي:</span>
+              <span className="text-xl font-black">{totalGrossProfit.toFixed(2)} ج.م</span>
+            </div>
+
+            <div className="flex justify-between items-center text-rose-700 border-b pb-2 pt-2">
+              <span>خصم: إجمالي المصروفات والنثريات:</span>
+              <span className="text-base font-black">-{totalExpensesAmount.toFixed(2)} ج.م</span>
+            </div>
+
+            <div className="flex justify-between items-center text-white bg-slate-900 p-4 rounded-xl shadow-lg mt-4">
+              <span className="text-base font-black">صافي الأرباح النهائية (Net Profit):</span>
+              <span className={`text-2xl font-black ${netProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {netProfit.toFixed(2)} ج.م
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== 4. EXPENSES REPORT ==================== */}
+      {activeReport === 'EXPENSES' && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+          <div className="flex justify-between items-center bg-rose-50 p-4 rounded-xl border border-rose-200 mb-4">
+            <span className="text-xs font-bold text-rose-800">إجمالي المصروفات المنصرفة في الفترة:</span>
+            <span className="text-2xl font-black text-rose-900">{totalExpensesAmount.toFixed(2)} ج.م</span>
+          </div>
+
+          <table className="w-full text-right text-xs">
+            <thead className="bg-slate-100 font-black text-slate-700 border-y">
+              <tr>
+                <th className="p-3">التاريخ والوقت</th>
+                <th className="p-3">الخزينة المنصرف منها</th>
+                <th className="p-3">الجهة / البيان</th>
+                <th className="p-3 text-rose-600">المبلغ</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y font-medium">
+              {filteredExpenses.map(e => (
+                <tr key={e.id} className="hover:bg-rose-50/20">
+                  <td className="p-3 font-mono text-slate-500">{new Date(e.created_at).toLocaleString('ar-EG')}</td>
+                  <td className="p-3 font-bold text-slate-800">{e.treasury_name || 'الخزينة'}</td>
+                  <td className="p-3 font-black text-slate-900">{e.description}</td>
+                  <td className="p-3 font-black text-rose-600 text-sm">{Math.abs(parseFloat(e.amount)).toFixed(2)} ج.م</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
     </div>
   );
 }
