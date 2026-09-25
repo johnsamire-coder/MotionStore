@@ -57,7 +57,7 @@ export default function PricingPage() {
   };
 
   // Action 1: Save Product Coding ONLY
-  const handleSaveProductOnly = async (e) => {
+    const handleSaveProductOnly = async (e) => {
     e.preventDefault();
     if (!prodName.trim()) {
       setMessage({ type: 'error', text: 'يرجى كتابة اسم الصنف / الاستوك' });
@@ -66,28 +66,37 @@ export default function PricingPage() {
 
     try {
       setLoading(true);
+      // Clean Payload without extra/unsupported fields
       const prodPayload = {
         name: prodName.trim(),
         code: prodCode.trim() || `COD-${Math.floor(1000 + Math.random()*9000)}`,
-        category: (prodCat && prodCat !== "") ? prodCat : null,
-        unit_of_measure: prodUom,
+        unit_of_measure: prodUom || 'PIECE',
         is_active: true
       };
+
+      // Only attach category if a valid string ID exists
+      if (prodCat && prodCat !== "" && prodCat !== "null") {
+        prodPayload.category = prodCat;
+      }
 
       const res = await axiosClient.post('/products/', prodPayload);
       const createdProd = res.data;
 
-      setMessage({ type: 'success', text: `تم تكويد الصنف (${createdProd.name}) بنجاح! يمكنك الآن الانتقال لتبويب التسعير.` });
+      setMessage({ type: 'success', text: `تم تكويد الصنف (${createdProd.name}) بنجاح! يمكنك الآن الانطلاق لتسعيره.` });
       setProdName('');
       setProdCode('');
       fetchInitialData();
     } catch (err) {
-      console.error("Prod Error:", err);
-      console.error("Prod Save Error:", err.response?.data || err);
-      let errMsg = 'حدث خطأ أثناء تكويد الصنف، تأكد من الكود والبيانات.';
-      if (err.response?.data?.code) errMsg = 'كود الصنف مستخدم مسبقاً، اختر كوداً آخر.';
-      if (err.response?.data?.name) errMsg = 'يرجى كتابة اسم صنف صحيح.';
-      setMessage({ type: 'error', text: errMsg });
+      console.error("Prod Save Error Details:", err.response?.data || err);
+      let errMsg = 'حدث خطأ في الحفظ.';
+      if (err.response?.data) {
+        const d = err.response.data;
+        if (d.code) errMsg = `الكود مستخدم مسبقاً: ${d.code[0]}`;
+        else if (d.name) errMsg = `اسم الصنف غير صالح: ${d.name[0]}`;
+        else if (d.category) errMsg = `التصنيف المحدد غير صالح: ${d.category[0]}`;
+        else errMsg = JSON.stringify(d);
+      }
+      setMessage({ type: 'error', text: `فشل الحفظ: ${errMsg}` });
     } finally {
       setLoading(false);
     }
