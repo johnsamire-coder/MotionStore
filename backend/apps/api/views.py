@@ -60,7 +60,14 @@ class WarehouseViewSet(BaseTenantViewSet):
     model = Warehouse
     serializer_class = WarehouseSerializer
 
-class CategoryViewSet(BaseTenantViewSet):
+
+class CategoryViewSet(viewsets.ModelViewSet):
+    def perform_create(self, serializer):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if not tenant:
+            from apps.tenants.models import Tenant
+            tenant = Tenant.objects.first()
+        serializer.save(tenant=tenant)
     model = Category
     serializer_class = CategorySerializer
 
