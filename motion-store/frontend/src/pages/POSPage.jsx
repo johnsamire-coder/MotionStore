@@ -38,6 +38,7 @@ export default function POSPage() {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [codeFilter, setCodeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [quickCode, setQuickCode] = useState('');
 
   // Cart & Invoice Calculations (Right Table)
   const [cart, setCart] = useState([]);
@@ -58,6 +59,7 @@ export default function POSPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const barcodeInputRef = useRef(null);
+  const quickCodeInputRef = useRef(null);
 
   useEffect(() => {
     loadPOSContext();
@@ -109,6 +111,7 @@ export default function POSPage() {
       console.error('Failed to load POS context:', err);
     } finally {
       setLoading(false);
+      setTimeout(() => quickCodeInputRef.current?.focus(), 100);
     }
   };
 
@@ -126,6 +129,40 @@ export default function POSPage() {
     } catch (err) {
       alert(err.response?.data?.detail || 'فشل فتح الوردية');
     }
+  };
+
+
+  const handleQuickCodeEnter = (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const code = (quickCode || '').trim();
+    if (!code) return;
+
+    const found = stockItems.find((item) => {
+      const pCode = (item.product?.code || item.product_code || '').toString().trim().toLowerCase();
+      const pBarcode = (item.product?.barcode || item.barcode || '').toString().trim().toLowerCase();
+      const pName = (item.product_name || item.product?.name || '').toString().trim().toLowerCase();
+      const q = code.toLowerCase();
+      return pCode === q || pBarcode === q || pCode.includes(q) || pBarcode.includes(q) || pName === q;
+    });
+
+    if (!found) {
+      alert('الكود غير موجود في المخزون: ' + code);
+      setQuickCode('');
+      setTimeout(() => quickCodeInputRef.current?.focus(), 50);
+      return;
+    }
+
+    if (parseFloat(found.total_weight_kg || 0) <= 0) {
+      alert('لا يوجد رصيد متاح لهذا الصنف');
+      setQuickCode('');
+      setTimeout(() => quickCodeInputRef.current?.focus(), 50);
+      return;
+    }
+
+    addToCart(found);
+    setQuickCode('');
+    setTimeout(() => quickCodeInputRef.current?.focus(), 50);
   };
 
   const addToCart = (stockItem) => {
@@ -273,6 +310,25 @@ export default function POSPage() {
             فتح وردية جديدة
           </button>
         )}
+      </div>
+
+
+      {/* Quick Code Entry - Direct to Invoice */}
+      <div className="bg-emerald-600 p-3 rounded-xl shadow-md flex items-center gap-3 print:hidden">
+        <Tag className="text-white shrink-0" size={20} />
+        <div className="flex-1">
+          <label className="block text-[11px] font-black text-emerald-100 mb-1">أدخل كود الصنف ثم Enter — ينزل مباشرة في الفاتورة</label>
+          <input
+            ref={quickCodeInputRef}
+            type="text"
+            value={quickCode}
+            onChange={(e) => setQuickCode(e.target.value)}
+            onKeyDown={handleQuickCodeEnter}
+            placeholder="اكتب الكود أو الباركود هنا..."
+            className="w-full bg-white border-0 rounded-lg px-4 py-3 text-base font-black text-slate-900 tracking-wider focus:ring-4 focus:ring-emerald-300 outline-none"
+            autoComplete="off"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
