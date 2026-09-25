@@ -1,616 +1,338 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
-import { Tag, Plus, Save, Search, CheckCircle2, History, Scale, Package, DollarSign, User, Clock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Tag, Save, Search, CheckCircle2, History, Scale, Package, DollarSign, User, Plus, Download, Printer } from 'lucide-react';
 
 export default function ProductCodingPage() {
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState('CODING'); // CODING | PRICING | HISTORY
+  const { tenant } = useAuth();
+  const [activeTab, setActiveTab] = useState('CODING');
 
-  // Common Data States
+  // Common Data
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Tab 1: Coding Form State
+  
+  // Tab 1: Coding
   const [codingForm, setCodingForm] = useState({
-    name: '',
-    code: '',
-    barcode: '',
-    wholesale_code: '',
-    category: '',
-    unit_of_measure: 'PIECE',
-    purchase_price: '0.00',
-    carton_price: '0.00',
-    carton_capacity: '1.000',
-    min_stock_level: '0.000',
-    opening_balance: '0.000',
-    package_type: ''
+    name: '', code: '', barcode: '', category: '', unit_of_measure: 'PIECE', min_stock_level: '0.000', package_type: ''
   });
 
-  // Tab 2: Dual Pricing State (Per Selected Product)
-  const [selectedProductForPrice, setSelectedProductForPrice] = useState(null);
-  const [pricingForm, setPricingForm] = useState({
-    // Weight-Based Pricing (Per KG)
-    kg_new_collection: '180.00',
-    kg_middle: '90.00',
-    kg_clearance: '30.00',
-    // Piece-Based Pricing (Per Piece)
-    piece_new_collection: '150.00',
-    piece_middle: '75.00',
-    piece_clearance: '25.00',
-    notes: 'تحديث أسعار الموسم'
+  // Tab 2: Pricing State
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [prices, setPrices] = useState({
+    kg_NEW_COLLECTION: { value: '', saved: '' },
+    kg_MIDDLE: { value: '', saved: '' },
+    kg_CLEARANCE: { value: '', saved: '' },
+    piece_NEW_COLLECTION: { value: '', saved: '' },
+    piece_MIDDLE: { value: '', saved: '' },
+    piece_CLEARANCE: { value: '', saved: '' }
   });
 
-  const uomList = [
-    { value: 'PIECE', label: 'قطعة / عدد' },
-    { value: 'KG', label: 'كيلو / كجم' },
-    { value: 'BOTH', label: 'قطعة + وزن' },
-    { value: 'BALE', label: 'باله' },
-    { value: 'DOZEN', label: 'دسته' },
-    { value: 'CARTON', label: 'كرتونه' },
-    { value: 'SACK', label: 'شيكارة' },
-    { value: 'BARREL', label: 'برميل' },
-    { value: 'BOX', label: 'علبة' },
-    { value: 'JAR', label: 'برطمان' },
-    { value: 'JERRYCAN', label: 'جركن' },
-    { value: 'LITER', label: 'لتر' },
-    { value: 'BAG', label: 'كيس' },
-    { value: 'TANK', label: 'تنك' },
-    { value: 'BUNDLE', label: 'هبط' },
-    { value: 'SET', label: 'مجموعة' },
-    { value: 'EMPTY', label: 'فوارغ' },
-    { value: 'CARD', label: 'كارت' },
-    { value: 'TOTE', label: 'شنطة' },
-    { value: 'LIST', label: 'لسته' },
-    { value: 'OTHER', label: 'غير محدد' }
-  ];
+  // Tab 3: History Filters
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
-  useEffect(() => {
-    fetchAllData();
-  }, []);
+  useEffect(() => { fetchAllData(); }, []);
 
   const fetchAllData = async () => {
     setLoading(true);
     try {
       const [pRes, cRes, hRes] = await Promise.all([
-        axiosClient.get('/products/'),
-        axiosClient.get('/categories/'),
-        axiosClient.get('/price-history/')
+        axiosClient.get('/products/'), axiosClient.get('/categories/'), axiosClient.get('/price-history/')
       ]);
-      const pList = pRes.data.results || pRes.data || [];
+      setProducts(pRes.data.results || pRes.data || []);
       const cList = cRes.data.results || cRes.data || [];
-      const hList = hRes.data.results || hRes.data || [];
-
-      setProducts(pList);
       setCategories(cList);
-      setPriceHistory(hList);
+      if (cList.length > 0 && !codingForm.category) setCodingForm(prev => ({ ...prev, category: cList[0].id }));
+      setPriceHistory(hRes.data.results || hRes.data || []);
+    } catch (err) { console.error(err); } finally { setLoading(false); }
+  };
 
-      if (cList.length > 0) {
-        setCodingForm(prev => ({ ...prev, category: cList[0].id }));
-      }
-      if (pList.length > 0 && !selectedProductForPrice) {
-        setSelectedProductForPrice(pList[0]);
-      }
-    } catch (err) {
-      console.error('فشل جلب البيانات:', err);
-    } finally {
-      setLoading(false);
+  const handleAddCategory = async () => {
+    const catName = prompt('أدخل اسم التصنيف الجديد:');
+    if (catName && catName.trim()) {
+      try {
+        const res = await axiosClient.post('/categories/', { name: catName });
+        setCategories([...categories, res.data]);
+        setCodingForm(prev => ({ ...prev, category: res.data.id }));
+      } catch (err) { alert('حدث خطأ أثناء إضافة التصنيف'); }
     }
   };
 
-  // Tab 1: Save Coding
   const handleSaveCoding = async (e) => {
-    if (e) e.preventDefault();
-    if (!codingForm.name.trim()) {
-      alert('يرجى إدخال اسم الصنف');
-      return;
-    }
-    if (!codingForm.category) {
-      alert('يرجى اختيار أو إنشاء تصنيف أولاً');
-      return;
-    }
-
-    setSaving(true);
+    e.preventDefault();
+    if (!codingForm.name || !codingForm.category) return alert('أكمل البيانات الأساسية');
     try {
       await axiosClient.post('/products/', codingForm);
       setSuccessMsg('تم تكويد الصنف بنجاح ✅');
-      setCodingForm({
-        name: '',
-        code: '',
-        barcode: '',
-        wholesale_code: '',
-        category: categories[0]?.id || '',
-        unit_of_measure: 'PIECE',
-        purchase_price: '0.00',
-        carton_price: '0.00',
-        carton_capacity: '1.000',
-        min_stock_level: '0.000',
-        opening_balance: '0.000',
-        package_type: ''
-      });
       fetchAllData();
-      setTimeout(() => setSuccessMsg(''), 4000);
-    } catch (err) {
-      alert(err.response?.data?.detail || 'فشل حفظ الصنف');
-    } finally {
-      setSaving(false);
-    }
+      setCodingForm({ ...codingForm, name: '', code: '', barcode: '' });
+      setTimeout(() => setSuccessMsg(''), 3000);
+    } catch (err) { alert('فشل الحفظ'); }
   };
 
-  // Tab 2: Save Dual Pricing
-  const handleSavePricing = async (e) => {
-    if (e) e.preventDefault();
-    if (!selectedProductForPrice) {
-      alert('يرجى اختيار صنف لتسعيره');
-      return;
-    }
-
-    setSaving(true);
+  const loadProductPrices = async (product) => {
+    setSelectedProduct(product);
     try {
-      // Get Default Price List
-      const plRes = await axiosClient.get('/price-lists/');
-      const defaultPL = (plRes.data.results || plRes.data || [])[0];
+      const res = await axiosClient.get(`/price-list-items/?product=${product.id}`);
+      const items = res.data.results || res.data || [];
+      const newPrices = { ...prices };
+      
+      // Reset all to empty first
+      Object.keys(newPrices).forEach(k => { newPrices[k] = { value: '', saved: '' }; });
 
-      if (!defaultPL) {
-        alert('لم يتم العثور على قائمة أسعار افتراضية!');
-        setSaving(false);
-        return;
-      }
+      items.forEach(item => {
+        if (parseFloat(item.price_per_kg) > 0) {
+          newPrices[`kg_${item.grade}`] = { value: item.price_per_kg, saved: item.price_per_kg };
+        }
+        if (parseFloat(item.price_per_piece) > 0) {
+          newPrices[`piece_${item.grade}`] = { value: item.price_per_piece, saved: item.price_per_piece };
+        }
+      });
+      setPrices(newPrices);
+    } catch (err) { console.error(err); }
+  };
 
-      // Save KG Prices (New Collection, Middle, Clearance)
-      const grades = [
-        { grade: 'NEW_COLLECTION', kg_price: pricingForm.kg_new_collection, piece_price: pricingForm.piece_new_collection },
-        { grade: 'MIDDLE', kg_price: pricingForm.kg_middle, piece_price: pricingForm.piece_middle },
-        { grade: 'CLEARANCE', kg_price: pricingForm.kg_clearance, piece_price: pricingForm.piece_clearance }
-      ];
+  const handleSaveIndividualPrice = async (type, grade) => {
+    const key = `${type}_${grade}`;
+    const val = prices[key].value;
+    if (!val) return;
 
-      for (const g of grades) {
-        await axiosClient.post('/price-list-items/', {
-          price_list: defaultPL.id,
-          product: selectedProductForPrice.id,
-          grade: g.grade,
-          price_per_kg: parseFloat(g.kg_price || 0),
-          price_per_piece: parseFloat(g.piece_price || 0)
-        });
-      }
-
-      setSuccessMsg(`تم تحديث مصفوفة أسعار "${selectedProductForPrice.name}" وتسجيل التاريخ بنجاح ✅`);
-      fetchAllData();
-      setTimeout(() => setSuccessMsg(''), 4000);
+    try {
+      const payload = {
+        product: selectedProduct.id,
+        grade: grade,
+        price_per_kg: type === 'kg' ? val : '0.00',
+        price_per_piece: type === 'piece' ? val : '0.00'
+      };
+      await axiosClient.post('/price-list-items/', payload);
+      
+      // Update local state to gray out the button
+      setPrices(prev => ({
+        ...prev,
+        [key]: { ...prev[key], saved: val }
+      }));
+      setSuccessMsg('تم تحديث السعر الفردي بنجاح ✅');
+      setTimeout(() => setSuccessMsg(''), 2000);
+      fetchAllData(); // Refresh history
     } catch (err) {
-      alert(err.response?.data?.detail || 'حدث خطأ أثناء حفظ الأسعار');
-    } finally {
-      setSaving(false);
+      alert('فشل تحديث السعر');
     }
   };
 
-  const filteredProducts = products.filter(p =>
-    (p.name && p.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (p.code && p.code.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (p.barcode && p.barcode.includes(searchQuery))
-  );
+  const filteredHistory = priceHistory.filter(h => {
+    const date = h.created_at.split('T')[0];
+    return date >= startDate && date <= endDate;
+  });
+
+  const exportExcel = () => {
+    const headers = ['التاريخ', 'الصنف', 'الدرجة', 'النوع', 'السعر القديم', 'السعر الجديد', 'المستخدم'];
+    const rows = filteredHistory.map(h => [
+      new Date(h.created_at).toLocaleString('ar-EG'), h.product_name, h.grade_display || h.grade,
+      h.pricing_type === 'KG' ? 'بالوزن' : 'بالقطعة', h.old_price, h.new_price, h.changed_by_username || 'المدير'
+    ]);
+    const csvContent = "\uFEFF" + [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `سجل_الأسعار_${startDate}_إلى_${endDate}.csv`;
+    link.click();
+  };
+
+  const printPDF = () => {
+    window.print();
+  };
+
+  const renderPriceRow = (title, type, grade, icon) => {
+    const key = `${type}_${grade}`;
+    const data = prices[key];
+    const hasChanged = data.value !== '' && data.value !== data.saved;
+
+    return (
+      <div className="flex items-center gap-2 bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-lg">{icon}</div>
+        <div className="flex-1">
+          <label className="block text-[11px] font-bold text-slate-500">{title}</label>
+          <input
+            type="number" step="0.01" placeholder="0.00"
+            value={data.value}
+            onChange={e => setPrices(prev => ({ ...prev, [key]: { ...prev[key], value: e.target.value } }))}
+            className="w-full font-black text-slate-900 bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none p-1"
+          />
+        </div>
+        <button
+          onClick={() => handleSaveIndividualPrice(type, grade)}
+          disabled={!hasChanged}
+          className={`px-4 py-2 rounded-lg font-black text-xs transition shadow-sm ${
+            hasChanged ? 'bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer animate-pulse' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+          }`}
+        >
+          {hasChanged ? 'حفظ السعر' : 'محفوظ'}
+        </button>
+      </div>
+    );
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Header & Tabs Bar */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 print:m-0 print:p-0">
+      
+      {/* Hidden Print Header (Only shows on PDF Print) */}
+      <div className="hidden print:block text-center border-b-2 border-slate-800 pb-4 mb-6">
+        <h1 className="text-3xl font-black text-slate-900">{tenant?.name || 'شركة الرميس لتجارة البالات'}</h1>
+        <p className="text-sm font-bold text-slate-600 mt-1">تقرير سجل تغيرات الأسعار التاريخي</p>
+        <p className="text-xs text-slate-500">الفترة من {startDate} إلى {endDate}</p>
+      </div>
+
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
         <div>
           <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
-            <Tag className="text-emerald-600" />
-            إدارة تكويد وتسعير البالات والقطع (F4)
+            <Tag className="text-emerald-600" /> إدارة التكويد والتسعير الشاملة
           </h1>
-          <p className="text-xs text-slate-500 mt-1">تكويد الأصناف، تسعير القطع والأوزان، وسجل تاريخ الأسعار والمستخدمين</p>
         </div>
-
-        {/* 3 Tabs Navigation */}
         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-          <button
-            onClick={() => setActiveTab('CODING')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
-              activeTab === 'CODING'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Tag size={15} />
-            <span>1. تكويد صنف جديد</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('PRICING')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
-              activeTab === 'PRICING'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <DollarSign size={15} />
-            <span>2. مصفوفة تسعير (قطع/أوزان)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('HISTORY')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${
-              activeTab === 'HISTORY'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <History size={15} />
-            <span>3. سجل تغيرات الأسعار</span>
-          </button>
+          <button onClick={() => setActiveTab('CODING')} className={`px-4 py-2 rounded-lg text-xs font-black transition ${activeTab === 'CODING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>1. التكويد</button>
+          <button onClick={() => setActiveTab('PRICING')} className={`px-4 py-2 rounded-lg text-xs font-black transition ${activeTab === 'PRICING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>2. التسعير الفردي</button>
+          <button onClick={() => setActiveTab('HISTORY')} className={`px-4 py-2 rounded-lg text-xs font-black transition ${activeTab === 'HISTORY' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>3. سجل التاريخ</button>
         </div>
       </div>
 
       {successMsg && (
-        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-3.5 rounded-xl text-sm font-bold flex items-center gap-2 shadow-sm">
-          <CheckCircle2 className="text-emerald-600" size={18} />
-          {successMsg}
+        <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-3 rounded-xl text-sm font-bold flex items-center gap-2 print:hidden">
+          <CheckCircle2 className="text-emerald-600" size={18} /> {successMsg}
         </div>
       )}
 
-      {/* ==================== TAB 1: PRODUCT CODING ==================== */}
+      {/* TAB 1: CODING */}
       {activeTab === 'CODING' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <form onSubmit={handleSaveCoding} className="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 print:hidden">
+          <form onSubmit={handleSaveCoding} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
             <h2 className="text-sm font-black text-slate-800 border-b pb-2">بيانات التكويد الأساسية</h2>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-600 mb-1">اسم الصنف / الاستوك *</label>
-                <input
-                  type="text"
-                  value={codingForm.name}
-                  onChange={e => setCodingForm({ ...codingForm, name: e.target.value })}
-                  placeholder="مثال: تيشرت حريمي أوفر سايز"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-emerald-500"
-                  required
-                />
+                <label className="block text-xs font-bold text-slate-600 mb-1">اسم الصنف *</label>
+                <input type="text" value={codingForm.name} onChange={e => setCodingForm({ ...codingForm, name: e.target.value })} className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold" required />
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">كود الصنف الداخلي</label>
-                <input
-                  type="text"
-                  value={codingForm.code}
-                  onChange={e => setCodingForm({ ...codingForm, code: e.target.value })}
-                  placeholder="SKU-1001"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold"
-                />
+                <label className="block text-xs font-bold text-slate-600 mb-1">الكود الداخلي</label>
+                <input type="text" value={codingForm.code} onChange={e => setCodingForm({ ...codingForm, code: e.target.value })} className="w-full bg-slate-50 border rounded-lg p-2 text-xs font-mono" />
               </div>
-
               <div>
                 <label className="block text-xs font-bold text-slate-600 mb-1">الباركود الدولي</label>
-                <input
-                  type="text"
-                  value={codingForm.barcode}
-                  onChange={e => setCodingForm({ ...codingForm, barcode: e.target.value })}
-                  placeholder="EAN / Barcode"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-mono font-bold"
-                />
+                <input type="text" value={codingForm.barcode} onChange={e => setCodingForm({ ...codingForm, barcode: e.target.value })} className="w-full bg-slate-50 border rounded-lg p-2 text-xs font-mono" />
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">التصنيف الرئيسي</label>
-                <select
-                  value={codingForm.category}
-                  onChange={e => setCodingForm({ ...codingForm, category: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
-                >
-                  {categories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">وحدة القياس</label>
-                <select
-                  value={codingForm.unit_of_measure}
-                  onChange={e => setCodingForm({ ...codingForm, unit_of_measure: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
-                >
-                  {uomList.map(u => (
-                    <option key={u.value} value={u.value}>{u.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">نوع العبوة</label>
-                <input
-                  type="text"
-                  placeholder="كرتونة / شيكارة"
-                  value={codingForm.package_type}
-                  onChange={e => setCodingForm({ ...codingForm, package_type: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">الحد الأدنى للرصيد</label>
-                <input
-                  type="number"
-                  step="0.001"
-                  value={codingForm.min_stock_level}
-                  onChange={e => setCodingForm({ ...codingForm, min_stock_level: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
-                />
+              <div className="col-span-2">
+                <label className="block text-xs font-bold text-slate-600 mb-1">التصنيف الرئيسي *</label>
+                <div className="flex gap-2">
+                  <select value={codingForm.category} onChange={e => setCodingForm({ ...codingForm, category: e.target.value })} className="flex-1 bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold" required>
+                    {categories.length === 0 && <option value="">لا توجد تصنيفات</option>}
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                  <button type="button" onClick={handleAddCategory} className="bg-slate-800 text-white px-3 rounded-lg hover:bg-slate-700 transition" title="إضافة تصنيف جديد"><Plus size={16} /></button>
+                </div>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-lg font-black text-sm flex items-center justify-center gap-2 shadow-md transition disabled:opacity-50 cursor-pointer"
-            >
-              <Save size={16} />
-              <span>{saving ? 'جاري الحفظ...' : 'حفظ الصنف (F1)'}</span>
-            </button>
+            <button type="submit" disabled={saving} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-lg font-black text-sm transition mt-4">حفظ وتكويد الصنف</button>
           </form>
-
-          {/* Coded Products List Table */}
-          <div className="lg:col-span-7 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
-            <div className="flex items-center justify-between border-b pb-3 mb-4">
-              <h2 className="text-sm font-black text-slate-800">الأصناف المكودة بالفهرس ({filteredProducts.length})</h2>
-              <div className="relative w-64">
-                <Search className="absolute right-3 top-2.5 text-slate-400" size={14} />
-                <input
-                  type="text"
-                  placeholder="بحث بالاسم أو الكود..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg pr-9 pl-3 py-1.5 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead className="bg-slate-100 text-slate-700 font-black border-y">
-                  <tr>
-                    <th className="p-2.5">الكود</th>
-                    <th className="p-2.5">اسم الصنف</th>
-                    <th className="p-2.5">التصنيف</th>
-                    <th className="p-2.5">الوحدة</th>
-                    <th className="p-2.5 text-center">الحد الأدنى</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {filteredProducts.map(p => (
-                    <tr key={p.id} className="hover:bg-slate-50 transition">
-                      <td className="p-2.5 font-mono font-bold text-slate-600">{p.code || p.barcode || '—'}</td>
-                      <td className="p-2.5 font-black text-slate-900">{p.name}</td>
-                      <td className="p-2.5 text-slate-500">{p.category_name || 'عام'}</td>
-                      <td className="p-2.5 font-bold text-slate-700">{p.unit_of_measure}</td>
-                      <td className="p-2.5 text-center text-slate-600">{p.min_stock_level || 0}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       )}
 
-      {/* ==================== TAB 2: DUAL PRICING MATRIX ==================== */}
+      {/* TAB 2: INDIVIDUAL PRICING */}
       {activeTab === 'PRICING' && (
-        <form onSubmit={handleSavePricing} className="space-y-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
-                <DollarSign className="text-emerald-600" size={18} />
-                تحديد أسعار القطع والأوزان للصنف المحدد
-              </h2>
+        <div className="space-y-6 print:hidden">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <label className="block text-xs font-bold text-slate-600 mb-2">اختر الصنف المراد تسعيره وتعديله:</label>
+            <select
+              onChange={e => loadProductPrices(products.find(p => p.id === e.target.value))}
+              value={selectedProduct?.id || ''}
+              className="w-full md:w-1/2 bg-slate-50 border border-emerald-300 rounded-lg p-3 text-sm font-black text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="" disabled>--- اختر صنفاً ---</option>
+              {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.code || p.barcode || 'بدون كود'})</option>)}
+            </select>
+          </div>
 
-              <div className="flex items-center gap-3">
-                <label className="text-xs font-bold text-slate-600">اختر الصنف المراد تسعيره:</label>
-                <select
-                  value={selectedProductForPrice?.id || ''}
-                  onChange={e => {
-                    const prod = products.find(p => p.id === e.target.value);
-                    setSelectedProductForPrice(prod);
-                  }}
-                  className="bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-black text-slate-900 min-w-[240px]"
-                >
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.category_name || 'عام'})</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-              {/* SECTION A: WEIGHT PRICING (PER KG) */}
-              <div className="bg-emerald-50/50 p-5 rounded-2xl border border-emerald-200 space-y-4">
-                <div className="flex items-center gap-2 border-b border-emerald-200 pb-2">
-                  <Scale className="text-emerald-700" size={18} />
-                  <h3 className="text-xs font-black text-emerald-950">1. تسعير الأوزان (سعر الكيلو لكل درجة)</h3>
-                </div>
-
+          {selectedProduct && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Weight Pricing */}
+              <div className="bg-emerald-50/30 p-5 rounded-2xl border border-emerald-200 space-y-4">
+                <h3 className="text-sm font-black text-emerald-900 flex items-center gap-2 border-b border-emerald-200 pb-2">
+                  <Scale size={18} /> تسعير الأوزان (للكيلو)
+                </h3>
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">✨ سعر الكيلو (كريمة / سوبر لوكس)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={pricingForm.kg_new_collection}
-                        onChange={e => setPricingForm({ ...pricingForm, kg_new_collection: e.target.value })}
-                        className="flex-1 bg-white border border-emerald-300 rounded-lg p-2.5 text-sm font-black text-emerald-900"
-                      />
-                      <span className="text-xs font-bold text-slate-500">ج.م / كجم</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">📦 سعر الكيلو (وسط / درجة ثانية)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={pricingForm.kg_middle}
-                        onChange={e => setPricingForm({ ...pricingForm, kg_middle: e.target.value })}
-                        className="flex-1 bg-white border border-emerald-300 rounded-lg p-2.5 text-sm font-black text-emerald-900"
-                      />
-                      <span className="text-xs font-bold text-slate-500">ج.م / كجم</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">🏷️ سعر الكيلو (تصفيات / شعبي)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={pricingForm.kg_clearance}
-                        onChange={e => setPricingForm({ ...pricingForm, kg_clearance: e.target.value })}
-                        className="flex-1 bg-white border border-emerald-300 rounded-lg p-2.5 text-sm font-black text-emerald-900"
-                      />
-                      <span className="text-xs font-bold text-slate-500">ج.م / كجم</span>
-                    </div>
-                  </div>
+                  {renderPriceRow('سعر الكيلو (كريمة / سوبر لوكس)', 'kg', 'NEW_COLLECTION', '✨')}
+                  {renderPriceRow('سعر الكيلو (وسط / درجة ثانية)', 'kg', 'MIDDLE', '📦')}
+                  {renderPriceRow('سعر الكيلو (تصفيات / شعبي)', 'kg', 'CLEARANCE', '🏷️')}
                 </div>
               </div>
 
-              {/* SECTION B: PIECE PRICING (PER PIECE) */}
-              <div className="bg-blue-50/50 p-5 rounded-2xl border border-blue-200 space-y-4">
-                <div className="flex items-center gap-2 border-b border-blue-200 pb-2">
-                  <Package className="text-blue-700" size={18} />
-                  <h3 className="text-xs font-black text-blue-950">2. تسعير القطع (حسب التصنيف والنوع)</h3>
-                </div>
-
+              {/* Piece Pricing */}
+              <div className="bg-blue-50/30 p-5 rounded-2xl border border-blue-200 space-y-4">
+                <h3 className="text-sm font-black text-blue-900 flex items-center gap-2 border-b border-blue-200 pb-2">
+                  <Package size={18} /> تسعير القطع (للقطعة)
+                </h3>
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">✨ سعر القطعة (نوع الكريمة)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={pricingForm.piece_new_collection}
-                        onChange={e => setPricingForm({ ...pricingForm, piece_new_collection: e.target.value })}
-                        className="flex-1 bg-white border border-blue-300 rounded-lg p-2.5 text-sm font-black text-blue-900"
-                      />
-                      <span className="text-xs font-bold text-slate-500">ج.م / قطعة</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">📦 سعر القطعة (نوع الوسط)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={pricingForm.piece_middle}
-                        onChange={e => setPricingForm({ ...pricingForm, piece_middle: e.target.value })}
-                        className="flex-1 bg-white border border-blue-300 rounded-lg p-2.5 text-sm font-black text-blue-900"
-                      />
-                      <span className="text-xs font-bold text-slate-500">ج.م / قطعة</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">🏷️ سعر القطعة (نوع التصفيات)</label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={pricingForm.piece_clearance}
-                        onChange={e => setPricingForm({ ...pricingForm, piece_clearance: e.target.value })}
-                        className="flex-1 bg-white border border-blue-300 rounded-lg p-2.5 text-sm font-black text-blue-900"
-                      />
-                      <span className="text-xs font-bold text-slate-500">ج.م / قطعة</span>
-                    </div>
-                  </div>
+                  {renderPriceRow('سعر القطعة (نوع كريمة)', 'piece', 'NEW_COLLECTION', '✨')}
+                  {renderPriceRow('سعر القطعة (نوع وسط)', 'piece', 'MIDDLE', '👗')}
+                  {renderPriceRow('سعر القطعة (نوع تصفيات)', 'piece', 'CLEARANCE', '👕')}
                 </div>
               </div>
             </div>
+          )}
+        </div>
+      )}
 
-            <div className="pt-3 border-t flex items-center justify-between">
-              <input
-                type="text"
-                placeholder="سبب التعديل أو ملاحظات التسعير..."
-                value={pricingForm.notes}
-                onChange={e => setPricingForm({ ...pricingForm, notes: e.target.value })}
-                className="bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs w-1/2"
-              />
-
-              <button
-                type="submit"
-                disabled={saving}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-xl font-black text-sm flex items-center gap-2 shadow-lg transition disabled:opacity-50 cursor-pointer"
-              >
-                <Save size={18} />
-                <span>{saving ? 'جاري الحفظ...' : 'اعتماد الأسعار وتسجيل السجل'}</span>
+      {/* TAB 3: HISTORY AUDIT LOG */}
+      {activeTab === 'HISTORY' && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-4 print:hidden">
+            <div className="flex items-center gap-3">
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-slate-50 border border-slate-300 p-2 rounded-lg text-xs font-bold" />
+              <span className="text-slate-400 font-bold">إلى</span>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-slate-50 border border-slate-300 p-2 rounded-lg text-xs font-bold" />
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <button onClick={exportExcel} className="flex items-center gap-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer">
+                <Download size={14} /> إكسيل CSV
+              </button>
+              <button onClick={printPDF} className="flex items-center gap-1.5 bg-rose-100 hover:bg-rose-200 text-rose-800 px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer">
+                <Printer size={14} /> طباعة PDF
               </button>
             </div>
           </div>
-        </form>
-      )}
 
-      {/* ==================== TAB 3: PRICE CHANGE AUDIT LOG ==================== */}
-      {activeTab === 'HISTORY' && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-          <div className="flex items-center justify-between border-b pb-3">
-            <h2 className="text-sm font-black text-slate-800 flex items-center gap-2">
-              <History className="text-indigo-600" size={18} />
-              سجل التغييرات التاريخية للأسعار ({priceHistory.length})
-            </h2>
-            <span className="text-xs text-slate-500">موثق باليوم والساعة والمستخدم المسئول</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-100 text-slate-700 font-black border-y">
-                <tr>
-                  <th className="p-3">التاريخ والوقت</th>
-                  <th className="p-3">اسم الصنف</th>
-                  <th className="p-3">الدرجة / النوع</th>
-                  <th className="p-3">نوع التسعير</th>
-                  <th className="p-3">السعر القديم</th>
-                  <th className="p-3">السعر الجديد</th>
-                  <th className="p-3">المستخدم / الكاشير</th>
-                  <th className="p-3">ملاحظات</th>
+          <table className="w-full text-right text-xs mt-4">
+            <thead className="bg-slate-100 text-slate-700 font-black border-y">
+              <tr>
+                <th className="p-3">التاريخ والوقت</th>
+                <th className="p-3">الصنف</th>
+                <th className="p-3">النوع/الدرجة</th>
+                <th className="p-3">طريقة التسعير</th>
+                <th className="p-3 text-rose-600">السعر القديم</th>
+                <th className="p-3 text-emerald-700">السعر الجديد</th>
+                <th className="p-3">المستخدم</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 font-medium">
+              {filteredHistory.map(h => (
+                <tr key={h.id} className="hover:bg-slate-50">
+                  <td className="p-3 text-slate-500 font-mono">{new Date(h.created_at).toLocaleString('ar-EG')}</td>
+                  <td className="p-3 font-black text-slate-900">{h.product_name}</td>
+                  <td className="p-3 font-bold text-slate-700">{h.grade_display || h.grade}</td>
+                  <td className="p-3">{h.pricing_type === 'KG' ? '⚖️ وزن' : '🔢 قطعة'}</td>
+                  <td className="p-3 font-bold text-rose-500 line-through">{parseFloat(h.old_price).toFixed(2)}</td>
+                  <td className="p-3 font-black text-emerald-600">{parseFloat(h.new_price).toFixed(2)}</td>
+                  <td className="p-3 text-slate-600">{h.changed_by_username || 'مدير'}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {priceHistory.length === 0 ? (
-                  <tr>
-                    <td colSpan="8" className="text-center py-10 text-slate-400">لا توجد سجلات تغيير أسعار مسجلة بعد</td>
-                  </tr>
-                ) : (
-                  priceHistory.map(h => (
-                    <tr key={h.id} className="hover:bg-slate-50 transition">
-                      <td className="p-3 text-slate-500 font-mono">
-                        {new Date(h.created_at).toLocaleString('ar-EG')}
-                      </td>
-                      <td className="p-3 font-black text-slate-900">{h.product_name}</td>
-                      <td className="p-3 font-bold text-slate-700">{h.grade_display || h.grade}</td>
-                      <td className="p-3">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
-                          h.pricing_type === 'KG' ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {h.pricing_type === 'KG' ? '⚖️ بالوزن كجم' : '🔢 بالقطعة'}
-                        </span>
-                      </td>
-                      <td className="p-3 font-bold text-rose-600 line-through">{parseFloat(h.old_price).toFixed(2)} ج.م</td>
-                      <td className="p-3 font-black text-emerald-700 text-sm">{parseFloat(h.new_price).toFixed(2)} ج.م</td>
-                      <td className="p-3 font-bold text-slate-800 flex items-center gap-1">
-                        <User size={12} className="text-slate-400" />
-                        {h.changed_by_username || 'المدير العام'}
-                      </td>
-                      <td className="p-3 text-slate-500 text-[11px]">{h.notes || '—'}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
