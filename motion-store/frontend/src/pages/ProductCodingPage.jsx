@@ -14,6 +14,7 @@ export default function ProductCodingPage() {
   const [categories, setCategories] = useState([]);
   const [priceHistory, setPriceHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   
   // Tab 1: Coding
@@ -46,12 +47,21 @@ export default function ProductCodingPage() {
       const [pRes, cRes, hRes] = await Promise.all([
         axiosClient.get('/products/'), axiosClient.get('/categories/'), axiosClient.get('/price-history/')
       ]);
-      setProducts(pRes.data.results || pRes.data || []);
+      const pList = pRes.data.results || pRes.data || [];
       const cList = cRes.data.results || cRes.data || [];
+      const hList = hRes.data.results || hRes.data || [];
+
+      setProducts(pList);
       setCategories(cList);
-      if (cList.length > 0 && !codingForm.category) setCodingForm(prev => ({ ...prev, category: cList[0].id }));
-      setPriceHistory(hRes.data.results || hRes.data || []);
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+      if (cList.length > 0 && !codingForm.category) {
+        setCodingForm(prev => ({ ...prev, category: cList[0].id }));
+      }
+      setPriceHistory(hList);
+    } catch (err) { 
+      console.error(err); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleAddCategory = async () => {
@@ -61,20 +71,28 @@ export default function ProductCodingPage() {
         const res = await axiosClient.post('/categories/', { name: catName });
         setCategories([...categories, res.data]);
         setCodingForm(prev => ({ ...prev, category: res.data.id }));
-      } catch (err) { alert('حدث خطأ أثناء إضافة التصنيف'); }
+      } catch (err) { 
+        alert('حدث خطأ أثناء إضافة التصنيف'); 
+      }
     }
   };
 
   const handleSaveCoding = async (e) => {
     e.preventDefault();
     if (!codingForm.name || !codingForm.category) return alert('أكمل البيانات الأساسية');
+    
+    setSaving(true);
     try {
       await axiosClient.post('/products/', codingForm);
       setSuccessMsg('تم تكويد الصنف بنجاح ✅');
       fetchAllData();
       setCodingForm({ ...codingForm, name: '', code: '', barcode: '' });
       setTimeout(() => setSuccessMsg(''), 3000);
-    } catch (err) { alert('فشل الحفظ'); }
+    } catch (err) { 
+      alert('فشل الحفظ'); 
+    } finally {
+      setSaving(false);
+    }
   };
 
   const loadProductPrices = async (product) => {
@@ -82,10 +100,14 @@ export default function ProductCodingPage() {
     try {
       const res = await axiosClient.get(`/price-list-items/?product=${product.id}`);
       const items = res.data.results || res.data || [];
-      const newPrices = { ...prices };
-      
-      // Reset all to empty first
-      Object.keys(newPrices).forEach(k => { newPrices[k] = { value: '', saved: '' }; });
+      const newPrices = {
+        kg_NEW_COLLECTION: { value: '', saved: '' },
+        kg_MIDDLE: { value: '', saved: '' },
+        kg_CLEARANCE: { value: '', saved: '' },
+        piece_NEW_COLLECTION: { value: '', saved: '' },
+        piece_MIDDLE: { value: '', saved: '' },
+        piece_CLEARANCE: { value: '', saved: '' }
+      };
 
       items.forEach(item => {
         if (parseFloat(item.price_per_kg) > 0) {
@@ -96,7 +118,9 @@ export default function ProductCodingPage() {
         }
       });
       setPrices(newPrices);
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+      console.error(err); 
+    }
   };
 
   const handleSaveIndividualPrice = async (type, grade) => {
@@ -104,6 +128,7 @@ export default function ProductCodingPage() {
     const val = prices[key].value;
     if (!val) return;
 
+    setSaving(true);
     try {
       const payload = {
         product: selectedProduct.id,
@@ -113,21 +138,22 @@ export default function ProductCodingPage() {
       };
       await axiosClient.post('/price-list-items/', payload);
       
-      // Update local state to gray out the button
       setPrices(prev => ({
         ...prev,
         [key]: { ...prev[key], saved: val }
       }));
       setSuccessMsg('تم تحديث السعر الفردي بنجاح ✅');
       setTimeout(() => setSuccessMsg(''), 2000);
-      fetchAllData(); // Refresh history
+      fetchAllData();
     } catch (err) {
       alert('فشل تحديث السعر');
+    } finally {
+      setSaving(false);
     }
   };
 
   const filteredHistory = priceHistory.filter(h => {
-    const date = h.created_at.split('T')[0];
+    const date = h.created_at ? h.created_at.split('T')[0] : '';
     return date >= startDate && date <= endDate;
   });
 
@@ -151,7 +177,7 @@ export default function ProductCodingPage() {
 
   const renderPriceRow = (title, type, grade, icon) => {
     const key = `${type}_${grade}`;
-    const data = prices[key];
+    const data = prices[key] || { value: '', saved: '' };
     const hasChanged = data.value !== '' && data.value !== data.saved;
 
     return (
@@ -168,7 +194,7 @@ export default function ProductCodingPage() {
         </div>
         <button
           onClick={() => handleSaveIndividualPrice(type, grade)}
-          disabled={!hasChanged}
+          disabled={!hasChanged || saving}
           className={`px-4 py-2 rounded-lg font-black text-xs transition shadow-sm ${
             hasChanged ? 'bg-emerald-500 hover:bg-emerald-600 text-white cursor-pointer animate-pulse' : 'bg-slate-200 text-slate-400 cursor-not-allowed'
           }`}
@@ -196,9 +222,9 @@ export default function ProductCodingPage() {
           </h1>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-          <button onClick={() => setActiveTab('CODING')} className={`px-4 py-2 rounded-lg text-xs font-black transition ${activeTab === 'CODING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>1. التكويد</button>
-          <button onClick={() => setActiveTab('PRICING')} className={`px-4 py-2 rounded-lg text-xs font-black transition ${activeTab === 'PRICING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>2. التسعير الفردي</button>
-          <button onClick={() => setActiveTab('HISTORY')} className={`px-4 py-2 rounded-lg text-xs font-black transition ${activeTab === 'HISTORY' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>3. سجل التاريخ</button>
+          <button onClick={() => setActiveTab('CODING')} className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${activeTab === 'CODING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>1. التكويد</button>
+          <button onClick={() => setActiveTab('PRICING')} className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${activeTab === 'PRICING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>2. التسعير الفردي</button>
+          <button onClick={() => setActiveTab('HISTORY')} className={`px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer ${activeTab === 'HISTORY' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'}`}>3. سجل التاريخ</button>
         </div>
       </div>
 
@@ -233,11 +259,11 @@ export default function ProductCodingPage() {
                     {categories.length === 0 && <option value="">لا توجد تصنيفات</option>}
                     {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
-                  <button type="button" onClick={handleAddCategory} className="bg-slate-800 text-white px-3 rounded-lg hover:bg-slate-700 transition" title="إضافة تصنيف جديد"><Plus size={16} /></button>
+                  <button type="button" onClick={handleAddCategory} className="bg-slate-800 text-white px-3 rounded-lg hover:bg-slate-700 transition cursor-pointer" title="إضافة تصنيف جديد"><Plus size={16} /></button>
                 </div>
               </div>
             </div>
-            <button type="submit" disabled={saving} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-lg font-black text-sm transition mt-4">حفظ وتكويد الصنف</button>
+            <button type="submit" disabled={saving} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-lg font-black text-sm transition mt-4 cursor-pointer">{saving ? 'جاري الحفظ...' : 'حفظ وتكويد الصنف'}</button>
           </form>
         </div>
       )}
@@ -299,7 +325,7 @@ export default function ProductCodingPage() {
             
             <div className="flex items-center gap-2">
               <button onClick={exportExcel} className="flex items-center gap-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer">
-                <Download size={14} /> إكسيل CSV
+                <Download size={14} /> تصدير إكسيل CSV
               </button>
               <button onClick={printPDF} className="flex items-center gap-1.5 bg-rose-100 hover:bg-rose-200 text-rose-800 px-4 py-2 rounded-lg text-xs font-black transition cursor-pointer">
                 <Printer size={14} /> طباعة PDF
