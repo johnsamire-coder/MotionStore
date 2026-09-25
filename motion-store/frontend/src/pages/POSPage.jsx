@@ -56,6 +56,8 @@ export default function POSPage() {
   const [openingFloat, setOpeningFloat] = useState('500.00');
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastInvoice, setLastInvoice] = useState(null);
+  const [lastPaidAmount, setLastPaidAmount] = useState('0');
+  const [lastChangeDue, setLastChangeDue] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
   const barcodeInputRef = useRef(null);
@@ -744,6 +746,14 @@ export default function POSPage() {
               <div className="flex justify-between text-sm font-black border-t pt-1">
                 <span>اجمالي المطلوب:</span>
                 <span>{parseFloat(lastInvoice.total_amount).toFixed(2)} ج.م</span>
+              </div>
+              <div className="flex justify-between text-slate-700 pt-1">
+                <span>المدفوع:</span>
+                <span>{parseFloat(lastPaidAmount || 0).toFixed(2)} ج.م</span>
+              </div>
+              <div className="flex justify-between text-amber-800 font-black">
+                <span>الباقي للعميل:</span>
+                <span>{parseFloat(lastChangeDue || 0).toFixed(2)} ج.م</span>
               </div>
             </div>
 
