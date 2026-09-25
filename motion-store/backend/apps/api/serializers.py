@@ -244,3 +244,11 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentMethod
         fields = '__all__'
+
+from apps.purchasing.models import PurchaseOption
+
+class PurchaseOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PurchaseOption
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']

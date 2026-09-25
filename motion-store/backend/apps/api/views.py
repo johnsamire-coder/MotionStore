@@ -112,6 +112,10 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
         from decimal import Decimal
 
         supplier_id = data.get('supplier_id')
+        if not supplier_id:
+            from apps.suppliers.models import Supplier as _Sup
+            _def_sup, _ = _Sup.objects.get_or_create(tenant=tenant, name='بدون مورد (شراء مباشر)', defaults={'is_active': True})
+            supplier_id = _def_sup.id
         warehouse_id = data.get('warehouse_id')
         freight_cost = Decimal(str(data.get('freight_cost', '0.00')))
 
@@ -165,7 +169,15 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
                 weight_kg=weight_kg,
                 quantity_pieces=qty_pcs,
                 unit_cost=unit_cost,
-                total_cost=line_total
+                total_cost=line_total,
+                purchase_kind=item.get('purchase_kind') or None,
+                bale_type=item.get('bale_type') or None,
+                grade=item.get('grade') or None,
+                segment=item.get('segment') or None,
+                stock_type=item.get('stock_type') or None,
+                brand=item.get('brand') or None,
+                item_name=item.get('item_name') or None,
+                extra_description=item.get('extra_description') or None
             )
 
             # If RAW_BALE, create RawLot automatically for the Sorting Hub
@@ -626,3 +638,28 @@ class TreasuryViewSet(BaseTenantViewSet):
 from apps.customers.models import Customer
 from apps.payments.models import PaymentMethod
 
+from apps.purchasing.models import PurchaseOption, PurchaseOptionType
+from apps.api.serializers import PurchaseOptionSerializer
+
+class PurchaseOptionViewSet(BaseTenantViewSet):
+    model = PurchaseOption
+    serializer_class = PurchaseOptionSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset().filter(is_active=True)
+        t = self.request.query_params.get('option_type')
+        if t:
+            qs = qs.filter(option_type=t)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        name = (request.data.get('name') or '').strip()
+        otype = request.data.get('option_type')
+        if not name or otype not in PurchaseOptionType.values:
+            return Response({'detail': 'اكتب الاسم واختار النوع'}, status=400)
+        obj, created = PurchaseOption.objects.get_or_create(tenant=tenant, option_type=otype, name=name, defaults={'is_active': True})
+        if not obj.is_active:
+            obj.is_active = True
+            obj.save()
+        return Response(PurchaseOptionSerializer(obj).data, status=201 if created else 200)

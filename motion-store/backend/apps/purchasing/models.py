@@ -14,6 +14,24 @@ class PurchaseItemType(models.TextChoices):
     FINISHED_GOODS = 'FINISHED_GOODS', 'Direct Finished Goods (بضاعة جاهزة)'
 
 
+class PurchaseKind(models.TextChoices):
+    BALE = 'BALE', 'Bale (بالة)'
+    STOCK = 'STOCK', 'Stock (استوك)'
+    DIRECT = 'DIRECT', 'Direct Purchase (شراء مباشر)'
+
+
+class StockType(models.TextChoices):
+    ONE_BRAND = 'ONE_BRAND', 'One Brand'
+    MIX_BRAND = 'MIX_BRAND', 'Mix Brand'
+
+
+class PurchaseOptionType(models.TextChoices):
+    BALE_TYPE = 'BALE_TYPE', 'Bale Type (نوع البالة)'
+    SEGMENT = 'SEGMENT', 'Segment (الصنف)'
+    BRAND = 'BRAND', 'Brand (البراند)'
+    SPECIAL_ITEM = 'SPECIAL_ITEM', 'Special Item (بند خاص)'
+
+
 class PurchaseInvoice(TenantAwareModel):
     supplier = models.ForeignKey(
         'suppliers.Supplier',
@@ -100,6 +118,16 @@ class PurchaseLineItem(TenantAwareModel):
     unit_cost = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
 
+    # --- Purchase screen v2 (all optional) ---
+    purchase_kind = models.CharField(max_length=10, choices=PurchaseKind.choices, blank=True, null=True)
+    bale_type = models.CharField(max_length=100, blank=True, null=True)
+    grade = models.CharField(max_length=50, blank=True, null=True)
+    segment = models.CharField(max_length=100, blank=True, null=True)
+    stock_type = models.CharField(max_length=10, choices=StockType.choices, blank=True, null=True)
+    brand = models.CharField(max_length=100, blank=True, null=True)
+    item_name = models.CharField(max_length=150, blank=True, null=True)
+    extra_description = models.TextField(blank=True, null=True)
+
     class Meta:
         db_table = "purchase_line_items"
         ordering = ["created_at"]
@@ -111,3 +139,19 @@ class PurchaseLineItem(TenantAwareModel):
         if not self.total_cost and self.unit_cost and self.weight_kg:
             self.total_cost = Decimal(str(self.unit_cost)) * Decimal(str(self.weight_kg))
         super().save(*args, **kwargs)
+
+
+class PurchaseOption(TenantAwareModel):
+    option_type = models.CharField(max_length=20, choices=PurchaseOptionType.choices, db_index=True)
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "purchase_options"
+        ordering = ["option_type", "name"]
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "option_type", "name"], name="unique_purchase_option_per_tenant")
+        ]
+
+    def __str__(self):
+        return f"{self.get_option_type_display()}: {self.name}"
