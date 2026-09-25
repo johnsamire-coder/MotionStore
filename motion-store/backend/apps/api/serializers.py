@@ -225,3 +225,9 @@ class UserManagementSerializer(serializers.ModelSerializer):
         model = User
         fields = ['id', 'username', 'email', 'role', 'role_display', 'tenant', 'tenant_name', 'assigned_branches', 'is_active', 'password', 'date_joined']
         read_only_fields = ['id', 'tenant', 'date_joined']
+
+class TreasurySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Treasury
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']

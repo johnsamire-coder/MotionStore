@@ -407,3 +407,7 @@ class UserViewSet(BaseTenantViewSet):
 class TenantViewSet(viewsets.ModelViewSet):
     queryset = Tenant.objects.all()
     serializer_class = TenantSerializer
+
+class TreasuryViewSet(BaseTenantViewSet):
+    model = Treasury
+    serializer_class = TreasurySerializer
