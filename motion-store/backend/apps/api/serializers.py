@@ -10,7 +10,7 @@ from apps.raw_lots.models import RawLot
 from apps.sorting.models import SortingOrder, SortingOutputLine, SortingWasteLine
 from apps.costing.models import CostingConfiguration, CostingParameter
 from apps.inventory.models import StockItem, InventoryTransaction
-from apps.pricing.models import PriceList, PriceListItem
+from apps.pricing.models import PriceList, PriceListItem, PriceHistory
 from apps.discounts.models import DiscountRule
 from apps.treasury.models import Treasury, TreasuryTransaction
 from apps.pos.models import POSTerminal
@@ -196,5 +196,14 @@ class SalesReturnSerializer(serializers.ModelSerializer):
     original_invoice_number = serializers.ReadOnlyField(source='original_sale_invoice.invoice_number')
     class Meta:
         model = SalesReturn
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class PriceHistorySerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    changed_by_username = serializers.ReadOnlyField(source='changed_by.username')
+    grade_display = serializers.CharField(source='get_grade_display', read_only=True)
+    class Meta:
+        model = PriceHistory
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']

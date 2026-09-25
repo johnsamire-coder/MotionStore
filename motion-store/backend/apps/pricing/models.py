@@ -68,3 +68,38 @@ class PriceListItem(TenantAwareModel):
 
     def __str__(self):
         return f"{self.product.name} [{self.get_grade_display()}] -> {self.price_per_kg} EGP/KG"
+
+
+class PriceHistory(TenantAwareModel):
+    product = models.ForeignKey(
+        'products.Product',
+        on_delete=models.CASCADE,
+        related_name="price_history"
+    )
+    grade = models.CharField(
+        max_length=30,
+        choices=GradeChoice.choices,
+        default=GradeChoice.NEW_COLLECTION
+    )
+    pricing_type = models.CharField(
+        max_length=20,
+        choices=[('KG', 'بالوزن / كجم'), ('PIECE', 'بالقطعة')],
+        default='KG'
+    )
+    old_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    new_price = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    changed_by = models.ForeignKey(
+        'users.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="price_changes"
+    )
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = "price_history"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.product.name} [{self.grade}] ({self.pricing_type}): {self.old_price} -> {self.new_price} EGP"

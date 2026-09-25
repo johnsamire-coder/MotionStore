@@ -17,7 +17,7 @@ from apps.sorting.models import SortingOrder
 from apps.costing.services import calculate_sorting_costs
 from apps.inventory.models import StockItem, InventoryTransaction
 from apps.inventory.services import post_sorting_to_inventory
-from apps.pricing.models import PriceList
+from apps.pricing.models import PriceList, PriceListItem, PriceHistory
 from apps.pos.models import POSTerminal
 from apps.shifts.models import Shift
 from apps.shifts.services import open_shift, close_shift
@@ -209,3 +209,26 @@ class TreasuryTransactionViewSet(BaseTenantViewSet):
 class SalesReturnViewSet(BaseTenantViewSet):
     model = SalesReturn
     serializer_class = SalesReturnSerializer
+
+class PriceListItemViewSet(BaseTenantViewSet):
+    model = PriceListItem
+    serializer_class = PriceListItemSerializer
+
+    def perform_create(self, serializer):
+        tenant = self.get_tenant()
+        instance = serializer.save(tenant=tenant)
+        # Record history log
+        PriceHistory.objects.create(
+            tenant=tenant,
+            product=instance.product,
+            grade=instance.grade,
+            pricing_type='KG' if instance.price_per_kg > 0 else 'PIECE',
+            old_price=Decimal('0.00'),
+            new_price=instance.price_per_kg or instance.price_per_piece or Decimal('0.00'),
+            changed_by=self.request.user if self.request.user.is_authenticated else None,
+            notes='تسجيل سعر جديد'
+        )
+
+class PriceHistoryViewSet(BaseTenantViewSet):
+    model = PriceHistory
+    serializer_class = PriceHistorySerializer
