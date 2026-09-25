@@ -778,6 +778,39 @@ export default function POSPage() {
           </div>
         </div>
       )}
+      {/* MODAL: Open Shift (restored) */}
+      {showOpenShiftModal && (
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4" dir="rtl">
+            <div className="text-center">
+              <h3 className="font-bold text-slate-900 text-base">فتح وردية جديدة</h3>
+              <p className="text-xs text-slate-500 mt-1">اكتب المبلغ الموجود في درج الكاشير الآن</p>
+            </div>
+            <form onSubmit={handleOpenShift} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">رصيد الافتتاح (ج.م)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  required
+                  value={openingFloat}
+                  onChange={(e) => setOpeningFloat(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-center font-bold text-base focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl cursor-pointer">
+                  فتح الوردية
+                </button>
+                <button type="button" onClick={() => setShowOpenShiftModal(false)} className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold cursor-pointer">
+                  إلغاء
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

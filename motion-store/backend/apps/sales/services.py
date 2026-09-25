@@ -130,7 +130,11 @@ def process_pos_sale(
     # 5. Process Payments & Treasury Receipts
     cash_collected = Decimal('0.00')
     for p_data in payments_data:
-        pm = p_data['payment_method']
+        from apps.payments.models import PaymentMethod
+        pm = p_data.get('payment_method')
+        if not isinstance(pm, PaymentMethod):
+            pm_id = p_data.get('payment_method_id') or pm
+            pm = PaymentMethod.objects.get(pk=pm_id, tenant=tenant)
         p_amount = Decimal(str(p_data['amount']))
 
         SalePayment.objects.create(
