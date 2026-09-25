@@ -16,7 +16,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
-  // Password Security Modal State
+  // Password Security Modal State (z-[70] layer)
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
   const [pendingAction, setPendingAction] = useState(null);
@@ -123,12 +123,12 @@ export default function SettingsPage() {
     }
   };
 
-  // Check if company name or logo has changed from baseline
+  // Check if company name or logo has changed
   const hasCompanyChanged = 
     companyForm.name.trim() !== savedCompanyForm.name.trim() ||
     companyForm.logo_base64 !== savedCompanyForm.logo_base64;
 
-  // Save Company Profile with Manager Password Requirement
+  // Save Company Profile
   const handleSaveCompany = async (e) => {
     e.preventDefault();
     if (!companyForm.name.trim()) return alert(t('settings.nameRequired'));
@@ -202,11 +202,11 @@ export default function SettingsPage() {
       try {
         await axiosClient.patch('/branches/' + editingBranch.id + '/', editingBranch);
         setEditingBranch(null);
-        setSuccessMsg('تم تحديث بيانات الفرع بنجاح ✅');
+        setSuccessMsg(t('settings.branchSuccess'));
         fetchSettingsData();
         setTimeout(() => setSuccessMsg(''), 4000);
       } catch (err) {
-        alert('فشل تعديل الفرع');
+        alert(t('settings.branchError'));
       }
     });
   };
@@ -217,11 +217,11 @@ export default function SettingsPage() {
     requireSecurityVerification(async () => {
       try {
         await axiosClient.delete('/branches/' + b.id + '/');
-        setSuccessMsg('تم حذف الفرع بنجاح ✅');
+        setSuccessMsg(t('settings.branchSuccess'));
         fetchSettingsData();
         setTimeout(() => setSuccessMsg(''), 4000);
       } catch (err) {
-        alert('لا يمكن حذف الفرع لاحتوائه على بيانات حية');
+        alert(t('settings.branchError'));
       }
     });
   };
@@ -258,11 +258,11 @@ export default function SettingsPage() {
       try {
         await axiosClient.patch('/warehouses/' + editingWarehouse.id + '/', editingWarehouse);
         setEditingWarehouse(null);
-        setSuccessMsg('تم تحديث بيانات المخزن بنجاح ✅');
+        setSuccessMsg(t('settings.warehouseSuccess'));
         fetchSettingsData();
         setTimeout(() => setSuccessMsg(''), 4000);
       } catch (err) {
-        alert('فشل تعديل المخزن');
+        alert(t('settings.warehouseError'));
       }
     });
   };
@@ -273,11 +273,11 @@ export default function SettingsPage() {
     requireSecurityVerification(async () => {
       try {
         await axiosClient.delete('/warehouses/' + w.id + '/');
-        setSuccessMsg('تم حذف المخزن بنجاح ✅');
+        setSuccessMsg(t('settings.warehouseSuccess'));
         fetchSettingsData();
         setTimeout(() => setSuccessMsg(''), 4000);
       } catch (err) {
-        alert('لا يمكن حذف المخزن لاحتوائه على بضائع مسجلة');
+        alert(t('settings.warehouseError'));
       }
     });
   };
@@ -388,7 +388,7 @@ export default function SettingsPage() {
             <span>
               {saving
                 ? t('settings.saving')
-                : (hasCompanyChanged ? t('settings.saveCompanyBtn') : 'محفوظ ✓')}
+                : (hasCompanyChanged ? t('settings.saveCompanyBtn') : (lang === 'ar' ? 'محفوظ ✓' : 'Saved ✓'))}
             </span>
           </button>
         </form>
@@ -468,7 +468,7 @@ export default function SettingsPage() {
             </h2>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs" dir={isRTL ? 'rtl' : 'ltr'}>
                 <thead className="bg-slate-100 text-slate-700 font-black border-y">
                   <tr>
                     <th className="p-3">{t('settings.colBranchCode')}</th>
@@ -578,7 +578,7 @@ export default function SettingsPage() {
             </h2>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs">
+              <table className="w-full text-right text-xs" dir={isRTL ? 'rtl' : 'ltr'}>
                 <thead className="bg-slate-100 text-slate-700 font-black border-y">
                   <tr>
                     <th className="p-3">{t('settings.colWarehouseName')}</th>
@@ -620,25 +620,25 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* SECURITY PASSWORD CONFIRMATION MODAL */}
+      {/* SECURITY PASSWORD CONFIRMATION MODAL - High Z-Index z-[70] */}
       {showSecurityModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleConfirmSecurity} className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl border">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[70] flex items-center justify-center p-4">
+          <form onSubmit={handleConfirmSecurity} className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl border border-rose-200">
             <div className="flex items-center justify-between border-b pb-3 text-rose-700 font-black text-sm">
               <span className="flex items-center gap-1.5"><ShieldAlert size={18}/> {t('settings.securityTitle')}</span>
-              <button type="button" onClick={() => setShowSecurityModal(false)} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>
+              <button type="button" onClick={() => setShowSecurityModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18}/></button>
             </div>
 
             <p className="text-xs text-slate-600 font-bold">{t('settings.securityDesc')}</p>
 
             <div className="relative">
-              <Lock size={16} className="absolute right-3 top-3 text-slate-400" />
+              <Lock size={16} className={'absolute ' + (isRTL ? 'right-3' : 'left-3') + ' top-3 text-slate-400'} />
               <input
                 type="password"
                 placeholder="••••••••"
                 value={adminPassword}
                 onChange={e => setAdminPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl pr-10 pl-3 py-2.5 text-sm font-black text-slate-900 focus:ring-2 focus:ring-rose-500"
+                className={'w-full bg-slate-50 border border-slate-300 rounded-xl ' + (isRTL ? 'pr-10 pl-3' : 'pl-10 pr-3') + ' py-2.5 text-sm font-black text-slate-900 focus:ring-2 focus:ring-rose-500'}
                 required
                 autoFocus
               />
@@ -649,27 +649,27 @@ export default function SettingsPage() {
                 type="submit"
                 className="flex-1 bg-rose-600 hover:bg-rose-700 text-white py-2.5 rounded-xl font-black text-xs shadow transition cursor-pointer"
               >
-                تأكيد واعتماد الإجراء
+                {t('settings.confirmAction')}
               </button>
               <button
                 type="button"
                 onClick={() => setShowSecurityModal(false)}
                 className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs cursor-pointer"
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* EDIT BRANCH MODAL */}
+      {/* EDIT BRANCH MODAL - z-50 */}
       {editingBranch && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <form onSubmit={handleUpdateBranch} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border">
             <div className="flex items-center justify-between border-b pb-3 font-black text-slate-800 text-sm">
               <span className="flex items-center gap-1.5"><Edit2 size={18}/> {t('settings.editBranchTitle')}</span>
-              <button type="button" onClick={() => setEditingBranch(null)} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>
+              <button type="button" onClick={() => setEditingBranch(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18}/></button>
             </div>
 
             <div className="space-y-3">
@@ -710,27 +710,27 @@ export default function SettingsPage() {
                 type="submit"
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-black text-xs shadow transition cursor-pointer"
               >
-                تأكيد تعديل الفرع
+                {t('settings.confirmEditBranch')}
               </button>
               <button
                 type="button"
                 onClick={() => setEditingBranch(null)}
                 className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs cursor-pointer"
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* EDIT WAREHOUSE MODAL */}
+      {/* EDIT WAREHOUSE MODAL - z-50 */}
       {editingWarehouse && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <form onSubmit={handleUpdateWarehouse} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border">
             <div className="flex items-center justify-between border-b pb-3 font-black text-slate-800 text-sm">
               <span className="flex items-center gap-1.5"><Edit2 size={18}/> {t('settings.editWarehouseTitle')}</span>
-              <button type="button" onClick={() => setEditingWarehouse(null)} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>
+              <button type="button" onClick={() => setEditingWarehouse(null)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18}/></button>
             </div>
 
             <div className="space-y-3">
@@ -764,14 +764,14 @@ export default function SettingsPage() {
                 type="submit"
                 className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl font-black text-xs shadow transition cursor-pointer"
               >
-                تأكيد تعديل المخزن
+                {t('settings.confirmEditWarehouse')}
               </button>
               <button
                 type="button"
                 onClick={() => setEditingWarehouse(null)}
                 className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs cursor-pointer"
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
             </div>
           </form>
