@@ -62,7 +62,8 @@ export default function PricingPage() {
       setLoading(true);
       const res = await axiosClient.post('/products/categories/', {
         name: newCatName.trim(),
-        code: `CAT-${Math.floor(100 + Math.random()*900)}`,
+        code: `CAT-${Math.floor(1000 + Math.random()*9000)}`,
+        description: 'تصنيف مخصص',
         is_active: true
       });
 
