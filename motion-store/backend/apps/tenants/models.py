@@ -13,6 +13,8 @@ class Tenant(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    logo_base64 = models.TextField(blank=True, null=True, verbose_name="Company Logo Base64")
+
     class Meta:
         db_table = "tenants"
         ordering = ["-created_at"]
@@ -56,6 +58,8 @@ class TenantAwareModel(models.Model):
 
     objects = TenantAwareManager()
     all_objects = models.Manager()
+
+    logo_base64 = models.TextField(blank=True, null=True, verbose_name="Company Logo Base64")
 
     class Meta:
         abstract = True

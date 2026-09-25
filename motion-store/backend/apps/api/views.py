@@ -402,3 +402,8 @@ class UserViewSet(BaseTenantViewSet):
         user_inst.set_password(new_password)
         user_inst.save()
         return Response({'status': 'password updated successfully'})
+
+
+class TenantViewSet(viewsets.ModelViewSet):
+    queryset = Tenant.objects.all()
+    serializer_class = TenantSerializer
