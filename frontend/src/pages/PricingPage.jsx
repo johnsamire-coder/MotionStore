@@ -69,7 +69,7 @@ export default function PricingPage() {
       const prodPayload = {
         name: prodName.trim(),
         code: prodCode.trim() || `COD-${Math.floor(1000 + Math.random()*9000)}`,
-        category: prodCat || null,
+        category: (prodCat && prodCat !== "") ? prodCat : null,
         unit_of_measure: prodUom,
         is_active: true
       };
@@ -83,7 +83,11 @@ export default function PricingPage() {
       fetchInitialData();
     } catch (err) {
       console.error("Prod Error:", err);
-      setMessage({ type: 'error', text: 'حدث خطأ أثناء تكويد الصنف، تأكد من البيانات.' });
+      console.error("Prod Save Error:", err.response?.data || err);
+      let errMsg = 'حدث خطأ أثناء تكويد الصنف، تأكد من الكود والبيانات.';
+      if (err.response?.data?.code) errMsg = 'كود الصنف مستخدم مسبقاً، اختر كوداً آخر.';
+      if (err.response?.data?.name) errMsg = 'يرجى كتابة اسم صنف صحيح.';
+      setMessage({ type: 'error', text: errMsg });
     } finally {
       setLoading(false);
     }
