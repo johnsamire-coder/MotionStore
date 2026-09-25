@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import axiosClient from '../../api/axiosClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import {
@@ -17,31 +18,64 @@ import {
   Globe,
   Tag,
   DollarSign,
-  RotateCcw
+  RotateCcw,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function AppLayout() {
   const { user, tenant, logout } = useAuth();
   const { t, lang, isRTL, toggleLanguage } = useLanguage();
   const navigate = useNavigate();
+  const [allowedScreens, setAllowedScreens] = useState(['*']);
 
-  // Global F-Key Listener (F1 - F10)
+  useEffect(() => {
+    if (user?.role) {
+      loadPermissions(user.role);
+    }
+  }, [user]);
+
+  const loadPermissions = async (roleId) => {
+    if (roleId === 'ADMIN') {
+      setAllowedScreens(['*']);
+      return;
+    }
+    try {
+      const res = await axiosClient.get(`/role-permissions/?role=${roleId}`);
+      const list = res.data.results || res.data || [];
+      const rolePerm = list.find(r => r.role === roleId);
+      if (rolePerm && rolePerm.allowed_screens) {
+        setAllowedScreens(rolePerm.allowed_screens);
+      } else {
+        if (roleId === 'CASHIER') setAllowedScreens(['/pos', '/shifts', '/returns']);
+        else setAllowedScreens(['/', '/pos']);
+      }
+    } catch (err) {
+      console.error('Failed to load permissions:', err);
+    }
+  };
+
+  const isAllowed = (path) => {
+    if (user?.role === 'ADMIN' || allowedScreens.includes('*')) return true;
+    return allowedScreens.includes(path);
+  };
+
+  // Global F-Key Listener
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'F1') { e.preventDefault(); navigate('/purchasing'); }
-      else if (e.key === 'F2') { e.preventDefault(); navigate('/pos'); }
-      else if (e.key === 'F3') { e.preventDefault(); navigate('/expenses'); }
-      else if (e.key === 'F4') { e.preventDefault(); navigate('/coding'); }
-      else if (e.key === 'F7') { e.preventDefault(); navigate('/treasury'); }
-      else if (e.key === 'F8') { e.preventDefault(); navigate('/inventory'); }
-      else if (e.key === 'F9') { e.preventDefault(); navigate('/shifts'); }
-      else if (e.key === 'F10') { e.preventDefault(); navigate('/returns'); }
+      if (e.key === 'F1' && isAllowed('/purchasing')) { e.preventDefault(); navigate('/purchasing'); }
+      else if (e.key === 'F2' && isAllowed('/pos')) { e.preventDefault(); navigate('/pos'); }
+      else if (e.key === 'F3' && isAllowed('/expenses')) { e.preventDefault(); navigate('/expenses'); }
+      else if (e.key === 'F4' && isAllowed('/coding')) { e.preventDefault(); navigate('/coding'); }
+      else if (e.key === 'F7' && isAllowed('/treasury')) { e.preventDefault(); navigate('/treasury'); }
+      else if (e.key === 'F8' && isAllowed('/inventory')) { e.preventDefault(); navigate('/inventory'); }
+      else if (e.key === 'F9' && isAllowed('/shifts')) { e.preventDefault(); navigate('/shifts'); }
+      else if (e.key === 'F10' && isAllowed('/returns')) { e.preventDefault(); navigate('/returns'); }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate]);
+  }, [navigate, allowedScreens, user]);
 
-  const ribbonItems = [
+  const allRibbonItems = [
     { name: 'مشتريات F1', to: '/purchasing', icon: Truck },
     { name: 'مبيعات F2', to: '/pos', icon: ShoppingCart },
     { name: 'مصروفات F3', to: '/expenses', icon: DollarSign },
@@ -53,7 +87,7 @@ export default function AppLayout() {
     { name: 'التقارير', to: '/reports', icon: BarChart3 },
   ];
 
-  const navigation = [
+  const allNavigation = [
     { name: t('nav.dashboard'), to: '/', icon: BarChart3 },
     { name: 'شاشة المبيعات (F2)', to: '/pos', icon: ShoppingCart },
     { name: 'شاشة المصروفات (F3)', to: '/expenses', icon: DollarSign },
@@ -65,8 +99,12 @@ export default function AppLayout() {
     { name: t('nav.shifts'), to: '/shifts', icon: Clock },
     { name: t('nav.treasury'), to: '/treasury', icon: Vault },
     { name: t('nav.reports'), to: '/reports', icon: FileSpreadsheet },
+    { name: 'إدارة الصلاحيات', to: '/permissions', icon: ShieldCheck },
     { name: t('nav.settings'), to: '/settings', icon: Settings },
   ];
+
+  const ribbonItems = allRibbonItems.filter(item => isAllowed(item.to));
+  const navigation = allNavigation.filter(item => isAllowed(item.to));
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans" dir={isRTL ? 'rtl' : 'ltr'}>
@@ -123,9 +161,9 @@ export default function AppLayout() {
         </div>
       </aside>
 
-      {/* Main Content Area with Top Ribbon Bar */}
+      {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* TOP RIBBON BAR (AL-RUMAIS STYLE) */}
+        {/* TOP RIBBON BAR */}
         <div className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex items-center justify-between gap-2 overflow-x-auto shadow-md">
           <div className="flex items-center gap-1.5 flex-nowrap">
             {ribbonItems.map((btn) => {
