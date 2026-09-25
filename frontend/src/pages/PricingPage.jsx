@@ -57,7 +57,7 @@ export default function PricingPage() {
   };
 
   // Action 1: Save Product Coding ONLY
-      const handleSaveProductOnly = async (e) => {
+        const handleSaveProductOnly = async (e) => {
     e.preventDefault();
     if (!prodName.trim()) {
       setMessage({ type: 'error', text: 'يرجى كتابة اسم الصنف / الاستوك' });
@@ -67,17 +67,21 @@ export default function PricingPage() {
     try {
       setLoading(true);
       const autoCode = prodCode.trim() || `COD-${Math.floor(1000 + Math.random()*9000)}`;
+      
+      // Fallback category logic
+      let targetCat = prodCat;
+      if ((!targetCat || targetCat === "") && categories.length > 0) {
+        targetCat = categories[0].id;
+      }
+
       const prodPayload = {
         name: prodName.trim(),
         code: autoCode,
         barcode: autoCode,
+        category: targetCat || null,
         unit_of_measure: prodUom || 'PIECE',
         is_active: true
       };
-
-      if (prodCat && prodCat !== "" && prodCat !== "null") {
-        prodPayload.category = prodCat;
-      }
 
       const res = await axiosClient.post('/products/', prodPayload);
       const createdProd = res.data;
@@ -92,7 +96,6 @@ export default function PricingPage() {
       if (err.response?.data) {
         const d = err.response.data;
         if (d.code) errMsg = `الكود مستخدم مسبقاً: ${d.code[0]}`;
-        else if (d.barcode) errMsg = `الباركوود مستخدم مسبقاً: ${d.barcode[0]}`;
         else if (d.name) errMsg = `اسم الصنف غير صالح: ${d.name[0]}`;
         else errMsg = JSON.stringify(d);
       }

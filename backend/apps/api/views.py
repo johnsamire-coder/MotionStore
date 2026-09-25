@@ -52,7 +52,14 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         tenant = getattr(self.request.user, 'tenant', None) or Tenant.objects.first()
-        serializer.save(tenant=tenant)
+        category = serializer.validated_data.get('category')
+        if not category:
+            category, _ = Category.objects.get_or_create(
+                tenant=tenant,
+                name='عام',
+                defaults={'code': 'CAT-GEN', 'is_active': True}
+            )
+        serializer.save(tenant=tenant, category=category)
 
 class SupplierViewSet(viewsets.ModelViewSet):
     queryset = Supplier.objects.all()
