@@ -8,7 +8,7 @@ from .views import (
 )
 
 router = DefaultRouter()
-router.register(r'products/items', ProductViewSet, basename='product')
+router.register(r'products/items', ProductViewSet, basename='product-item')
 router.register(r'products', ProductViewSet, basename='product-main')
 router.register(r'suppliers', SupplierViewSet, basename='supplier')
 router.register(r'purchases', PurchaseInvoiceViewSet, basename='purchase')
@@ -22,9 +22,8 @@ router.register(r'accounting/entries', JournalEntryViewSet, basename='journal-en
 router.register(r'pricing/price-list-items', PriceListItemViewSet, basename='pricelist-item')
 
 urlpatterns = [
-    # Explicit Category List/Create Endpoint to avoid DRF URL Collision
+    # Explicit Category endpoints to ensure POST/GET works without collision
     path('products/categories/', CategoryViewSet.as_view({'get': 'list', 'post': 'create'}), name='category-list-create'),
     path('products/categories/<uuid:pk>/', CategoryViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='category-detail'),
-    path('categories/', CategoryViewSet.as_view({'get': 'list', 'post': 'create'}), name='category-alt-list'),
     path('', include(router.urls)),
 ]
