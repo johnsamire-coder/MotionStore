@@ -1,3 +1,4 @@
+from apps.discounts.models import DiscountRule
 from apps.returns.models import SalesReturn
 from apps.treasury.models import TreasuryTransaction
 from rest_framework import viewsets, status
@@ -356,3 +357,7 @@ class PriceListItemViewSet(BaseTenantViewSet):
 class PriceHistoryViewSet(BaseTenantViewSet):
     model = PriceHistory
     serializer_class = PriceHistorySerializer
+
+class DiscountRuleViewSet(BaseTenantViewSet):
+    model = DiscountRule
+    serializer_class = DiscountRuleSerializer

@@ -1,3 +1,4 @@
+from apps.discounts.models import DiscountRule
 from rest_framework import serializers
 from apps.tenants.models import Tenant
 from apps.companies.models import Company
@@ -11,7 +12,7 @@ from apps.sorting.models import SortingOrder, SortingOutputLine, SortingWasteLin
 from apps.costing.models import CostingConfiguration, CostingParameter
 from apps.inventory.models import StockItem, InventoryTransaction
 from apps.pricing.models import PriceList, PriceListItem, PriceHistory
-from apps.discounts.models import DiscountRule
+
 from apps.treasury.models import Treasury, TreasuryTransaction
 from apps.pos.models import POSTerminal
 from apps.shifts.models import Shift
@@ -205,5 +206,11 @@ class PriceHistorySerializer(serializers.ModelSerializer):
     grade_display = serializers.CharField(source='get_grade_display', read_only=True)
     class Meta:
         model = PriceHistory
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class DiscountRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DiscountRule
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']

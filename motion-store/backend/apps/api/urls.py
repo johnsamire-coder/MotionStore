@@ -18,6 +18,7 @@ router.register(r"inventory-ledger", InventoryTransactionViewSet, basename="inve
 router.register(r"price-lists", PriceListViewSet, basename="price-lists")
 router.register(r"price-list-items", PriceListItemViewSet, basename="price-list-items")
 router.register(r"price-history", PriceHistoryViewSet, basename="price-history")
+router.register(r"discount-rules", DiscountRuleViewSet, basename="discount-rules")
 router.register(r"pos-terminals", POSTerminalViewSet, basename="pos-terminals")
 router.register(r"shifts", ShiftViewSet, basename="shifts")
 router.register(r"sales", SaleInvoiceViewSet, basename="sales")
