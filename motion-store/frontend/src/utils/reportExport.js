@@ -197,3 +197,25 @@ export async function exportToPDF({ title, columns, rows, totals = null, filters
     })
     .save();
 }
+
+export async function exportCouponsPDF({ offerName, summary, validTo, codes, isRTL = true }) {
+  const co = await getCompanyInfo();
+  const logo = co.logo ? `<img src="${co.logo}" style="width:34px;height:34px;object-fit:contain" />` : '';
+  const vt = validTo ? (isRTL ? `صالح لحد: ${esc(validTo)}` : `Valid until: ${esc(validTo)}`) : '';
+  const once = isRTL ? 'يُستخدم مرة واحدة' : 'Single use';
+  const cards = codes.map((code) => `
+    <div style="border:2px dashed #7c3aed;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:6px;page-break-inside:avoid;background:#faf5ff">
+      <div style="display:flex;align-items:center;gap:8px">${logo}<div style="font-size:12px;font-weight:800;color:#047857">${esc(co.name)}</div></div>
+      <div style="font-size:12px;font-weight:700;color:#0f172a">${esc(offerName)}</div>
+      <div style="font-size:11px;color:#334155;min-height:28px">${esc(summary)}</div>
+      <div style="font-size:22px;font-weight:900;letter-spacing:2px;text-align:center;background:#fff;border:1px solid #ddd6fe;border-radius:8px;padding:6px 0;font-family:monospace">${esc(code)}</div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:#64748b"><span>${once}</span><span>${vt}</span></div>
+    </div>`).join('');
+  const html = `<div dir="${isRTL ? 'rtl' : 'ltr'}" style="font-family:'Cairo','Tahoma','Segoe UI',Arial,sans-serif;width:760px;background:#fff;padding:4px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${cards}</div></div>`;
+  await html2pdf().set({
+    margin: [8, 8, 8, 8], filename: `coupons-${fileStamp()}.pdf`, image: { type: 'jpeg', quality: 0.96 },
+    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' }, jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'], avoid: 'div' }
+  }).from(html, 'string').save();
+}

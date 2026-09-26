@@ -79,31 +79,31 @@ export default function AppLayout() {
   }, [navigate, allowedScreens, user]);
 
   const allRibbonItems = [
-    { name: 'مشتريات Alt+1', to: '/purchasing', icon: Truck },
-    { name: 'مبيعات Alt+2', to: '/pos', icon: ShoppingCart },
-    { name: 'مصروفات Alt+3', to: '/expenses', icon: DollarSign },
-    { name: 'تسعير Alt+4', to: '/coding', icon: Tag },
-    { name: 'الخزينة Alt+7', to: '/treasury', icon: Vault },
-    { name: 'المخزون Alt+8', to: '/inventory', icon: Package },
-    { name: 'الورديات Alt+9', to: '/shifts', icon: Clock },
-    { name: 'مرتجعات Alt+0', to: '/returns', icon: RotateCcw },
-    { name: 'التقارير', to: '/reports', icon: BarChart3 },
+    { name: 'مشتريات Alt+1', en: 'Purchases Alt+1', to: '/purchasing', icon: Truck },
+    { name: 'مبيعات Alt+2', en: 'Sales Alt+2', to: '/pos', icon: ShoppingCart },
+    { name: 'مصروفات Alt+3', en: 'Expenses Alt+3', to: '/expenses', icon: DollarSign },
+    { name: 'تسعير Alt+4', en: 'Pricing Alt+4', to: '/coding', icon: Tag },
+    { name: 'الخزينة Alt+7', en: 'Treasury Alt+7', to: '/treasury', icon: Vault },
+    { name: 'المخزون Alt+8', en: 'Inventory Alt+8', to: '/inventory', icon: Package },
+    { name: 'الورديات Alt+9', en: 'Shifts Alt+9', to: '/shifts', icon: Clock },
+    { name: 'مرتجعات Alt+0', en: 'Returns Alt+0', to: '/returns', icon: RotateCcw },
+    { name: 'التقارير', en: 'Reports', to: '/reports', icon: BarChart3 },
   ];
 
   const allNavigation = [
     { name: t('nav.dashboard'), to: '/', icon: BarChart3 },
-    { name: 'شاشة المبيعات (Alt+2)', to: '/pos', icon: ShoppingCart },
-    { name: 'شاشة المصروفات (Alt+3)', to: '/expenses', icon: DollarSign },
-    { name: 'التسعير (Alt+4)', to: '/coding', icon: Tag },
-    { name: 'مرتجعات المبيعات (Alt+0)', to: '/returns', icon: RotateCcw },
+    { name: 'شاشة المبيعات (Alt+2)', en: 'Sales (Alt+2)', to: '/pos', icon: ShoppingCart },
+    { name: 'شاشة المصروفات (Alt+3)', en: 'Expenses (Alt+3)', to: '/expenses', icon: DollarSign },
+    { name: 'التسعير', en: 'Pricing', to: '/coding', icon: Tag },
+    { name: 'مرتجعات المبيعات (Alt+0)', en: 'Sales Returns (Alt+0)', to: '/returns', icon: RotateCcw },
     { name: t('nav.sorting'), to: '/sorting', icon: Layers },
     { name: t('nav.inventory'), to: '/inventory', icon: Package },
     { name: t('nav.purchasing'), to: '/purchasing', icon: Truck },
     { name: t('nav.shifts'), to: '/shifts', icon: Clock },
     { name: t('nav.treasury'), to: '/treasury', icon: Vault },
     { name: t('nav.reports'), to: '/reports', icon: FileSpreadsheet },
-    { name: 'إدارة الموظفين', to: '/users', icon: Users },
-    { name: 'إدارة الصلاحيات', to: '/permissions', icon: ShieldCheck },
+    { name: 'إدارة الموظفين', en: 'Employees', to: '/users', icon: Users },
+    { name: 'إدارة الصلاحيات', en: 'Permissions', to: '/permissions', icon: ShieldCheck },
     { name: t('nav.settings'), to: '/settings', icon: Settings },
   ];
 
@@ -143,7 +143,7 @@ export default function AppLayout() {
                 }
               >
                 <Icon size={15} />
-                <span>{item.name}</span>
+                <span>{isRTL ? item.name : (item.en || item.name)}</span>
               </NavLink>
             );
           })}
@@ -188,7 +188,7 @@ export default function AppLayout() {
                   }
                 >
                   <Icon size={14} />
-                  <span>{btn.name}</span>
+                  <span>{isRTL ? btn.name : (btn.en || btn.name)}</span>
                 </NavLink>
               );
             })}

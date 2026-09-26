@@ -153,6 +153,7 @@ class PieceItem(TenantAwareModel):
     price_per_piece = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     price_per_kg = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
+    offer = models.ForeignKey('discounts.Offer', on_delete=models.SET_NULL, null=True, blank=True, related_name='offer_pieces')
 
     class Meta:
         db_table = "pricing_piece_items"

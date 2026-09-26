@@ -24,7 +24,7 @@ export default function PermissionsPage() {
     { path: '/', name: 'لوحة المؤشرات (الرئيسية)', category: 'عام' },
     { path: '/pos', name: 'شاشة المبيعات (F2)', category: 'المبيعات' },
     { path: '/expenses', name: 'شاشة المصروفات (F3)', category: 'المالية' },
-    { path: '/coding', name: 'التسعير (F4)', category: 'إدارة المنتجات' },
+    { path: '/coding', name: 'التسعير', category: 'إدارة المنتجات' },
     { path: '/returns', name: 'مرتجعات المبيعات (F10)', category: 'المبيعات' },
     { path: '/sorting', name: 'الفرز', category: 'المخازن والفرز' },
     { path: '/inventory', name: 'المخزون التام وجرد الأصناف (F8)', category: 'المخازن والفرز' },

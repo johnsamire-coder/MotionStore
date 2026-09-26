@@ -1,7 +1,7 @@
 export const translations = {
   ar: {
     common: { currency: "ج.م", kg: "كجم", lot: "بالة", pcs: "قطعة", refresh: "تحديث", print: "طباعة", close: "إغلاق", clear: "تفريغ", save: "حفظ", cancel: "إلغاء", all: "الكل", search: "بحث..." },
-    nav: { brand: "موشن ستور", brandSub: "إدارة البالات والمخازن", dashboard: "الرئيسية", pos: "المبيعات (الكاشير)", sorting: "الفرز", inventory: "المخزون والحركات", purchasing: "المشتريات الخام", shifts: "الورديات وتسليم العهدة", treasury: "الخزينة", reports: "التقارير وقائمة الدخل", settings: "الإعدادات والسياسات", logout: "تسجيل الخروج", workspace: "مساحة العمل التشغيلية", onlineEngine: "النظام متصل ويعمل" },
+    nav: { brand: "موشن ستور", brandSub: "إدارة البالات والمخازن", dashboard: "الرئيسية", pos: "المبيعات (الكاشير)", sorting: "الفرز", inventory: "المخزون والحركات", purchasing: "المشتريات", shifts: "الورديات وتسليم العهدة", treasury: "الخزينة", reports: "التقارير وقائمة الدخل", settings: "الإعدادات والسياسات", logout: "تسجيل الخروج", workspace: "مساحة العمل التشغيلية", onlineEngine: "النظام متصل ويعمل" },
     login: {
       title: "نظام إدارة",
       subtitle: "أدخل بيانات الاعتماد للوصول لمساحة العمل",

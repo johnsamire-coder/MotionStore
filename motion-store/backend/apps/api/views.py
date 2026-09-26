@@ -1018,3 +1018,180 @@ class PriceChangeLogViewSet(_AllPagesMixin, BaseTenantViewSet):
         if p.get('user'):
             qs = qs.filter(changed_by_id=p['user'])
         return qs
+
+from apps.discounts.models import Offer, OFFER_DAYS
+from apps.api.serializers import OfferSerializer
+
+
+import random as _rnd
+from rest_framework.exceptions import ValidationError as _DRFVE
+_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+def _new_coupon_code(tenant):
+    from apps.discounts.models import Coupon
+    while True:
+        code = 'MS-' + ''.join(_rnd.choice(_CODE_CHARS) for _ in range(5))
+        if not Coupon.objects.filter(tenant=tenant, code=code).exists():
+            return code
+
+
+def _next_offer_piece_code(tenant):
+    nums = [int(x) for x in PieceItem.objects.filter(tenant=tenant).values_list('code', flat=True) if str(x).isdigit()]
+    return str(max(nums + [9000]) + 1) if max(nums + [0]) >= 9000 else '9001'
+
+
+def _offer_is_live(o, shop=None):
+    from django.utils import timezone
+    now = timezone.localtime()
+    today = now.date(); t = now.time()
+    day = OFFER_DAYS[(now.weekday() + 2) % 7]
+    if not o.is_active:
+        return False, 'العرض موقوف'
+    if o.date_from and today < o.date_from:
+        return False, 'العرض لسه مابدأش'
+    if o.date_to and today > o.date_to:
+        return False, 'العرض انتهى'
+    if o.time_from and o.time_to and not (o.time_from <= t <= o.time_to):
+        return False, 'العرض مش في ساعته دلوقتي'
+    if o.days and day not in o.days:
+        return False, 'العرض مش شغال النهاردة'
+    if o.shops and shop and shop not in [str(x) for x in o.shops]:
+        return False, 'العرض مش شغال في المحل ده'
+    return True, ''
+
+
+def _sync_offer(offer):
+    from apps.discounts.models import Coupon
+    p = offer.params or {}
+    if offer.offer_type in ('ANYPIECE', 'ITEMPRICE'):
+        piece = PieceItem.objects.filter(tenant=offer.tenant, offer=offer).first()
+        code = (p.get('piece_code') or '').strip() or (piece.code if piece else _next_offer_piece_code(offer.tenant))
+        clash = PieceItem.objects.filter(tenant=offer.tenant, code=code)
+        if piece:
+            clash = clash.exclude(pk=piece.pk)
+        if clash.exists():
+            raise _DRFVE({'detail': f'الكود {code} مستعمل قبل كده'})
+        kind = p.get('source_kind') or 'BALE'
+        vals = dict(code=code, name=(p.get('piece_name') or offer.name).strip(), source_kind=kind,
+                    segment=p.get('segment') or None, season=p.get('season') or None,
+                    purchase_grade=(p.get('purchase_grade') or None) if kind == 'BALE' else None,
+                    brand=(p.get('brand') or None) if kind == 'STOCK' else None,
+                    price_per_piece=_dec(p.get('price')) or Decimal('0'), price_per_kg=Decimal('0'), is_active=offer.is_active)
+        if piece:
+            for k, val in vals.items():
+                setattr(piece, k, val)
+            piece.save()
+        else:
+            PieceItem.objects.create(tenant=offer.tenant, offer=offer, **vals)
+        if (p.get('piece_code') or '') != code:
+            offer.params = {**p, 'piece_code': code}
+            offer.save(update_fields=['params'])
+    if offer.offer_type == 'COUPON' or offer.apply_mode == 'COUPON':
+        if (offer.coupon_mode or 'SHARED') == 'SHARED':
+            code = (p.get('coupon') or '').strip()
+            if code:
+                c = Coupon.objects.filter(tenant=offer.tenant, offer=offer).first()
+                if c:
+                    c.code = code; c.max_uses = offer.coupon_max_uses; c.is_active = offer.is_active; c.save()
+                else:
+                    Coupon.objects.create(tenant=offer.tenant, offer=offer, code=code, max_uses=offer.coupon_max_uses, is_active=offer.is_active)
+        else:
+            Coupon.objects.filter(offer=offer).update(is_active=offer.is_active)
+
+
+def redeem_coupon(tenant, code, invoice_number, user, discount_amount):
+    """ Called by checkout: records the use and increments counters """
+    from apps.discounts.models import Coupon, CouponUse
+    c = Coupon.objects.select_for_update().filter(tenant=tenant, code=code).first()
+    if not c:
+        raise _DRFVE({'detail': 'الكوبون مش موجود'})
+    if c.max_uses is not None and c.used_count >= c.max_uses:
+        raise _DRFVE({'detail': 'الكوبون ده اتستعمل قبل كده' if c.max_uses == 1 else 'الكوبون خلص عدد استخدامه'})
+    c.used_count += 1
+    c.save(update_fields=['used_count'])
+    CouponUse.objects.create(tenant=tenant, coupon=c, invoice_number=invoice_number, used_by=user if (user is not None and user.is_authenticated) else None, discount_amount=discount_amount)
+    return c
+
+class OfferViewSet(_AllPagesMixin, BaseTenantViewSet):
+    model = Offer
+    serializer_class = OfferSerializer
+
+    def perform_create(self, serializer):
+        from django.db import transaction as dbt
+        with dbt.atomic():
+            offer = serializer.save(tenant=self.get_tenant())
+            _sync_offer(offer)
+
+    def perform_update(self, serializer):
+        from django.db import transaction as dbt
+        with dbt.atomic():
+            offer = serializer.save()
+            _sync_offer(offer)
+
+    @action(detail=True, methods=['post'])
+    def generate_coupons(self, request, pk=None):
+        from django.db import transaction as dbt
+        from apps.discounts.models import Coupon
+        offer = self.get_object()
+        try:
+            n = int(request.data.get('count') or 0)
+        except Exception:
+            n = 0
+        if n < 1 or n > 1000:
+            return Response({'detail': 'اكتب عدد من 1 لـ 1000'}, status=400)
+        if (offer.coupon_mode or 'SHARED') != 'UNIQUE':
+            return Response({'detail': 'العرض ده كوبونه كود واحد للكل'}, status=400)
+        codes = []
+        with dbt.atomic():
+            for _ in range(n):
+                code = _new_coupon_code(offer.tenant)
+                Coupon.objects.create(tenant=offer.tenant, offer=offer, code=code, max_uses=1, is_active=offer.is_active)
+                codes.append(code)
+        return Response({'created': n, 'codes': codes}, status=201)
+
+    @action(detail=True, methods=['get'])
+    def coupons(self, request, pk=None):
+        offer = self.get_object()
+        return Response([{'code': c.code, 'max_uses': c.max_uses, 'used_count': c.used_count, 'is_active': c.is_active} for c in offer.coupons.all().order_by('code')])
+
+    @action(detail=False, methods=['get'])
+    def validate_coupon(self, request):
+        from apps.discounts.models import Coupon
+        code = (request.query_params.get('code') or '').strip()
+        c = Coupon.objects.select_related('offer').filter(tenant=self.get_tenant(), code=code).first()
+        if not c:
+            return Response({'valid': False, 'detail': 'الكوبون مش موجود'}, status=400)
+        if not c.is_active:
+            return Response({'valid': False, 'detail': 'الكوبون موقوف'}, status=400)
+        ok, why = _offer_is_live(c.offer, request.query_params.get('warehouse'))
+        if not ok:
+            return Response({'valid': False, 'detail': why}, status=400)
+        if c.max_uses is not None and c.used_count >= c.max_uses:
+            return Response({'valid': False, 'detail': 'الكوبون ده اتستعمل قبل كده' if c.max_uses == 1 else 'الكوبون خلص عدد استخدامه'}, status=400)
+        return Response({'valid': True, 'code': c.code, 'offer': OfferSerializer(c.offer).data})
+
+    def get_queryset(self):
+        return super().get_queryset().order_by('-created_at')
+
+    @action(detail=False, methods=['get'])
+    def active_now(self, request):
+        from django.utils import timezone
+        now = timezone.localtime()
+        today = now.date(); t = now.time()
+        day = OFFER_DAYS[(now.weekday() + 2) % 7]
+        shop = request.query_params.get('warehouse')
+        out = []
+        for o in Offer.objects.filter(tenant=self.get_tenant(), is_active=True):
+            if o.date_from and today < o.date_from:
+                continue
+            if o.date_to and today > o.date_to:
+                continue
+            if o.time_from and o.time_to and not (o.time_from <= t <= o.time_to):
+                continue
+            if o.days and day not in o.days:
+                continue
+            if o.shops and shop and shop not in [str(x) for x in o.shops]:
+                continue
+            out.append(o)
+        return Response(OfferSerializer(out, many=True).data)

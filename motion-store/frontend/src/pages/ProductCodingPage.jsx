@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import PricingV2 from '../components/PricingV2';
 import PriceLogV2 from '../components/PriceLogV2';
+import OffersV2 from '../components/OffersV2';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { Tag, Save, Search, CheckCircle2, History, Scale, Package, Plus, Download, Printer, FileSpreadsheet, User, Gift, ToggleLeft, ToggleRight } from 'lucide-react';
 
 export default function ProductCodingPage() {
-  const { t } = useLanguage();
+  const { t, isRTL } = useLanguage();
   const { tenant } = useAuth();
   const [activeTab, setActiveTab] = useState('PRICING'); // CODING | PRICING | HISTORY | OFFERS
 
@@ -318,9 +319,9 @@ export default function ProductCodingPage() {
         <div>
           <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
             <Tag className="text-emerald-600" />
-            التسعير (F4)
+            {isRTL ? 'التسعير' : 'Pricing'}
           </h1>
-          <p className="text-xs text-slate-500 mt-1">تسعير الأوزان والقطع، وسجل تغييرات الأسعار، والعروض</p>
+          <p className="text-xs text-slate-500 mt-1">{isRTL ? 'تسعير الأوزان والقطع، وسجل تغييرات الأسعار، والعروض' : 'Weight & piece pricing, price change log, and offers'}</p>
         </div>
 
         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 flex-wrap gap-1">
@@ -330,7 +331,7 @@ export default function ProductCodingPage() {
               activeTab === 'PRICING' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            2. التسعير الفردي
+            {isRTL ? 'التسعير' : 'Pricing'}
           </button>
           <button
             onClick={() => setActiveTab('HISTORY')}
@@ -338,7 +339,7 @@ export default function ProductCodingPage() {
               activeTab === 'HISTORY' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            3. سجل التغيرات
+            {isRTL ? 'سجل التغيرات' : 'Change Log'}
           </button>
           <button
             onClick={() => setActiveTab('OFFERS')}
@@ -347,7 +348,7 @@ export default function ProductCodingPage() {
             }`}
           >
             <Gift size={14} />
-            <span>4. عروض الخصومات</span>
+            <span>{isRTL ? 'العروض' : 'Offers'}</span>
           </button>
         </div>
       </div>
@@ -364,174 +365,7 @@ export default function ProductCodingPage() {
 
       {activeTab === 'HISTORY' && <PriceLogV2 />}
 
-      {activeTab === 'OFFERS' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 print:hidden">
-          {/* CREATE OFFER FORM */}
-          <form onSubmit={handleSaveOffer} className="lg:col-span-5 bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-            <h2 className="text-sm font-black text-slate-800 border-b pb-2 flex items-center gap-2">
-              <Gift className="text-purple-600" size={18} />
-              إضافة وتفعيل عرض / تصفية جديدة
-            </h2>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">اسم العرض *</label>
-                <input
-                  type="text"
-                  placeholder="مثال: تصفية الشتوي 20% / خصم الجملة"
-                  value={offerForm.name}
-                  onChange={e => setOfferForm({ ...offerForm, name: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">نوع العرض / الخصم *</label>
-                <select
-                  value={offerForm.discount_type}
-                  onChange={e => setOfferForm({ ...offerForm, discount_type: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
-                >
-                  <option value="GRADE_PERCENTAGE">خصم نسبة % على درجة معينة (مثال: خصم على التصفيات)</option>
-                  <option value="WEIGHT_TIER">خصم نسبة % عند شراء وزن معين (مثال: خصم عند شراء 5 كجم+)</option>
-                  <option value="FIXED_AMOUNT">خصم مبلغ ثابت (ج.م) على الفاتورة</option>
-                </select>
-              </div>
-
-              {offerForm.discount_type === 'GRADE_PERCENTAGE' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">الدرجة المستهدفة بالخصم:</label>
-                  <select
-                    value={offerForm.target_grade}
-                    onChange={e => setOfferForm({ ...offerForm, target_grade: e.target.value })}
-                    className="w-full bg-slate-50 border border-purple-300 rounded-lg p-2 text-xs font-bold text-purple-900"
-                  >
-                    <option value="CLEARANCE">🏷️ تصفيات / شعبي</option>
-                    <option value="MIDDLE">📦 وسط / درجة ثانية</option>
-                    <option value="NEW_COLLECTION">✨ كريمة / سوبر لوكس</option>
-                  </select>
-                </div>
-              )}
-
-              {offerForm.discount_type === 'WEIGHT_TIER' && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 mb-1">الحد الأدنى لوزن الفاتورة (كجم):</label>
-                  <input
-                    type="number" step="0.5"
-                    value={offerForm.min_weight_kg}
-                    onChange={e => setOfferForm({ ...offerForm, min_weight_kg: e.target.value })}
-                    className="w-full bg-slate-50 border border-purple-300 rounded-lg p-2 text-xs font-bold"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">
-                  قيمة الخصم {offerForm.discount_type === 'FIXED_AMOUNT' ? '(ج.م)' : '(%)'}:
-                </label>
-                <input
-                  type="number" step="0.01"
-                  value={offerForm.value}
-                  onChange={e => setOfferForm({ ...offerForm, value: e.target.value })}
-                  className="w-full bg-purple-50 border border-purple-300 rounded-lg p-2.5 text-base font-black text-purple-900"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">يبدأ من تاريخ:</label>
-                  <input
-                    type="date"
-                    value={offerForm.start_date}
-                    onChange={e => setOfferForm({ ...offerForm, start_date: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 mb-1">ينتهي بتاريخ:</label>
-                  <input
-                    type="date"
-                    value={offerForm.end_date}
-                    onChange={e => setOfferForm({ ...offerForm, end_date: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-black text-sm shadow-md transition disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-            >
-              <Gift size={16} />
-              <span>{saving ? 'جاري التفعيل...' : 'إضافة وتفعيل العرض (F1)'}</span>
-            </button>
-          </form>
-
-          {/* ACTIVE DISCOUNTS LIST */}
-          <div className="lg:col-span-7 bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col">
-            <h2 className="text-sm font-black text-slate-800 border-b pb-3 mb-4 flex items-center gap-2">
-              <Gift className="text-purple-600" size={16} />
-              قائمة العروض والخصومات المفعلة بالبرنامج ({discountRules.length})
-            </h2>
-
-            <div className="flex-1 overflow-x-auto">
-              <table className="w-full text-right text-xs">
-                <thead className="bg-slate-100 text-slate-700 font-black border-y">
-                  <tr>
-                    <th className="p-2.5">اسم العرض</th>
-                    <th className="p-2.5">النوع والتفاصيل</th>
-                    <th className="p-2.5">قيمة الخصم</th>
-                    <th className="p-2.5">صلاحية العرض</th>
-                    <th className="p-2.5 text-center">الحالة / إجراء</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
-                  {discountRules.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="text-center py-10 text-slate-400">لا توجد عروض مفعّلة حالياً</td>
-                    </tr>
-                  ) : (
-                    discountRules.map(r => (
-                      <tr key={r.id} className="hover:bg-purple-50/30 transition">
-                        <td className="p-2.5 font-black text-slate-900">{r.name}</td>
-                        <td className="p-2.5 text-slate-600">
-                          {r.discount_type === 'GRADE_PERCENTAGE' ? `خصم على درجة (${r.target_grade})` : (
-                            r.discount_type === 'WEIGHT_TIER' ? `خصم عند شراء (${r.min_weight_kg} كجم+)` : 'خصم مبلغ ثابت'
-                          )}
-                        </td>
-                        <td className="p-2.5 font-black text-purple-700">
-                          {r.discount_type === 'FIXED_AMOUNT' ? `${r.value} ج.م` : `${r.value}%`}
-                        </td>
-                        <td className="p-2.5 text-[11px] font-mono text-slate-500">
-                          {r.start_date} $\rightarrow$ {r.end_date}
-                        </td>
-                        <td className="p-2.5 text-center">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleOffer(r)}
-                            className={`px-3 py-1 rounded-lg font-black text-[11px] transition cursor-pointer flex items-center gap-1 mx-auto ${
-                              r.is_active
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
-                            }`}
-                          >
-                            {r.is_active ? <ToggleRight size={14}/> : <ToggleLeft size={14}/>}
-                            <span>{r.is_active ? 'مفعل (شغال)' : 'معطل'}</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
+      {activeTab === 'OFFERS' && <OffersV2 />}
 
     </div>
   );

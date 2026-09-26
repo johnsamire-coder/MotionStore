@@ -328,3 +328,66 @@ class PriceChangeLogSerializer(serializers.ModelSerializer):
         model = PriceChangeLog
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+from apps.discounts.models import Offer, OFFER_TYPES, OFFER_DAYS
+
+class OfferSerializer(serializers.ModelSerializer):
+    coupons_total = serializers.SerializerMethodField()
+    coupons_used = serializers.SerializerMethodField()
+    offer_piece_code = serializers.SerializerMethodField()
+
+    def get_coupons_total(self, o):
+        return o.coupons.count()
+
+    def get_coupons_used(self, o):
+        return sum(c.used_count for c in o.coupons.all())
+
+    def get_offer_piece_code(self, o):
+        p = o.offer_pieces.first()
+        return p.code if p else None
+
+    class Meta:
+        model = Offer
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'usage_count', 'total_sales', 'total_discount']
+
+    def validate(self, attrs):
+        t = attrs.get('offer_type', getattr(self.instance, 'offer_type', None))
+        if t not in OFFER_TYPES:
+            raise serializers.ValidationError({'detail': 'نوع العرض غلط'})
+        if not (attrs.get('name', getattr(self.instance, 'name', '')) or '').strip():
+            raise serializers.ValidationError({'detail': 'اكتب اسم العرض'})
+        mode = attrs.get('apply_mode', getattr(self.instance, 'apply_mode', 'CASHIER'))
+        if mode not in ('AUTO', 'CASHIER', 'COUPON'):
+            raise serializers.ValidationError({'detail': 'طريقة التطبيق غلط'})
+        days = attrs.get('days', getattr(self.instance, 'days', []) or [])
+        if any(d not in OFFER_DAYS for d in days):
+            raise serializers.ValidationError({'detail': 'الأيام غلط'})
+        params = attrs.get('params', getattr(self.instance, 'params', {}) or {}) or {}
+        coupon = (params.get('coupon') or '').strip() if isinstance(params, dict) else ''
+        if t == 'COUPON' or mode == 'COUPON':
+            cmode = attrs.get('coupon_mode', getattr(self.instance, 'coupon_mode', '')) or 'SHARED'
+            if cmode not in ('SHARED', 'UNIQUE'):
+                raise serializers.ValidationError({'detail': 'نوع الكوبون غلط'})
+            if cmode == 'SHARED':
+                if not coupon:
+                    raise serializers.ValidationError({'detail': 'اكتب كود الكوبون أو دوس توليد'})
+                from apps.discounts.models import Coupon
+                request = self.context.get('request')
+                tenant = getattr(request, 'tenant', None) if request is not None else None
+                q1 = Offer.objects.filter(params__coupon=coupon)
+                q2 = Coupon.objects.filter(code=coupon)
+                if self.instance:
+                    q1 = q1.exclude(pk=self.instance.pk)
+                    q2 = q2.exclude(offer=self.instance)
+                if tenant:
+                    q1 = q1.filter(tenant=tenant)
+                    q2 = q2.filter(tenant=tenant)
+                if q1.exists() or q2.exists():
+                    raise serializers.ValidationError({'detail': f'الكوبون {coupon} مستعمل قبل كده'})
+        if t in ('ANYPIECE', 'ITEMPRICE'):
+            if not str(params.get('piece_name') or '').strip():
+                raise serializers.ValidationError({'detail': 'اكتب اسم القطعة'})
+            if not str(params.get('price') or '').strip():
+                raise serializers.ValidationError({'detail': 'اكتب سعر العرض'})
+        return attrs
