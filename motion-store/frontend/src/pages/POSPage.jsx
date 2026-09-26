@@ -205,7 +205,7 @@ export default function POSPage() {
         axiosClient.get(`/offers/active_now/?${term.default_warehouse ? `warehouse=${term.default_warehouse}` : ''}`)
       ]);
       const sh = listOf(shRes.data).find((x) => (String(x.terminal) === String(term.id) || String(x.terminal_id) === String(term.id)) && x.status === 'OPEN') || null;
-      setShift(sh); if (!sh) setShowOpenShift(true);
+      setShift(sh); if (!sh) { setShowOpenShift(true); try { const trr = await axiosClient.get('/treasuries/'); const dd = listOf(trr.data).find((x) => String(x.id) === String(term.cash_drawer)); if (dd) setOpeningCash(String(dd.current_balance)); } catch (e2) { /* ignore */ } }
       setStock(listOf(stRes.data));
       setPayMethods(listOf(pmRes.data));
       setActiveOffers(listOf(ofRes.data));
@@ -358,7 +358,7 @@ export default function POSPage() {
   };
 
   const openShiftNow = async () => {
-    try { const r = await axiosClient.post('/shifts/open/', { terminal_id: terminal.id, opening_cash: num(openingCash).toFixed(2) }); setShift(r.data); setShowOpenShift(false); }
+    try { const r = await axiosClient.post('/shifts/open_v2/', { terminal_id: terminal.id, counted_cash: num(openingCash).toFixed(2), manager_password: mgrPwd || undefined }); setShift(r.data); setShowOpenShift(false); }
     catch (e) { apiErr(e); }
   };
 
@@ -665,7 +665,7 @@ export default function POSPage() {
           <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-3">
             <div className="flex items-center justify-between"><div className="text-base font-bold">{T.openTitle}</div><button type="button" onClick={() => setShowOpenShift(false)} aria-label="close" className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><X size={16} /></button></div>
             <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.openingCash}<input type="number" min="0" step="0.01" value={openingCash} onChange={(e) => setOpeningCash(e.target.value)} className={input + ' w-full text-center font-bold'} /></label>
-            <button type="button" onClick={openShiftNow} className="w-full h-11 rounded-xl bg-emerald-600 text-white text-sm font-bold cursor-pointer">{T.open}</button>
+            {err && <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2 rounded-lg text-xs font-bold">{err}</div>}<input type="password" value={mgrPwd} onChange={(e) => setMgrPwd(e.target.value)} placeholder={isRTL ? 'باسورد المدير (لو المعدود مختلف عن الدرج)' : 'Manager password (if count differs)'} className={input + ' w-full text-center'} /><button type="button" onClick={openShiftNow} className="w-full h-11 rounded-xl bg-emerald-600 text-white text-sm font-bold cursor-pointer">{T.open}</button>
           </div>
         </div>
       )}

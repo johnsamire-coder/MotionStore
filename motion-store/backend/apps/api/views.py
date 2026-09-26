@@ -617,6 +617,166 @@ class ShiftViewSet(BaseTenantViewSet):
     model = Shift
     serializer_class = ShiftSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('terminal', 'cashier').order_by('-opened_at')
+        p = self.request.query_params
+        if p.get('terminal'):
+            qs = qs.filter(terminal_id=p['terminal'])
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        if p.get('date_from'):
+            qs = qs.filter(opened_at__date__gte=p['date_from'])
+        if p.get('date_to'):
+            qs = qs.filter(opened_at__date__lte=p['date_to'])
+        return qs
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('all') == '1':
+            return None
+        return super().paginate_queryset(queryset)
+
+    @action(detail=False, methods=['post'])
+    def open_v2(self, request):
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from apps.pos.models import POSTerminal
+        from apps.treasury.models import TreasuryTransactionType
+        from apps.treasury.services import record_treasury_transaction
+        t = self.get_tenant()
+        term = POSTerminal.objects.filter(tenant=t, pk=request.data.get('terminal_id')).first()
+        if not term or not term.cash_drawer_id:
+            return Response({'detail': 'نقطة البيع دي مالهاش درج'}, status=400)
+        if Shift.objects.filter(terminal=term, status='OPEN').exists():
+            return Response({'detail': 'فيه وردية مفتوحة بالفعل على نقطة البيع دي'}, status=400)
+        drawer = term.cash_drawer
+        drawer.refresh_from_db()
+        bal = drawer.current_balance
+        counted = request.data.get('counted_cash')
+        counted = bal if counted in (None, '') else Decimal(str(counted))
+        diff = counted - bal
+        with dbt.atomic():
+            if diff != 0:
+                if not _verify_manager(t, request.data.get('manager_password')):
+                    return Response({'detail': f'الدرج المفروض فيه {bal}، وإنت عدّيت {counted}. الفرق محتاج باسورد المدير', 'drawer_balance': str(bal)}, status=403)
+                record_treasury_transaction(treasury_id=drawer.id, transaction_type=TreasuryTransactionType.DEPOSIT if diff > 0 else TreasuryTransactionType.WITHDRAWAL,
+                                            amount=abs(diff), source_document_type='ShiftOpeningAdjust', source_document_id=str(term.code), description=f"تظبيط الدرج عند فتح الوردية ({diff})", allow_negative=True)
+            now = timezone.now()
+            seq = Shift.objects.filter(tenant=t, opened_at__date=now.date()).count() + 1
+            sh = Shift.objects.create(tenant=t, shift_code=f"SH-{term.code}-{now.strftime('%Y%m%d')}-{seq:03d}", terminal=term, cashier=request.user, opened_at=now,
+                                      status='OPEN', opening_cash=counted, opening_difference=diff, notes=request.data.get('notes'))
+        return Response(ShiftSerializer(sh).data, status=201)
+
+    def _summary(self, sh):
+        from django.db.models import Sum
+        from apps.treasury.models import TreasuryTransaction
+        from apps.sales.models import SaleInvoice, SalePayment
+        drawer = sh.terminal.cash_drawer
+        drawer.refresh_from_db()
+        LABELS = {'SaleInvoice': 'مبيعات كاش', 'SalesReturn': 'مرتجعات', 'Expense': 'مصروفات', 'ExpenseCancel': 'إلغاء مصروفات', 'DeferredSale': 'عربون مؤجلة',
+                  'CustomerPayment': 'تحصيل من عملاء', 'SupplierPayment': 'دفع لموردين', 'ShiftOpeningAdjust': 'تظبيط الافتتاح', 'ShiftOpening': 'افتتاح (قديم)', 'OwnerDrawing': 'ترحيل لصاحب المحل', 'ShiftShortage': 'عجز على الكاشير', 'ShiftSurplus': 'زيادة خزينة', 'Other': 'ترحيل لخزنة / تحويلات', 'None': 'ترحيل لخزنة / تحويلات'}
+        moves = {}
+        qs = TreasuryTransaction.objects.filter(treasury=drawer, created_at__gte=sh.opened_at)
+        if sh.closed_at:
+            qs = qs.filter(created_at__lte=sh.closed_at)
+        for tx in qs:
+            sign = 1 if tx.transaction_type in ('DEPOSIT', 'TRANSFER_IN') else -1
+            key = tx.source_document_type or 'Other'
+            moves[key] = moves.get(key, Decimal('0')) + (tx.amount if tx.amount < 0 else sign * tx.amount)
+        by_method = {}
+        invs = SaleInvoice.objects.filter(shift=sh)
+        for p in SalePayment.objects.filter(sale_invoice__in=invs).select_related('payment_method'):
+            by_method[p.payment_method.name] = by_method.get(p.payment_method.name, Decimal('0')) + p.amount
+        return {'shift': ShiftSerializer(sh).data, 'drawer': drawer.name, 'opening': str(sh.opening_cash), 'expected': str(drawer.current_balance),
+                'invoices': invs.count(), 'sales_total': str(invs.aggregate(s=Sum('total_amount'))['s'] or 0),
+                'by_method': [{'method': k, 'amount': str(v)} for k, v in by_method.items()],
+                'moves': [{'key': k, 'label': LABELS.get(k, k), 'amount': str(v)} for k, v in moves.items()]}
+
+    @action(detail=True, methods=['get'])
+    def summary(self, request, pk=None):
+        return Response(self._summary(self.get_object()))
+
+    @action(detail=True, methods=['post'])
+    def close_v2(self, request, pk=None):
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from apps.treasury.models import Treasury, TreasuryTransactionType, Expense, ExpenseCategory
+        from apps.treasury.services import record_treasury_transaction, transfer_between_treasuries
+        from apps.shifts.models import CashierCustody, ShiftHandover
+        sh = self.get_object()
+        if sh.status != 'OPEN':
+            return Response({'detail': 'الوردية دي مقفولة'}, status=400)
+        t = sh.tenant
+        d = request.data
+        drawer = sh.terminal.cash_drawer
+        drawer.refresh_from_db()
+        expected = drawer.current_balance
+        actual = Decimal(str(d.get('actual_cash') if d.get('actual_cash') not in (None, '') else '-1'))
+        if actual < 0:
+            return Response({'detail': 'اكتب الفلوس اللي اتعدّت في الدرج'}, status=400)
+        diff = actual - expected
+        mode = d.get('shortage_mode') or ''
+        hand = d.get('handovers') or []
+        htotal = sum((Decimal(str(h.get('amount') or '0')) for h in hand), Decimal('0'))
+        if htotal > actual:
+            return Response({'detail': 'الترحيل أكبر من الفلوس اللي في الدرج'}, status=400)
+        try:
+            with dbt.atomic():
+                if diff < 0:
+                    short = -diff
+                    if mode == 'SHOP':
+                        mgr = _verify_manager(t, d.get('manager_password'))
+                        if not mgr:
+                            return Response({'detail': 'العجز على المحل محتاج باسورد المدير'}, status=403)
+                        cat, _ = ExpenseCategory.objects.get_or_create(tenant=t, name='عجز خزينة', defaults={'is_active': True})
+                        today = timezone.localdate()
+                        num = f"EXP-{today.strftime('%Y%m%d')}-{Expense.objects.filter(tenant=t, created_at__date=today).count() + 1:03d}"
+                        record_treasury_transaction(treasury_id=drawer.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=short, source_document_type='Expense',
+                                                    source_document_id=num, description=f"عجز وردية {sh.shift_code}", allow_negative=True)
+                        e = Expense.objects.create(tenant=t, number=num, expense_date=today, category=cat, amount=short, treasury=drawer, shift=sh, paid_to=sh.cashier.username if sh.cashier_id else '',
+                                                   description=f"عجز وردية {sh.shift_code}", created_by=request.user, approved_by=mgr)
+                        e.journal_posted = _expense_journal(t, num, short, when=today)
+                        e.save(update_fields=['journal_posted'])
+                    elif mode == 'CASHIER':
+                        record_treasury_transaction(treasury_id=drawer.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=short, source_document_type='ShiftShortage',
+                                                    source_document_id=sh.shift_code, description=f"عجز على الكاشير - وردية {sh.shift_code}", allow_negative=True)
+                        CashierCustody.objects.create(tenant=t, cashier=sh.cashier, shift=sh, amount=short, notes=f"عجز وردية {sh.shift_code}")
+                    else:
+                        return Response({'detail': 'فيه عجز: اختار هيتسجل على الكاشير ولا على المحل'}, status=400)
+                elif diff > 0:
+                    record_treasury_transaction(treasury_id=drawer.id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=diff, source_document_type='ShiftSurplus',
+                                                source_document_id=sh.shift_code, description=f"زيادة خزينة - وردية {sh.shift_code}")
+                for h in hand:
+                    amt = Decimal(str(h.get('amount') or '0'))
+                    if amt <= 0:
+                        continue
+                    if h.get('destination') == 'OWNER':
+                        record_treasury_transaction(treasury_id=drawer.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, source_document_type='OwnerDrawing',
+                                                    source_document_id=sh.shift_code, description=f"ترحيل لصاحب المحل - {h.get('notes') or ''}".strip(' -'))
+                        ShiftHandover.objects.create(tenant=t, shift=sh, destination='OWNER', amount=amt, notes=h.get('notes'))
+                    else:
+                        to = Treasury.objects.filter(tenant=t, pk=h.get('treasury_id')).first()
+                        if not to or to.pk == drawer.pk:
+                            raise ValueError('اختار الخزنة اللي هيترحّل ليها')
+                        transfer_between_treasuries(drawer.id, to.id, amt, f"ترحيل وردية {sh.shift_code}")
+                        ShiftHandover.objects.create(tenant=t, shift=sh, destination='TREASURY', to_treasury=to, amount=amt, notes=h.get('notes'))
+                sh.expected_cash = expected
+                sh.actual_cash = actual
+                sh.difference = diff
+                sh.shortage_mode = mode if diff < 0 else ''
+                sh.handover_total = htotal
+                sh.status = 'CLOSED'
+                sh.closed_at = timezone.now()
+                sh.closed_by = request.user
+                sh.notes = ((sh.notes or '') + ' ' + (d.get('notes') or '')).strip()
+                sh.save()
+        except Exception as ex:
+            msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
+            return Response({'detail': 'الخزنة مفيهاش فلوس كفاية' if 'Insufficient' in msg else msg}, status=400)
+        drawer.refresh_from_db()
+        out = self._summary(sh)
+        out['remaining_in_drawer'] = str(drawer.current_balance)
+        return Response(out)
+
     @action(detail=False, methods=['post'])
     def open(self, request):
         shift = open_shift(
