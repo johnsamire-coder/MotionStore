@@ -125,6 +125,7 @@ class SortingOrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class StockItemSerializer(serializers.ModelSerializer):
+    warehouse_type = serializers.ReadOnlyField(source='warehouse.warehouse_type')
     product_name = serializers.ReadOnlyField(source='product.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
     class Meta:
@@ -133,6 +134,7 @@ class StockItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class InventoryTransactionSerializer(serializers.ModelSerializer):
+    warehouse_type = serializers.ReadOnlyField(source='warehouse.warehouse_type')
     product_name = serializers.ReadOnlyField(source='product.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
     class Meta:
@@ -258,5 +260,24 @@ from apps.purchasing.models import PurchaseOption
 class PurchaseOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOption
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+from apps.transfers.models import TransferOrder, TransferLineItem
+
+class TransferLineItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.ReadOnlyField(source='product.name')
+    class Meta:
+        model = TransferLineItem
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class TransferOrderSerializer(serializers.ModelSerializer):
+    lines = TransferLineItemSerializer(many=True, read_only=True)
+    source_name = serializers.ReadOnlyField(source='source_warehouse.name')
+    destination_name = serializers.ReadOnlyField(source='destination_warehouse.name')
+    requested_by_name = serializers.ReadOnlyField(source='requested_by.username')
+    class Meta:
+        model = TransferOrder
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']

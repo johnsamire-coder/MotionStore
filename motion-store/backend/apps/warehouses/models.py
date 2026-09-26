@@ -7,6 +7,7 @@ class Warehouse(TenantAwareModel):
         ('SORTING', 'Sorting Area'),
         ('TRANSIT', 'In-Transit Storage'),
         ('RETURNS', 'Returns Warehouse'),
+        ('STORE', 'Retail Store / Shop (محل)'),
     ]
 
     branch = models.ForeignKey(

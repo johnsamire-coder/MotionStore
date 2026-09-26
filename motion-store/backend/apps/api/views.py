@@ -60,6 +60,35 @@ class BranchViewSet(BaseTenantViewSet):
 class WarehouseViewSet(BaseTenantViewSet):
     model = Warehouse
     serializer_class = WarehouseSerializer
+    @action(detail=False, methods=['post'])
+    def add_location(self, request):
+        from apps.branches.models import Branch
+        from apps.treasury.models import Treasury
+        from apps.pos.models import POSTerminal
+        from django.db import transaction as dbt
+        tenant = self.get_tenant()
+        name = (request.data.get('name') or '').strip()
+        kind = request.data.get('kind') or 'MAIN'
+        if not name or kind not in ('STORE', 'MAIN'):
+            return Response({'detail': 'اكتب الاسم واختار النوع (مخزن أو محل)'}, status=400)
+        if Warehouse.objects.filter(tenant=tenant, name=name).exists():
+            return Response({'detail': 'الاسم ده موجود قبل كده'}, status=400)
+        branch = Branch.objects.filter(tenant=tenant).first()
+        if not branch:
+            return Response({'detail': 'مفيش فرع متسجل للشركة'}, status=400)
+        with dbt.atomic():
+            wh = Warehouse.objects.create(tenant=tenant, branch=branch, name=name, warehouse_type=kind, is_active=True)
+            result = {'warehouse': WarehouseSerializer(wh).data, 'terminal': None}
+            if kind == 'STORE':
+                drawer = Treasury.objects.create(tenant=tenant, branch=branch, name=f'درج كاشير - {name}', treasury_type='POS_DRAWER', current_balance=Decimal('0.00'), is_active=True)
+                n = POSTerminal.objects.filter(tenant=tenant).count() + 1
+                code = f'POS-S{n:02d}'
+                while POSTerminal.objects.filter(code=code).exists():
+                    n += 1
+                    code = f'POS-S{n:02d}'
+                term = POSTerminal.objects.create(tenant=tenant, branch=branch, name=f'كاشير {name}', code=code, default_warehouse=wh, cash_drawer=drawer, is_active=True)
+                result['terminal'] = term.code
+        return Response(result, status=201)
 
 class CategoryViewSet(BaseTenantViewSet):
     model = Category
@@ -351,10 +380,50 @@ class SortingOrderViewSet(BaseTenantViewSet):
 class StockItemViewSet(BaseTenantViewSet):
     model = StockItem
     serializer_class = StockItemSerializer
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('product', 'warehouse')
+        p = self.request.query_params
+        if p.get('warehouse'):
+            qs = qs.filter(warehouse_id=p['warehouse'])
+        if p.get('warehouse_type'):
+            qs = qs.filter(warehouse__warehouse_type=p['warehouse_type'])
+        if p.get('only_positive') == '1':
+            qs = qs.filter(total_weight_kg__gt=0)
+        return qs
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('all') == '1':
+            return None
+        return super().paginate_queryset(queryset)
 
 class InventoryTransactionViewSet(BaseTenantViewSet):
     model = InventoryTransaction
     serializer_class = InventoryTransactionSerializer
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('product', 'warehouse').order_by('-created_at')
+        p = self.request.query_params
+        if p.get('date_from'):
+            qs = qs.filter(created_at__date__gte=p['date_from'])
+        if p.get('date_to'):
+            qs = qs.filter(created_at__date__lte=p['date_to'])
+        if p.get('warehouse'):
+            qs = qs.filter(warehouse_id=p['warehouse'])
+        if p.get('warehouse_type'):
+            qs = qs.filter(warehouse__warehouse_type=p['warehouse_type'])
+        if p.get('product'):
+            qs = qs.filter(product_id=p['product'])
+        if p.get('grade'):
+            qs = qs.filter(grade=p['grade'])
+        if p.get('transaction_type'):
+            qs = qs.filter(transaction_type__in=p['transaction_type'].split(','))
+        if p.get('direction') == 'in':
+            qs = qs.filter(weight_change_kg__gt=0)
+        if p.get('direction') == 'out':
+            qs = qs.filter(weight_change_kg__lt=0)
+        return qs
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('all') == '1':
+            return None
+        return super().paginate_queryset(queryset)
 
 class PriceListViewSet(BaseTenantViewSet):
     model = PriceList
@@ -682,3 +751,67 @@ class PurchaseOptionViewSet(BaseTenantViewSet):
             obj.is_active = True
             obj.save()
         return Response(PurchaseOptionSerializer(obj).data, status=201 if created else 200)
+
+from django.db.models import Q
+from apps.transfers.models import TransferOrder
+from apps.transfers.services import create_transfer_order, ship_transfer_order, receive_transfer_order
+from apps.api.serializers import TransferOrderSerializer
+
+class TransferOrderViewSet(BaseTenantViewSet):
+    model = TransferOrder
+    serializer_class = TransferOrderSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('source_warehouse', 'destination_warehouse', 'requested_by').prefetch_related('lines__product').order_by('-created_at')
+        p = self.request.query_params
+        if p.get('date_from'):
+            qs = qs.filter(transfer_date__gte=p['date_from'])
+        if p.get('date_to'):
+            qs = qs.filter(transfer_date__lte=p['date_to'])
+        if p.get('warehouse'):
+            qs = qs.filter(Q(source_warehouse_id=p['warehouse']) | Q(destination_warehouse_id=p['warehouse']))
+        return qs
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('all') == '1':
+            return None
+        return super().paginate_queryset(queryset)
+
+    def create(self, request, *args, **kwargs):
+        from django.core.exceptions import ValidationError as DjVE
+        from django.db import transaction as dbt
+        tenant = self.get_tenant()
+        d = request.data
+        src = Warehouse.objects.filter(tenant=tenant, pk=d.get('source_warehouse_id')).first()
+        dst = Warehouse.objects.filter(tenant=tenant, pk=d.get('destination_warehouse_id')).first()
+        if not src or not dst:
+            return Response({'detail': 'اختار المكان اللي طالعة منه البضاعة والمكان اللي رايحة له'}, status=400)
+        if src.pk == dst.pk:
+            return Response({'detail': 'مينفعش تنقل لنفس المكان'}, status=400)
+        items = []
+        for it in d.get('items', []):
+            si = StockItem.objects.filter(tenant=tenant, pk=it.get('stock_item_id'), warehouse=src).first()
+            if not si:
+                return Response({'detail': f'فيه صنف مش موجود في {src.name}'}, status=400)
+            w = Decimal(str(it.get('weight_kg') or '0'))
+            if w <= 0:
+                return Response({'detail': 'اكتب الوزن المنقول'}, status=400)
+            if w > si.total_weight_kg:
+                return Response({'detail': f'الوزن المطلوب من {si.product.name} أكبر من المتاح ({si.total_weight_kg} كجم)'}, status=400)
+            pcs = it.get('quantity_pieces')
+            if pcs in (None, ''):
+                pcs = int(round(float(si.total_quantity_pieces) * float(w) / float(si.total_weight_kg))) if si.total_weight_kg > 0 else 0
+            pcs = max(0, min(int(pcs), int(si.total_quantity_pieces)))
+            items.append({'stock_item_id': si.pk, 'weight_kg': w, 'quantity_pieces': pcs})
+        if not items:
+            return Response({'detail': 'ضيف صنف واحد على الأقل'}, status=400)
+        user = request.user if request.user.is_authenticated else None
+        try:
+            with dbt.atomic():
+                tr = create_transfer_order(tenant, src, dst, user, items, d.get('notes'))
+                ship_transfer_order(tr.pk)
+                receive_transfer_order(tr.pk)
+        except DjVE as e:
+            return Response({'detail': '; '.join(e.messages)}, status=400)
+        tr.refresh_from_db()
+        return Response(TransferOrderSerializer(tr).data, status=201)
