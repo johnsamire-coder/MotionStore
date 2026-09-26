@@ -303,6 +303,18 @@ class SortingOrderViewSet(BaseTenantViewSet):
         from apps.warehouses.models import Warehouse
         
         category, _ = Category.objects.get_or_create(tenant=tenant, name="أصناف مفروزة عامة")
+        _li = getattr(getattr(order, 'raw_lot', None), 'purchase_line_item', None)
+        _base = None
+        if _li and _li.purchase_kind == 'BALE':
+            _base = ' '.join([x for x in [_li.bale_type, _li.segment] if x]) or 'بالة'
+        elif _li and _li.purchase_kind == 'STOCK':
+            _base = f"استوك {_li.brand}" if (_li.stock_type == 'ONE_BRAND' and _li.brand) else 'استوك ميكس'
+        elif _li and _li.purchase_kind == 'DIRECT':
+            _base = _li.item_name or 'أصناف خاصة'
+
+        def _next_code():
+            nums = [int(x) for x in Product.objects.filter(tenant=tenant).values_list('code', flat=True) if x and str(x).isdigit()]
+            return str(max(nums + [1000]) + 1)
 
         # Get target warehouse from raw lot or default main warehouse
         target_wh = None
@@ -325,12 +337,12 @@ class SortingOrderViewSet(BaseTenantViewSet):
             weight = float(out.get('weight_kg', 0))
             pcs = int(out.get('quantity_pieces', 0))
             if weight > 0 or pcs > 0:
-                grade_name = "كريمة" if grade == "NEW_COLLECTION" else ("وسط" if grade == "MIDDLE" else "تصفيات")
+                grade_name = "عالي" if grade == "NEW_COLLECTION" else ("وسط" if grade == "MIDDLE" else "تصفيات")
                 prod, _ = Product.objects.get_or_create(
                     tenant=tenant,
                     category=category,
-                    name=f"استوك فرز - {grade_name}",
-                    defaults={'code': f"SORT-{grade}"}
+                    name=(f"{_base} - {grade_name}" if _base else grade_name),
+                    defaults={'code': _next_code()}
                 )
                 SortingOutputLine.objects.create(
                     tenant=tenant,

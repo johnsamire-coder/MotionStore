@@ -125,6 +125,7 @@ class SortingOrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class StockItemSerializer(serializers.ModelSerializer):
+    retail_price = serializers.ReadOnlyField(source='product.retail_price')
     warehouse_type = serializers.ReadOnlyField(source='warehouse.warehouse_type')
     product_name = serializers.ReadOnlyField(source='product.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')

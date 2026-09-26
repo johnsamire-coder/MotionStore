@@ -1,324 +1,460 @@
+// INVENTORY_V2
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
-import { 
-  Package, 
-  History, 
-  Search, 
-  ArrowUpRight, 
-  ArrowDownRight, 
-  Boxes,
-  RotateCcw
-} from 'lucide-react';
+import ExportButtons from '../components/ExportButtons';
+import { Search, Plus, ArrowLeftRight, X as XIcon, Trash2 } from 'lucide-react';
+
+const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
+const num = (v) => parseFloat(v || 0) || 0;
+const money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const kgf = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 });
+const pad = (n) => String(n).padStart(2, '0');
+const dt = (iso) => { if (!iso) return ''; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+
+const GRADE = {
+  ar: { NEW_COLLECTION: 'عالي', MIDDLE: 'وسط', CLEARANCE: 'تصفيات', WASTE: 'هالك' },
+  en: { NEW_COLLECTION: 'High', MIDDLE: 'Medium', CLEARANCE: 'Low', WASTE: 'Waste' }
+};
+const TXN = {
+  ar: { SORT_IN: 'دخل من الفرز', SALE: 'بيع', RETURN_IN: 'مرتجع مبيعات', TRANSFER_OUT: 'نقل صادر', TRANSFER_IN: 'نقل وارد', ADJUSTMENT_PLUS: 'تسوية بالزيادة', ADJUSTMENT_MINUS: 'تسوية بالنقص', WRITE_DOWN: 'تخفيض قيمة' },
+  en: { SORT_IN: 'Sorting In', SALE: 'Sale', RETURN_IN: 'Sales Return', TRANSFER_OUT: 'Transfer Out', TRANSFER_IN: 'Transfer In', ADJUSTMENT_PLUS: 'Adjustment +', ADJUSTMENT_MINUS: 'Adjustment -', WRITE_DOWN: 'Write Down' }
+};
+const TXT = {
+  ar: {
+    title: 'المخزون', subtitle: 'أرصدة المخازن والمحلات، ونقل البضاعة بينهم، وسجل كل الحركات',
+    transfer: 'نقل بضاعة', addLoc: 'إضافة مكان', vStock: 'الأرصدة', vLedger: 'سجل الحركات', vTransfers: 'أذون النقل',
+    warehouses: 'المخازن', shops: 'المحلات', allWh: 'كل المخازن', allShops: 'كل المحلات', kg: 'كجم', cur: 'ج.م',
+    kTotal: 'إجمالي الوزن', kCost: 'القيمة بالتكلفة', kSale: 'القيمة بسعر البيع', kLow: 'أصناف قربت تخلص (أقل من 10 كجم)',
+    search: 'ابحث بالصنف أو الدرجة أو المكان...', results: 'عدد النتائج', product: 'الصنف', grade: 'الدرجة', loc: 'المكان',
+    weight: 'الوزن', pcs: 'القطع', cost: 'تكلفة الكيلو', price: 'سعر البيع', value: 'القيمة', moves: 'الحركة',
+    noStock: 'مفيش بضاعة هنا.', from: 'من تاريخ', to: 'إلى تاريخ', allLocs: 'كل الأماكن', type: 'نوع الحركة', allTypes: 'كل الأنواع',
+    dir: 'الاتجاه', dirAll: 'الكل', dirIn: 'داخل', dirOut: 'خارج', allGrades: 'كل الدرجات', show: 'عرض', reset: 'مسح الفلاتر',
+    date: 'التاريخ', change: 'التغيير', pcsChange: 'القطع', balance: 'الرصيد بعدها', doc: 'المستند',
+    totalIn: 'إجمالي الداخل', totalOut: 'إجمالي الخارج', net: 'الصافي', noMoves: 'مفيش حركات بالفلاتر دي.',
+    code: 'رقم الإذن', fromLoc: 'من', toLoc: 'إلى', items: 'الأصناف', totalKg: 'إجمالي الوزن', totalCost: 'قيمة التكلفة', by: 'بواسطة', noTransfers: 'مفيش أذون نقل.',
+    tTitle: 'إذن نقل بضاعة', tFrom: 'من (المكان اللي طالعة منه)', tTo: 'إلى (المكان اللي رايحة له)', choose: 'اختار...',
+    tItem: 'الصنف', tKg: 'الوزن (كجم)', avail: 'المتاح', addLine: '+ إضافة للإذن', tLines: 'أصناف الإذن', notes: 'ملاحظات',
+    confirm: 'تأكيد النقل', cancel: 'إلغاء', saving: 'جاري الحفظ...', close: 'إغلاق',
+    locTitle: 'إضافة مكان جديد', locName: 'الاسم', locKind: 'النوع', kindWh: 'مخزن', kindShop: 'محل', save: 'حفظ',
+    errPick: 'اختار الصنف واكتب الوزن', errMore: 'الوزن أكبر من المتاح', errSame: 'اختار مكانين مختلفين', errLines: 'ضيف صنف واحد على الأقل',
+    doneTransfer: 'تم النقل بنجاح - إذن رقم', doneLoc: 'تم إضافة المكان', doneShop: 'ونقطة البيع الخاصة بيه', failed: 'حصلت مشكلة: ',
+    rStock: 'تقرير أرصدة المخزون', rLedger: 'سجل حركات المخزون', rTransfers: 'تقرير أذون النقل', period: 'الفترة'
+  },
+  en: {
+    title: 'Inventory', subtitle: 'Warehouse & shop balances, transfers between them, and full movement history',
+    transfer: 'Transfer Goods', addLoc: 'Add Location', vStock: 'Balances', vLedger: 'Movements Log', vTransfers: 'Transfers',
+    warehouses: 'Warehouses', shops: 'Shops', allWh: 'All Warehouses', allShops: 'All Shops', kg: 'KG', cur: 'EGP',
+    kTotal: 'Total Weight', kCost: 'Value at Cost', kSale: 'Value at Sale Price', kLow: 'Low Stock Items (< 10 KG)',
+    search: 'Search by item, grade or location...', results: 'Results', product: 'Item', grade: 'Grade', loc: 'Location',
+    weight: 'Weight', pcs: 'Pieces', cost: 'Cost/KG', price: 'Sale Price', value: 'Value', moves: 'History',
+    noStock: 'No stock here.', from: 'From date', to: 'To date', allLocs: 'All locations', type: 'Movement type', allTypes: 'All types',
+    dir: 'Direction', dirAll: 'All', dirIn: 'In', dirOut: 'Out', allGrades: 'All grades', show: 'Show', reset: 'Clear filters',
+    date: 'Date', change: 'Change', pcsChange: 'Pieces', balance: 'Balance after', doc: 'Document',
+    totalIn: 'Total In', totalOut: 'Total Out', net: 'Net', noMoves: 'No movements for these filters.',
+    code: 'Transfer #', fromLoc: 'From', toLoc: 'To', items: 'Items', totalKg: 'Total Weight', totalCost: 'Cost Value', by: 'By', noTransfers: 'No transfers.',
+    tTitle: 'Goods Transfer', tFrom: 'From (source)', tTo: 'To (destination)', choose: 'Choose...',
+    tItem: 'Item', tKg: 'Weight (KG)', avail: 'Available', addLine: '+ Add to transfer', tLines: 'Transfer items', notes: 'Notes',
+    confirm: 'Confirm Transfer', cancel: 'Cancel', saving: 'Saving...', close: 'Close',
+    locTitle: 'Add New Location', locName: 'Name', locKind: 'Type', kindWh: 'Warehouse', kindShop: 'Shop', save: 'Save',
+    errPick: 'Choose an item and enter weight', errMore: 'Weight is more than available', errSame: 'Choose two different locations', errLines: 'Add at least one item',
+    doneTransfer: 'Transfer completed - #', doneLoc: 'Location added', doneShop: 'with its POS terminal', failed: 'Something went wrong: ',
+    rStock: 'Inventory Balances Report', rLedger: 'Inventory Movements Log', rTransfers: 'Transfers Report', period: 'Period'
+  }
+};
 
 export default function InventoryPage() {
-  const { t, isRTL } = useLanguage();
+  const { lang, isRTL } = useLanguage();
+  const T = TXT[lang] || TXT.ar;
+  const G = GRADE[lang] || GRADE.ar;
+  const X = TXN[lang] || TXN.ar;
 
-  const [viewMode, setViewMode] = useState('BALANCES');
-  const [stockItems, setStockItems] = useState([]);
-  const [ledgerTransactions, setLedgerTransactions] = useState([]);
+  const [view, setView] = useState('stock');
+  const [locTab, setLocTab] = useState('wh');
+  const [locId, setLocId] = useState('');
+  const [q, setQ] = useState('');
   const [warehouses, setWarehouses] = useState([]);
-  const [selectedWarehouse, setSelectedWarehouse] = useState('ALL');
-  const [selectedGrade, setSelectedGrade] = useState('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [stock, setStock] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState('');
 
-  useEffect(() => {
-    loadInventoryData();
-  }, []);
+  const emptyLF = { from: '', to: '', wh: '', type: '', dir: '', grade: '', q: '' };
+  const [lf, setLf] = useState(emptyLF);
+  const [ledger, setLedger] = useState([]);
+  const [tfFilter, setTfFilter] = useState({ from: '', to: '', wh: '' });
+  const [transfers, setTransfers] = useState([]);
 
-  const loadInventoryData = async () => {
+  const [showT, setShowT] = useState(false);
+  const [tf, setTf] = useState({ src: '', dst: '', pick: '', kg: '', lines: [], notes: '' });
+  const [showLoc, setShowLoc] = useState(false);
+  const [locForm, setLocForm] = useState({ name: '', kind: 'STORE' });
+  const [saving, setSaving] = useState(false);
+
+  const whById = {};
+  warehouses.forEach((w) => { whById[w.id] = w; });
+  const isShop = (id) => whById[id]?.warehouse_type === 'STORE';
+  const activeWh = warehouses.filter((w) => w.is_active !== false);
+  const tabLocs = activeWh.filter((w) => (locTab === 'shop' ? w.warehouse_type === 'STORE' : w.warehouse_type !== 'STORE'));
+
+  const loadBase = async () => {
     setLoading(true);
     try {
-      const stockRes = await axiosClient.get('/stock-items/');
-      setStockItems(stockRes.data.results || stockRes.data || []);
-
-      const ledgerRes = await axiosClient.get('/inventory-ledger/');
-      setLedgerTransactions(ledgerRes.data.results || ledgerRes.data || []);
-
-      const whRes = await axiosClient.get('/warehouses/?is_active=true');
-      setWarehouses(whRes.data.results || whRes.data || []);
-    } catch (err) {
-      console.error("Failed to load inventory data:", err);
-    } finally {
-      setLoading(false);
-    }
+      const [wRes, sRes] = await Promise.all([axiosClient.get('/warehouses/'), axiosClient.get('/stock-items/?all=1')]);
+      setWarehouses(listOf(wRes.data));
+      setStock(listOf(sRes.data));
+    } catch (e) { console.error(e); } finally { setLoading(false); }
+  };
+  const loadLedger = async (f = lf) => {
+    const p = new URLSearchParams({ all: '1' });
+    if (f.from) p.append('date_from', f.from);
+    if (f.to) p.append('date_to', f.to);
+    if (f.wh) p.append('warehouse', f.wh);
+    if (f.type) p.append('transaction_type', f.type);
+    if (f.dir) p.append('direction', f.dir);
+    if (f.grade) p.append('grade', f.grade);
+    try { const r = await axiosClient.get(`/inventory-ledger/?${p.toString()}`); setLedger(listOf(r.data)); } catch (e) { console.error(e); }
+  };
+  const loadTransfers = async (f = tfFilter) => {
+    const p = new URLSearchParams({ all: '1' });
+    if (f.from) p.append('date_from', f.from);
+    if (f.to) p.append('date_to', f.to);
+    if (f.wh) p.append('warehouse', f.wh);
+    try { const r = await axiosClient.get(`/transfers/?${p.toString()}`); setTransfers(listOf(r.data)); } catch (e) { console.error(e); }
   };
 
-  const totalWeight = stockItems.reduce((acc, i) => acc + parseFloat(i.total_weight_kg || 0), 0);
-  const totalValuation = stockItems.reduce((acc, i) => acc + parseFloat(i.current_total_value || 0), 0);
-  const totalPieces = stockItems.reduce((acc, i) => acc + (parseInt(i.total_quantity_pieces) || 0), 0);
+  useEffect(() => { loadBase(); }, []);
+  useEffect(() => { if (view === 'ledger') loadLedger(); if (view === 'transfers') loadTransfers(); }, [view]);
 
-  const newCollectionWeight = stockItems
-    .filter(i => i.grade === 'NEW_COLLECTION')
-    .reduce((acc, i) => acc + parseFloat(i.total_weight_kg || 0), 0);
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 5000); };
 
-  const middleGradeWeight = stockItems
-    .filter(i => i.grade === 'MIDDLE')
-    .reduce((acc, i) => acc + parseFloat(i.total_weight_kg || 0), 0);
+  // ---------- balances ----------
+  const inTab = stock.filter((s) => num(s.total_weight_kg) > 0 && (locTab === 'shop') === isShop(s.warehouse));
+  const term = q.trim().toLowerCase();
+  const rows = inTab.filter((s) => (!locId || s.warehouse === locId) && (!term || [s.product_name, G[s.grade], s.warehouse_name].join(' ').toLowerCase().includes(term)));
+  const sumKg = (list) => list.reduce((a, s) => a + num(s.total_weight_kg), 0);
+  const sumVal = (list) => list.reduce((a, s) => a + num(s.current_total_value), 0);
+  const sumSale = (list) => list.reduce((a, s) => a + num(s.total_weight_kg) * num(s.retail_price), 0);
 
-  const clearanceWeight = stockItems
-    .filter(i => i.grade === 'CLEARANCE')
-    .reduce((acc, i) => acc + parseFloat(i.total_weight_kg || 0), 0);
-
-  const filteredStock = stockItems.filter(item => {
-    const matchesSearch = item.product_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesWh = selectedWarehouse === 'ALL' || item.warehouse === selectedWarehouse;
-    const matchesGrade = selectedGrade === 'ALL' || item.grade === selectedGrade;
-    return matchesSearch && matchesWh && matchesGrade;
+  const stockReport = () => ({
+    title: T.rStock + ' - ' + (locId ? whById[locId]?.name : (locTab === 'shop' ? T.allShops : T.allWh)),
+    filename: 'inventory-balances', filtersText: q,
+    columns: [
+      { key: 'product', header: T.product, width: 28 }, { key: 'grade', header: T.grade, width: 12 }, { key: 'loc', header: T.loc, width: 20 },
+      { key: 'kg', header: T.weight + ' (' + T.kg + ')', type: 'number' }, { key: 'pcs', header: T.pcs, type: 'number' },
+    ],
+    rows: rows.map((s) => ({ product: s.product_name, grade: G[s.grade] || s.grade, loc: s.warehouse_name, kg: num(s.total_weight_kg), pcs: num(s.total_quantity_pieces), cost: num(s.avg_cost_per_kg), price: num(s.retail_price), value: num(s.current_total_value) })),
+    totals: { kg: sumKg(rows), pcs: rows.reduce((a, s) => a + num(s.total_quantity_pieces), 0) }
   });
 
-  const filteredLedger = ledgerTransactions.filter(txn => {
-    const matchesSearch = txn.source_document_id?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          txn.notes?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesWh = selectedWarehouse === 'ALL' || txn.warehouse === selectedWarehouse;
-    const matchesGrade = selectedGrade === 'ALL' || txn.grade === selectedGrade;
-    return matchesSearch && matchesWh && matchesGrade;
+  // ---------- ledger ----------
+  const lterm = lf.q.trim().toLowerCase();
+  const lrows = ledger.filter((r) => !lterm || [r.product_name, r.warehouse_name, r.source_document_id, r.notes, X[r.transaction_type]].join(' ').toLowerCase().includes(lterm));
+  const tIn = lrows.reduce((a, r) => a + Math.max(0, num(r.weight_change_kg)), 0);
+  const tOut = lrows.reduce((a, r) => a + Math.min(0, num(r.weight_change_kg)), 0);
+  const periodText = () => [lf.from && (T.from + ': ' + lf.from), lf.to && (T.to + ': ' + lf.to), lf.wh && whById[lf.wh]?.name, lf.type && X[lf.type], lf.dir && (lf.dir === 'in' ? T.dirIn : T.dirOut), lf.grade && G[lf.grade], lf.q].filter(Boolean).join(' | ');
+  const ledgerReport = () => ({
+    title: T.rLedger, filename: 'inventory-movements', filtersText: periodText(),
+    columns: [
+      { key: 'date', header: T.date, width: 17 }, { key: 'loc', header: T.loc, width: 18 }, { key: 'product', header: T.product, width: 26 },
+      { key: 'grade', header: T.grade, width: 10 }, { key: 'type', header: T.type, width: 15 }, { key: 'kg', header: T.change + ' (' + T.kg + ')', type: 'number' },
+      { key: 'pcs', header: T.pcsChange, type: 'number' }, { key: 'bal', header: T.balance, type: 'number' }, { key: 'doc', header: T.doc, width: 22 }
+    ],
+    rows: lrows.map((r) => ({ date: dt(r.created_at), loc: r.warehouse_name, product: r.product_name, grade: G[r.grade] || r.grade, type: X[r.transaction_type] || r.transaction_type, kg: num(r.weight_change_kg), pcs: num(r.quantity_change_pieces), bal: num(r.running_weight_balance), doc: r.source_document_id })),
+    totals: { kg: tIn + tOut }
   });
 
-  const getGradeLabel = (gradeKey) => {
-    if (gradeKey === 'NEW_COLLECTION') return t('inventory.gradeNew');
-    if (gradeKey === 'MIDDLE') return t('inventory.gradeMid');
-    if (gradeKey === 'CLEARANCE') return t('inventory.gradeClr');
-    return gradeKey;
+  // ---------- transfers ----------
+  const transfersReport = () => ({
+    title: T.rTransfers, filename: 'transfers', filtersText: [tfFilter.from, tfFilter.to, tfFilter.wh && whById[tfFilter.wh]?.name].filter(Boolean).join(' | '),
+    columns: [
+      { key: 'code', header: T.code, width: 18 }, { key: 'date', header: T.date, width: 12 }, { key: 'from', header: T.fromLoc, width: 18 }, { key: 'to', header: T.toLoc, width: 18 },
+      { key: 'items', header: T.items, width: 40 }, { key: 'kg', header: T.totalKg, type: 'number' }, { key: 'cost', header: T.totalCost, type: 'money' }, { key: 'by', header: T.by, width: 12 }
+    ],
+    rows: transfers.map((x) => ({ code: x.transfer_code, date: x.transfer_date, from: x.source_name, to: x.destination_name, items: (x.lines || []).map((l) => `${l.product_name} (${G[l.grade] || l.grade}) ${kgf(l.weight_kg)}`).join(' | '), kg: num(x.total_weight_kg), cost: num(x.total_cost_value), by: x.requested_by_name || '' })),
+    totals: { kg: transfers.reduce((a, x) => a + num(x.total_weight_kg), 0), cost: transfers.reduce((a, x) => a + num(x.total_cost_value), 0) }
+  });
+
+  // ---------- transfer modal ----------
+  const srcItems = stock.filter((s) => s.warehouse === tf.src && num(s.total_weight_kg) > 0);
+  const inLines = (id) => tf.lines.filter((l) => l.stock_item_id === id).reduce((a, l) => a + l.kg, 0);
+  const pickItem = srcItems.find((s) => s.id === tf.pick);
+  const pickAvail = pickItem ? num(pickItem.total_weight_kg) - inLines(pickItem.id) : 0;
+  const openTransfer = () => { setTf({ src: activeWh.find((w) => w.warehouse_type !== 'STORE')?.id || '', dst: '', pick: '', kg: '', lines: [], notes: '' }); setShowT(true); };
+  const addTLine = () => {
+    const kg = num(tf.kg);
+    if (!pickItem || kg <= 0) { alert(T.errPick); return; }
+    if (kg > pickAvail + 0.0001) { alert(T.errMore + ` (${kgf(pickAvail)} ${T.kg})`); return; }
+    setTf({ ...tf, pick: '', kg: '', lines: [...tf.lines, { stock_item_id: pickItem.id, kg, label: `${pickItem.product_name} - ${G[pickItem.grade] || pickItem.grade}` }] });
+  };
+  const submitTransfer = async () => {
+    if (!tf.src || !tf.dst || tf.src === tf.dst) { alert(T.errSame); return; }
+    if (!tf.lines.length) { alert(T.errLines); return; }
+    setSaving(true);
+    try {
+      const r = await axiosClient.post('/transfers/', { source_warehouse_id: tf.src, destination_warehouse_id: tf.dst, notes: tf.notes, items: tf.lines.map((l) => ({ stock_item_id: l.stock_item_id, weight_kg: l.kg.toFixed(3) })) });
+      setShowT(false);
+      flash(`${T.doneTransfer} ${r.data.transfer_code}`);
+      loadBase(); if (view === 'ledger') loadLedger(); if (view === 'transfers') loadTransfers();
+    } catch (e) { alert(T.failed + (e.response?.data?.detail || e.message)); } finally { setSaving(false); }
+  };
+  const submitLoc = async () => {
+    if (!locForm.name.trim()) return;
+    setSaving(true);
+    try {
+      const r = await axiosClient.post('/warehouses/add_location/', { name: locForm.name.trim(), kind: locForm.kind });
+      setShowLoc(false); setLocForm({ name: '', kind: 'STORE' });
+      flash(r.data.terminal ? `${T.doneLoc} ${T.doneShop} (${r.data.terminal})` : T.doneLoc);
+      setLocTab(locForm.kind === 'STORE' ? 'shop' : 'wh');
+      loadBase();
+    } catch (e) { alert(T.failed + (e.response?.data?.detail || e.message)); } finally { setSaving(false); }
   };
 
-  const getTransactionBadge = (type) => {
-    switch (type) {
-      case 'SORT_IN':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 flex items-center gap-1 w-fit"><ArrowDownRight size={12}/> {t('inventory.txnSortIn')}</span>;
-      case 'SALE':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 flex items-center gap-1 w-fit"><ArrowUpRight size={12}/> {t('inventory.txnSale')}</span>;
-      case 'RETURN_IN':
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800 flex items-center gap-1 w-fit"><RotateCcw size={12}/> {t('inventory.txnReturnIn')}</span>;
-      default:
-        return <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 w-fit">{type}</span>;
-    }
-  };
+  const Tab = ({ active, onClick, children }) => (
+    <button type="button" onClick={onClick} className={`h-10 px-5 rounded-lg text-sm font-bold border transition cursor-pointer ${active ? 'bg-slate-900 border-slate-900 text-white' : 'bg-white border-slate-300 text-slate-800 hover:border-slate-500'}`}>{children}</button>
+  );
+  const inputCls = 'h-10 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-emerald-500';
+  const searchBox = (value, onChange, ph) => (
+    <div className="relative flex-1 min-w-[220px]">
+      <Search size={16} className="absolute top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" style={isRTL ? { right: 12 } : { left: 12 }} />
+      <input type="text" value={value} onChange={onChange} placeholder={ph} className={inputCls + ' w-full'} style={isRTL ? { paddingRight: 36 } : { paddingLeft: 36 }} />
+    </div>
+  );
 
-  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
+  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">...</div>;
 
   return (
-    <div className="space-y-8" dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('inventory.title')}</h2>
-          <p className="text-sm text-slate-500">{t('inventory.subtitle')}</p>
+          <h1 className="text-xl font-black text-slate-800">{T.title}</h1>
+          <p className="text-xs text-slate-500 mt-1">{T.subtitle}</p>
         </div>
-
-        <div className="bg-slate-200/80 p-1 rounded-xl flex items-center gap-1 self-start">
-          <button
-            onClick={() => setViewMode('BALANCES')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
-              viewMode === 'BALANCES' 
-                ? 'bg-white text-slate-900 shadow-xs' 
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Boxes size={15} /> {t('inventory.stockBalances')}
-          </button>
-          <button
-            onClick={() => setViewMode('LEDGER')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
-              viewMode === 'LEDGER' 
-                ? 'bg-white text-slate-900 shadow-xs' 
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <History size={15} /> {t('inventory.auditLedger')}
-          </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setShowLoc(true)} className="h-10 px-4 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 cursor-pointer"><Plus size={14} /> {T.addLoc}</button>
+          <button type="button" onClick={openTransfer} className="h-10 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black flex items-center gap-1.5 cursor-pointer"><ArrowLeftRight size={14} /> {T.transfer}</button>
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('inventory.totalStock')}</span>
-          <div className="text-2xl font-black text-slate-900">{totalWeight.toFixed(3)} <span className="text-xs font-normal text-slate-500">{t('common.kg')}</span></div>
-          <p className="text-xs text-slate-500 mt-2 flex items-center gap-1 font-medium">
-            <Package size={13} className="text-emerald-600" /> {t('inventory.acrossWhSub')} ({totalPieces} {t('common.pcs')})
-          </p>
-        </div>
+      {msg && <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-3 rounded-xl text-sm font-bold">{msg}</div>}
 
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('inventory.totalValuation')}</span>
-          <div className="text-2xl font-black text-emerald-600">{totalValuation.toFixed(2)} <span className="text-xs font-normal text-slate-500">{t('common.currency')}</span></div>
-          <p className="text-xs text-emerald-700 mt-2 font-bold">{t('inventory.costBasisSub')}</p>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('inventory.gradeNew')}</span>
-          <div className="text-2xl font-black text-indigo-600">{newCollectionWeight.toFixed(3)} <span className="text-xs font-normal text-slate-500">{t('common.kg')}</span></div>
-          <p className="text-xs text-indigo-700 mt-2 font-semibold">{t('inventory.avgCostSub')} ~176.47 {t('common.currency')}/{t('common.kg')}</p>
-        </div>
-
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{t('inventory.midAndClear')}</span>
-          <div className="text-2xl font-black text-amber-600">{(middleGradeWeight + clearanceWeight).toFixed(3)} <span className="text-xs font-normal text-slate-500">{t('common.kg')}</span></div>
-          <p className="text-xs text-slate-500 mt-2 font-medium">{t('inventory.midLabel')}: {middleGradeWeight.toFixed(1)}k | {t('inventory.clearLabel')}: {clearanceWeight.toFixed(1)}k</p>
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <Tab active={view === 'stock'} onClick={() => setView('stock')}>{T.vStock}</Tab>
+        <Tab active={view === 'ledger'} onClick={() => setView('ledger')}>{T.vLedger}</Tab>
+        <Tab active={view === 'transfers'} onClick={() => setView('transfers')}>{T.vTransfers}</Tab>
       </div>
 
-      {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-[280px]">
-          <div className="relative flex-1 max-w-sm">
-            <Search size={16} className={`absolute ${isRTL ? 'right-3.5' : 'left-3.5'} top-3 text-slate-400`} />
-            <input
-              type="text"
-              placeholder={viewMode === 'BALANCES' ? t('inventory.searchPlaceholderBalances') : t('inventory.searchPlaceholderLedger')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={`w-full ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:border-emerald-500`}
-            />
+      {view === 'stock' && (
+        <>
+          <div className="flex gap-2">
+            <Tab active={locTab === 'wh'} onClick={() => { setLocTab('wh'); setLocId(''); }}>{T.warehouses}</Tab>
+            <Tab active={locTab === 'shop'} onClick={() => { setLocTab('shop'); setLocId(''); }}>{T.shops}</Tab>
           </div>
-
-          <select
-            value={selectedWarehouse}
-            onChange={(e) => setSelectedWarehouse(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-          >
-            <option value="ALL">{t('inventory.allWarehouses')}</option>
-            {warehouses.map(wh => (
-              <option key={wh.id} value={wh.id}>{wh.name}</option>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[{ id: '', name: locTab === 'shop' ? T.allShops : T.allWh, list: inTab }, ...tabLocs.map((w) => ({ id: w.id, name: w.name, list: inTab.filter((s) => s.warehouse === w.id) }))].map((c) => (
+              <button key={c.id || 'all'} type="button" onClick={() => setLocId(c.id)} className={`text-start p-3 rounded-xl border cursor-pointer transition ${locId === c.id ? 'border-emerald-600 bg-emerald-50 border-2' : 'border-slate-200 bg-white hover:border-emerald-300'}`}>
+                <div className="text-sm font-bold text-slate-900">{c.name}</div>
+                <div className="text-xs text-slate-600 mt-1">{kgf(sumKg(c.list))} {T.kg}</div>
+              </button>
             ))}
-          </select>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.kTotal}</div><div className="text-xl font-black mt-1">{kgf(sumKg(rows))} <span className="text-xs text-slate-500">{T.kg}</span></div></div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.kSale}</div><div className="text-xl font-black mt-1 text-emerald-800">{money(sumSale(rows))} <span className="text-xs text-slate-500">{T.cur}</span></div></div>
+            <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.kLow}</div><div className="text-xl font-black mt-1 text-amber-700">{rows.filter((s) => num(s.total_weight_kg) < 10).length}</div></div>
+          </div>
+          <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              {searchBox(q, (e) => setQ(e.target.value), T.search)}
+              <div className="text-xs font-bold text-slate-500 whitespace-nowrap">{T.results}: {rows.length}</div>
+              <ExportButtons getReport={stockReport} />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead><tr className="bg-slate-100 text-slate-700">
+                  <th className="p-2 text-start">{T.product}</th><th className="p-2 text-start">{T.grade}</th><th className="p-2 text-start">{T.loc}</th>
+                  <th className="p-2 text-center">{T.weight}</th><th className="p-2 text-center">{T.pcs}</th>
+                  <th className="p-2"></th>
+                </tr></thead>
+                <tbody>
+                  {rows.length === 0 && <tr><td colSpan={6} className="p-4 text-center text-slate-500">{T.noStock}</td></tr>}
+                  {rows.map((s) => (
+                    <tr key={s.id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="p-2 font-bold text-slate-900">{s.product_name}</td>
+                      <td className="p-2"><span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 font-bold">{G[s.grade] || s.grade}</span></td>
+                      <td className="p-2">{s.warehouse_name}</td>
+                      <td className="p-2 text-center font-bold">{kgf(s.total_weight_kg)} {T.kg}</td>
+                      <td className="p-2 text-center">{s.total_quantity_pieces}</td>
+                      <td className="p-2"><button type="button" onClick={() => { const f = { ...emptyLF, wh: s.warehouse, q: s.product_name }; setLf(f); setView('ledger'); }} className="h-8 px-3 rounded-lg border border-slate-300 bg-white text-xs font-bold cursor-pointer hover:bg-slate-100">{T.moves}</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
-          <select
-            value={selectedGrade}
-            onChange={(e) => setSelectedGrade(e.target.value)}
-            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-          >
-            <option value="ALL">{t('inventory.allGrades')}</option>
-            <option value="NEW_COLLECTION">{t('inventory.gradeNew')}</option>
-            <option value="MIDDLE">{t('inventory.gradeMid')}</option>
-            <option value="CLEARANCE">{t('inventory.gradeClr')}</option>
-          </select>
-        </div>
-
-        <button 
-          onClick={loadInventoryData}
-          className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-slate-50 rounded-xl transition cursor-pointer"
-          title={t('common.refresh')}
-        >
-          <RotateCcw size={16} />
-        </button>
-      </div>
-
-      {/* VIEW 1: STOCK BALANCES */}
-      {viewMode === 'BALANCES' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      {view === 'ledger' && (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-2 items-end">
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.from}<input type="date" value={lf.from} onChange={(e) => setLf({ ...lf, from: e.target.value })} className={inputCls + ' w-full'} /></label>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.to}<input type="date" value={lf.to} onChange={(e) => setLf({ ...lf, to: e.target.value })} className={inputCls + ' w-full'} /></label>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.loc}<select value={lf.wh} onChange={(e) => setLf({ ...lf, wh: e.target.value })} className={inputCls + ' w-full'}><option value="">{T.allLocs}</option>{activeWh.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.type}<select value={lf.type} onChange={(e) => setLf({ ...lf, type: e.target.value })} className={inputCls + ' w-full'}><option value="">{T.allTypes}</option>{Object.keys(X).map((k) => <option key={k} value={k}>{X[k]}</option>)}</select></label>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.dir}<select value={lf.dir} onChange={(e) => setLf({ ...lf, dir: e.target.value })} className={inputCls + ' w-full'}><option value="">{T.dirAll}</option><option value="in">{T.dirIn}</option><option value="out">{T.dirOut}</option></select></label>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.grade}<select value={lf.grade} onChange={(e) => setLf({ ...lf, grade: e.target.value })} className={inputCls + ' w-full'}><option value="">{T.allGrades}</option>{Object.keys(G).map((k) => <option key={k} value={k}>{G[k]}</option>)}</select></label>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {searchBox(lf.q, (e) => setLf({ ...lf, q: e.target.value }), T.search)}
+            <button type="button" onClick={() => loadLedger()} className="h-10 px-5 rounded-lg bg-slate-900 text-white text-xs font-bold cursor-pointer">{T.show}</button>
+            <button type="button" onClick={() => { setLf(emptyLF); loadLedger(emptyLF); }} className="h-10 px-4 rounded-lg border border-slate-300 bg-white text-xs font-bold cursor-pointer">{T.reset}</button>
+            <div className="text-xs font-bold text-slate-500 whitespace-nowrap">{T.results}: {lrows.length}</div>
+            <ExportButtons getReport={ledgerReport} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm font-bold text-emerald-800">{T.totalIn}: +{kgf(tIn)} {T.kg}</div>
+            <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-sm font-bold text-rose-800">{T.totalOut}: {kgf(tOut)} {T.kg}</div>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold text-slate-800">{T.net}: {kgf(tIn + tOut)} {T.kg}</div>
+          </div>
           <div className="overflow-x-auto">
-            <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs`}>
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-3.5 px-5">{t('inventory.colProduct')}</th>
-                  <th className="py-3.5 px-5">{t('inventory.colWarehouse')}</th>
-                  <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('inventory.colWeight')}</th>
-                  <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('inventory.colPieces')}</th>
-                  <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('inventory.colCost')}</th>
-                  <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('inventory.colTotal')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-150 text-slate-800 font-medium">
-                {filteredStock.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50/70 transition">
-                    <td className="py-4 px-5">
-                      <div className="font-bold text-slate-900 text-sm">{item.product_name}</div>
-                      <span className={`inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                        item.grade === 'NEW_COLLECTION' 
-                          ? 'bg-emerald-100 text-emerald-800' 
-                          : item.grade === 'MIDDLE' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {getGradeLabel(item.grade)}
-                      </span>
-                    </td>
-                    <td className="py-4 px-5 text-slate-600">{item.warehouse_name}</td>
-                    <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-slate-900 text-sm`}>
-                      {parseFloat(item.total_weight_kg).toFixed(3)} <span className="text-[10px] font-normal text-slate-500">{t('common.kg')}</span>
-                    </td>
-                    <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-semibold text-slate-700`}>{item.total_quantity_pieces} {t('common.pcs')}</td>
-                    <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-mono font-semibold text-slate-600`}>
-                      {parseFloat(item.avg_cost_per_kg).toFixed(2)} {t('common.currency')}
-                    </td>
-                    <td className={`py-4 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-emerald-700 text-sm`}>
-                      {parseFloat(item.current_total_value).toFixed(2)} {t('common.currency')}
-                    </td>
+            <table className="w-full text-xs">
+              <thead><tr className="bg-slate-100 text-slate-700">
+                <th className="p-2 text-start">{T.date}</th><th className="p-2 text-start">{T.loc}</th><th className="p-2 text-start">{T.product}</th><th className="p-2 text-start">{T.grade}</th>
+                <th className="p-2 text-start">{T.type}</th><th className="p-2 text-center">{T.change}</th><th className="p-2 text-center">{T.pcsChange}</th><th className="p-2 text-center">{T.balance}</th><th className="p-2 text-start">{T.doc}</th>
+              </tr></thead>
+              <tbody>
+                {lrows.length === 0 && <tr><td colSpan={9} className="p-4 text-center text-slate-500">{T.noMoves}</td></tr>}
+                {lrows.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-100">
+                    <td className="p-2 font-mono whitespace-nowrap">{dt(r.created_at)}</td>
+                    <td className="p-2">{r.warehouse_name}</td>
+                    <td className="p-2 font-bold">{r.product_name}</td>
+                    <td className="p-2">{G[r.grade] || r.grade}</td>
+                    <td className="p-2">{X[r.transaction_type] || r.transaction_type}</td>
+                    <td className={`p-2 text-center font-bold ${num(r.weight_change_kg) >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{num(r.weight_change_kg) > 0 ? '+' : ''}{kgf(r.weight_change_kg)}</td>
+                    <td className="p-2 text-center">{r.quantity_change_pieces}</td>
+                    <td className="p-2 text-center">{kgf(r.running_weight_balance)}</td>
+                    <td className="p-2 font-mono">{r.source_document_id}</td>
                   </tr>
                 ))}
-
-                {filteredStock.length === 0 && (
-                  <tr>
-                    <td colSpan="6" className="py-16 text-center text-slate-400 text-xs font-bold">
-                      {t('inventory.noStockFound')}
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
-      {/* VIEW 2: LEDGER JOURNAL STREAM */}
-      {viewMode === 'LEDGER' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      {view === 'transfers' && (
+        <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.from}<input type="date" value={tfFilter.from} onChange={(e) => setTfFilter({ ...tfFilter, from: e.target.value })} className={inputCls + ' w-full'} /></label>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.to}<input type="date" value={tfFilter.to} onChange={(e) => setTfFilter({ ...tfFilter, to: e.target.value })} className={inputCls + ' w-full'} /></label>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.loc}<select value={tfFilter.wh} onChange={(e) => setTfFilter({ ...tfFilter, wh: e.target.value })} className={inputCls + ' w-full'}><option value="">{T.allLocs}</option>{activeWh.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}</select></label>
+            <button type="button" onClick={() => loadTransfers()} className="h-10 px-5 rounded-lg bg-slate-900 text-white text-xs font-bold cursor-pointer">{T.show}</button>
+            <div className="text-xs font-bold text-slate-500 whitespace-nowrap">{T.results}: {transfers.length}</div>
+            <ExportButtons getReport={transfersReport} />
+          </div>
           <div className="overflow-x-auto">
-            <table className={`w-full ${isRTL ? 'text-right' : 'text-left'} text-xs`}>
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                <tr>
-                  <th className="py-3.5 px-5">{t('inventory.colDate')}</th>
-                  <th className="py-3.5 px-5">{t('inventory.colProduct')}</th>
-                  <th className="py-3.5 px-5">{t('inventory.colWarehouse')}</th>
-                  <th className="py-3.5 px-5">{t('inventory.colDoc')}</th>
-                  <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('inventory.colChange')}</th>
-                  <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('inventory.colCost')}</th>
-                  <th className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'}`}>{t('inventory.colRunning')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-150 text-slate-800 font-medium">
-                {filteredLedger.map((txn) => {
-                  const wtChange = parseFloat(txn.weight_change_kg);
-                  return (
-                    <tr key={txn.id} className="hover:bg-slate-50/70 transition font-mono">
-                      <td className="py-3.5 px-5">
-                        <div className="text-[11px] text-slate-500 font-sans">{txn.created_at?.substring(0, 10)}</div>
-                        <div className="mt-1">{getTransactionBadge(txn.transaction_type)}</div>
-                      </td>
-                      <td className="py-3.5 px-5 font-sans">
-                        <div className="font-bold text-slate-900 text-xs">{txn.product_name || 'Item'}</div>
-                        <div className="text-[10px] text-slate-500">{getGradeLabel(txn.grade)}</div>
-                      </td>
-                      <td className="py-3.5 px-5 font-sans text-slate-600">{txn.warehouse_name || 'Warehouse'}</td>
-                      <td className="py-3.5 px-5 font-sans">
-                        <span className="font-bold text-slate-700">{txn.source_document_id}</span>
-                        <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{txn.notes}</div>
-                      </td>
-                      <td className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-xs ${wtChange >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                        {wtChange >= 0 ? `+${wtChange.toFixed(3)}` : wtChange.toFixed(3)} {t('common.kg')}
-                      </td>
-                      <td className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'} font-semibold text-slate-600`}>
-                        {parseFloat(txn.unit_cost).toFixed(2)} {t('common.currency')}
-                      </td>
-                      <td className={`py-3.5 px-5 ${isRTL ? 'text-left' : 'text-right'} font-bold text-slate-900`}>
-                        {parseFloat(txn.running_weight_balance).toFixed(3)} {t('common.kg')}
-                      </td>
-                    </tr>
-                  );
-                })}
-
-                {filteredLedger.length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="py-16 text-center text-slate-400 text-xs font-sans">
-                      {t('inventory.noLedgerFound')}
-                    </td>
+            <table className="w-full text-xs">
+              <thead><tr className="bg-slate-100 text-slate-700">
+                <th className="p-2 text-start">{T.code}</th><th className="p-2 text-start">{T.date}</th><th className="p-2 text-start">{T.fromLoc}</th><th className="p-2 text-start">{T.toLoc}</th>
+                <th className="p-2 text-start">{T.items}</th><th className="p-2 text-center">{T.totalKg}</th><th className="p-2 text-center">{T.totalCost}</th><th className="p-2 text-start">{T.by}</th>
+              </tr></thead>
+              <tbody>
+                {transfers.length === 0 && <tr><td colSpan={8} className="p-4 text-center text-slate-500">{T.noTransfers}</td></tr>}
+                {transfers.map((x) => (
+                  <tr key={x.id} className="border-b border-slate-100">
+                    <td className="p-2 font-mono font-bold">{x.transfer_code}</td>
+                    <td className="p-2">{x.transfer_date}</td>
+                    <td className="p-2">{x.source_name}</td>
+                    <td className="p-2">{x.destination_name}</td>
+                    <td className="p-2">{(x.lines || []).map((l) => `${l.product_name} (${G[l.grade] || l.grade}) ${kgf(l.weight_kg)} ${T.kg}`).join(' | ')}</td>
+                    <td className="p-2 text-center font-bold">{kgf(x.total_weight_kg)}</td>
+                    <td className="p-2 text-center">{money(x.total_cost_value)}</td>
+                    <td className="p-2">{x.requested_by_name || '—'}</td>
                   </tr>
-                )}
+                ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {showT && (
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="text-base font-bold">{T.tTitle}</div>
+              <button type="button" onClick={() => setShowT(false)} aria-label={T.close} className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><XIcon size={18} /></button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.tFrom}
+                <select value={tf.src} onChange={(e) => setTf({ ...tf, src: e.target.value, pick: '', lines: [] })} className={inputCls + ' w-full'}>
+                  <option value="">{T.choose}</option>{activeWh.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.tTo}
+                <select value={tf.dst} onChange={(e) => setTf({ ...tf, dst: e.target.value })} className={inputCls + ' w-full'}>
+                  <option value="">{T.choose}</option>{activeWh.filter((w) => w.id !== tf.src).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 border border-slate-200 rounded-xl p-3">
+              <label className="text-xs font-bold text-slate-600 space-y-1 block md:col-span-2">{T.tItem}
+                <select value={tf.pick} onChange={(e) => setTf({ ...tf, pick: e.target.value })} className={inputCls + ' w-full'}>
+                  <option value="">{T.choose}</option>
+                  {srcItems.map((s) => <option key={s.id} value={s.id}>{s.product_name} - {G[s.grade] || s.grade} ({kgf(num(s.total_weight_kg) - inLines(s.id))} {T.kg})</option>)}
+                </select>
+              </label>
+              <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.tKg}
+                <input type="number" min="0" step="0.001" value={tf.kg} onChange={(e) => setTf({ ...tf, kg: e.target.value })} className={inputCls + ' w-full'} />
+              </label>
+              <div className="text-xs text-slate-600 md:col-span-2">{pickItem ? `${T.avail}: ${kgf(pickAvail)} ${T.kg}` : ''}</div>
+              <button type="button" onClick={addTLine} className="h-10 px-4 rounded-lg bg-slate-900 text-white text-xs font-bold cursor-pointer">{T.addLine}</button>
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs font-bold text-slate-700">{T.tLines}</div>
+              {tf.lines.length === 0 && <div className="text-xs text-slate-500">—</div>}
+              {tf.lines.map((l, i) => (
+                <div key={i} className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2 text-sm">
+                  <span className="font-bold">{l.label}</span>
+                  <span className="flex items-center gap-3"><span>{kgf(l.kg)} {T.kg}</span>
+                    <button type="button" onClick={() => setTf({ ...tf, lines: tf.lines.filter((_, j) => j !== i) })} className="h-8 w-8 rounded-lg border border-red-200 bg-red-50 text-red-700 flex items-center justify-center cursor-pointer"><Trash2 size={14} /></button>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.notes}
+              <input value={tf.notes} onChange={(e) => setTf({ ...tf, notes: e.target.value })} className={inputCls + ' w-full'} />
+            </label>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setShowT(false)} className="h-10 px-5 rounded-lg border border-slate-300 bg-white text-sm font-bold cursor-pointer">{T.cancel}</button>
+              <button type="button" disabled={saving} onClick={submitTransfer} className="h-10 px-6 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-bold cursor-pointer">{saving ? T.saving : T.confirm}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showLoc && (
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="text-base font-bold">{T.locTitle}</div>
+              <button type="button" onClick={() => setShowLoc(false)} aria-label={T.close} className="h-9 w-9 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><XIcon size={18} /></button>
+            </div>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.locName}
+              <input autoFocus value={locForm.name} onChange={(e) => setLocForm({ ...locForm, name: e.target.value })} className={inputCls + ' w-full'} />
+            </label>
+            <div className="space-y-1">
+              <div className="text-xs font-bold text-slate-600">{T.locKind}</div>
+              <div className="flex gap-2">
+                <Tab active={locForm.kind === 'STORE'} onClick={() => setLocForm({ ...locForm, kind: 'STORE' })}>{T.kindShop}</Tab>
+                <Tab active={locForm.kind === 'MAIN'} onClick={() => setLocForm({ ...locForm, kind: 'MAIN' })}>{T.kindWh}</Tab>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => setShowLoc(false)} className="h-10 px-5 rounded-lg border border-slate-300 bg-white text-sm font-bold cursor-pointer">{T.cancel}</button>
+              <button type="button" disabled={saving || !locForm.name.trim()} onClick={submitLoc} className="h-10 px-6 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-bold cursor-pointer">{saving ? T.saving : T.save}</button>
+            </div>
           </div>
         </div>
       )}
