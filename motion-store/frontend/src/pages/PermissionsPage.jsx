@@ -24,6 +24,7 @@ export default function PermissionsPage() {
     { path: '/', name: 'لوحة المؤشرات (الرئيسية)', category: 'عام' },
     { path: '/pos', name: 'شاشة المبيعات (F2)', category: 'المبيعات' },
     { path: '/invoices', name: 'فواتير المبيعات', category: 'المبيعات' },
+    { path: '/customers', name: 'العملاء', category: 'المبيعات' },
     { path: '/expenses', name: 'شاشة المصروفات (F3)', category: 'المالية' },
     { path: '/coding', name: 'التسعير', category: 'إدارة المنتجات' },
     { path: '/returns', name: 'مرتجعات المبيعات (F10)', category: 'المبيعات' },

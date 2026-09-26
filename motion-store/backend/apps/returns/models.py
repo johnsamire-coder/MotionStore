@@ -36,6 +36,10 @@ class SalesReturn(TenantAwareModel):
     )
     reason = models.TextField(blank=True, null=True)
 
+    refund_method = models.ForeignKey('payments.PaymentMethod', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    refund_to_credit = models.BooleanField(default=False)
+    customer = models.ForeignKey('customers.Customer', on_delete=models.SET_NULL, null=True, blank=True, related_name='sales_returns')
+
     class Meta:
         db_table = "sales_returns"
         ordering = ["-return_date_time", "-created_at"]

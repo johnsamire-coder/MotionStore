@@ -235,6 +235,7 @@ class TreasuryTransactionSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class SalesReturnLineItemSerializer(serializers.ModelSerializer):
+    display_name = serializers.ReadOnlyField(source='original_sale_line.display_name')
     product_name = serializers.ReadOnlyField(source='product.name')
     class Meta:
         model = SalesReturnLineItem
@@ -245,6 +246,11 @@ class SalesReturnSerializer(serializers.ModelSerializer):
     lines = SalesReturnLineItemSerializer(many=True, read_only=True)
     cashier_username = serializers.ReadOnlyField(source='cashier.username')
     original_invoice_number = serializers.ReadOnlyField(source='original_sale_invoice.invoice_number')
+    customer_name = serializers.ReadOnlyField(source='original_sale_invoice.customer.name')
+    customer_phone = serializers.ReadOnlyField(source='original_sale_invoice.customer.phone')
+    customer_code = serializers.ReadOnlyField(source='original_sale_invoice.customer.code')
+    refund_method_name = serializers.ReadOnlyField(source='refund_method.name')
+    terminal_code = serializers.ReadOnlyField(source='shift.terminal.code')
     class Meta:
         model = SalesReturn
         fields = '__all__'

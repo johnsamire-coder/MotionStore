@@ -161,6 +161,26 @@ class CustomerViewSet(BaseTenantViewSet):
             return Response({'detail': 'عميل جديد'}, status=404)
         return Response(CustomerSerializer(c).data)
 
+    @action(detail=True, methods=['post'])
+    def collect(self, request, pk=None):
+        from django.db import transaction as dbt
+        from apps.payments.models import PaymentMethod
+        from apps.treasury.services import record_treasury_transaction
+        from apps.treasury.models import TreasuryTransactionType
+        c = self.get_object()
+        amt = Decimal(str(request.data.get('amount') or '0'))
+        if amt <= 0:
+            return Response({'detail': 'اكتب المبلغ'}, status=400)
+        pm = PaymentMethod.objects.filter(tenant=c.tenant, pk=request.data.get('payment_method_id')).first()
+        if not pm or pm.method_type == 'CREDIT' or not pm.treasury_id:
+            return Response({'detail': 'اختار طريقة دفع ليها خزنة'}, status=400)
+        with dbt.atomic():
+            record_treasury_transaction(treasury_id=pm.treasury_id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=amt, payment_method=pm,
+                                        source_document_type='CustomerPayment', source_document_id=str(c.id), description=f"تحصيل من العميل {c.code or ''} {c.name} {request.data.get('notes') or ''}".strip())
+            c.credit_balance -= amt
+            c.save(update_fields=['credit_balance'])
+        return Response(CustomerSerializer(c).data)
+
     @action(detail=True, methods=['get'])
     def history(self, request, pk=None):
         from apps.sales.models import SaleInvoice, SaleLineItem, SalePayment
@@ -174,7 +194,9 @@ class CustomerViewSet(BaseTenantViewSet):
                 'payments': [{'method': p.payment_method.name, 'type': p.payment_method.method_type, 'amount': str(p.amount)} for p in SalePayment.objects.filter(sale_invoice=inv).select_related('payment_method')],
                 'lines': [{'name': l.display_name or l.product.name, 'pieces': l.quantity_pieces, 'kg': str(l.weight_kg), 'total': str(l.total_price), 'bundle': l.bundle_label} for l in SaleLineItem.objects.filter(sale_invoice=inv).select_related('product')]
             })
-        return Response({'customer': CustomerSerializer(c).data, 'invoices_count': len(out), 'total_spent': str(total), 'invoices': out})
+        from apps.treasury.models import TreasuryTransaction as _TT
+        cols = [{'date': t.created_at, 'amount': str(t.amount), 'method': t.payment_method.name if t.payment_method_id else '', 'note': t.description} for t in _TT.objects.filter(source_document_type='CustomerPayment', source_document_id=str(c.id)).order_by('-created_at')]
+        return Response({'customer': CustomerSerializer(c).data, 'invoices_count': len(out), 'total_spent': str(total), 'invoices': out, 'collections': cols})
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
@@ -643,6 +665,58 @@ class TreasuryTransactionViewSet(BaseTenantViewSet):
 class SalesReturnViewSet(BaseTenantViewSet):
     model = SalesReturn
     serializer_class = SalesReturnSerializer
+    def get_queryset(self):
+        from django.db.models import Q as _Q
+        qs = super().get_queryset().select_related('original_sale_invoice__customer', 'cashier', 'refund_method', 'shift__terminal').prefetch_related('lines').order_by('-return_date_time')
+        p = self.request.query_params
+        if p.get('date_from'):
+            qs = qs.filter(return_date_time__date__gte=p['date_from'])
+        if p.get('date_to'):
+            qs = qs.filter(return_date_time__date__lte=p['date_to'])
+        q = (p.get('q') or '').strip()
+        if q:
+            qs = qs.filter(_Q(return_number__icontains=q) | _Q(original_sale_invoice__invoice_number__icontains=q) | _Q(original_sale_invoice__customer__phone__icontains=q) | _Q(original_sale_invoice__customer__code__iexact=q))
+        return qs
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('all') == '1':
+            return None
+        return super().paginate_queryset(queryset)
+
+    @action(detail=False, methods=['get'])
+    def invoice_lookup(self, request):
+        from django.db.models import Q as _Q, Sum
+        from apps.returns.models import SalesReturnLineItem, ReturnStatus
+        q = (request.query_params.get('q') or '').strip()
+        base_inv = SaleInvoice.objects.filter(tenant=self.get_tenant())
+        if q:
+            qs = base_inv.filter(_Q(invoice_number__icontains=q) | _Q(customer__phone__icontains=q) | _Q(customer__code__iexact=q)).order_by('-invoice_date_time')[:20]
+        else:
+            qs = base_inv.order_by('-invoice_date_time')[:20]
+        out = []
+        for inv in qs:
+            d = SaleInvoiceSerializer(inv).data
+            for ln in d.get('lines', []):
+                agg = SalesReturnLineItem.objects.filter(original_sale_line_id=ln['id'], sales_return__status=ReturnStatus.COMPLETED).aggregate(w=Sum('weight_kg'), p=Sum('quantity_pieces'))
+                ln['returned_weight'] = str(agg['w'] or 0)
+                ln['returned_pieces'] = agg['p'] or 0
+                qp = int(ln.get('quantity_pieces') or 0)
+                ln['piece_mode'] = qp > 0 and abs(Decimal(str(ln['subtotal'])) - Decimal(qp) * Decimal(str(ln['unit_price']))) < Decimal('0.02')
+            out.append(d)
+        return Response(out)
+
+    def create(self, request, *args, **kwargs):
+        from django.core.exceptions import ValidationError as _DjVE
+        from apps.returns.services import process_sales_return_v2
+        d = request.data
+        try:
+            sr = process_sales_return_v2(invoice_id=d.get('invoice_id'), shift_id=d.get('shift_id'), cashier=request.user, items=d.get('items') or [],
+                                         refund_method_id=d.get('refund_method_id'), refund_to_credit=bool(d.get('refund_to_credit')), reason=d.get('reason'))
+        except _DjVE as e:
+            return Response({'detail': '; '.join(e.messages)}, status=400)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=400)
+        return Response(SalesReturnSerializer(sr).data, status=201)
 
 class PriceListItemViewSet(BaseTenantViewSet):
     model = PriceListItem
