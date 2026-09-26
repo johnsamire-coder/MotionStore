@@ -257,9 +257,8 @@ export default function InventoryPage() {
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.kTotal}</div><div className="text-xl font-black mt-1">{kgf(sumKg(rows))} <span className="text-xs text-slate-500">{T.kg}</span></div></div>
-            <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.kSale}</div><div className="text-xl font-black mt-1 text-emerald-800">{money(sumSale(rows))} <span className="text-xs text-slate-500">{T.cur}</span></div></div>
             <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.kLow}</div><div className="text-xl font-black mt-1 text-amber-700">{rows.filter((s) => num(s.total_weight_kg) < 10).length}</div></div>
           </div>
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
