@@ -429,3 +429,22 @@ class DeferredSaleSerializer(serializers.ModelSerializer):
     def get_is_overdue(self, o):
         from django.utils import timezone
         return o.status == 'OPEN' and o.due_date < timezone.localdate()
+
+from apps.treasury.models import Expense, ExpenseCategory
+
+class ExpenseCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExpenseCategory
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class ExpenseSerializer(serializers.ModelSerializer):
+    category_name = serializers.ReadOnlyField(source='category.name')
+    treasury_name = serializers.ReadOnlyField(source='treasury.name')
+    created_by_name = serializers.ReadOnlyField(source='created_by.username')
+    approved_by_name = serializers.ReadOnlyField(source='approved_by.username')
+    cancelled_by_name = serializers.ReadOnlyField(source='cancelled_by.username')
+    shift_code = serializers.ReadOnlyField(source='shift.shift_code')
+    class Meta:
+        model = Expense
+        fields = '__all__'

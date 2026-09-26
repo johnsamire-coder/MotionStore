@@ -1705,3 +1705,157 @@ class DeferredSaleViewSet(_AllPagesMixin, BaseTenantViewSet):
         except _DjVE as e:
             return Response({'detail': '; '.join(e.messages)}, status=400)
         return Response(DeferredSaleSerializer(ds).data)
+
+from apps.treasury.models import Expense, ExpenseCategory
+from apps.api.serializers import ExpenseSerializer, ExpenseCategorySerializer
+DEFAULT_EXPENSE_CATEGORIES = ['إيجار', 'كهرباء ومياه', 'مرتبات', 'نقل ومواصلات', 'ضيافة', 'صيانة', 'إعلانات', 'مستلزمات (أكياس وشماعات)', 'تليفون وإنترنت', 'مصروفات أخرى']
+
+
+def _verify_manager(tenant, pwd):
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+    if not pwd:
+        return None
+    for mgr in get_user_model().objects.filter(is_active=True).filter(Q(tenant=tenant) | Q(is_superuser=True)).filter(Q(role__in=['ADMIN', 'MANAGER']) | Q(is_superuser=True)):
+        if mgr.check_password(pwd):
+            return mgr
+    return None
+
+
+def _expense_journal(tenant, number, amount, reverse=False, when=None):
+    """ Dr expense / Cr cash (or reversed). Skips quietly if no expense account exists. """
+    from django.apps import apps as _apps
+    from django.db import transaction as dbt
+    from django.utils import timezone
+    from apps.accounting.services import create_balanced_journal_entry
+    acc_model = None
+    for mdl in _apps.get_app_config('accounting').get_models():
+        names = [f.name for f in mdl._meta.fields]
+        if 'code' in names and 'name' in names and 'tenant' in names:
+            acc_model = mdl
+            break
+    if not acc_model:
+        return False
+    codes = list(acc_model.objects.filter(tenant=tenant).values_list('code', 'name'))
+    exp = next((c for c, n in codes if c.startswith('5') and c != '5010' and ('مصروف' in (n or '') or 'xpens' in (n or ''))), None) or next((c for c, n in codes if c in ('5020', '5030', '5040')), None)
+    if not exp or not any(c == '1030' for c, n in codes):
+        return False
+    amt = Decimal(str(amount))
+    lines = [{'account_code': exp, 'debit': amt, 'credit': Decimal('0.00'), 'desc': f'Expense {number}'}, {'account_code': '1030', 'debit': Decimal('0.00'), 'credit': amt, 'desc': f'Expense paid {number}'}]
+    if reverse:
+        lines = [{'account_code': l['account_code'], 'debit': l['credit'], 'credit': l['debit'], 'desc': 'Reversal ' + l['desc']} for l in lines]
+    try:
+        with dbt.atomic():
+            create_balanced_journal_entry(tenant=tenant, entry_number=f"JV-{'X' if reverse else ''}{number}", entry_date=(when or timezone.localdate()), source_document_type='Expense',
+                                          source_document_id=number, notes=('Cancel ' if reverse else '') + f'Expense {number}', lines_data=lines)
+        return True
+    except Exception:
+        return False
+
+
+class ExpenseCategoryViewSet(_AllPagesMixin, BaseTenantViewSet):
+    model = ExpenseCategory
+    serializer_class = ExpenseCategorySerializer
+
+    def get_queryset(self):
+        t = self.get_tenant()
+        if not ExpenseCategory.objects.filter(tenant=t).exists():
+            for n in DEFAULT_EXPENSE_CATEGORIES:
+                ExpenseCategory.objects.create(tenant=t, name=n)
+        return super().get_queryset().filter(is_active=True).order_by('name')
+
+    def create(self, request, *args, **kwargs):
+        name = (request.data.get('name') or '').strip()
+        if not name:
+            return Response({'detail': 'اكتب اسم البند'}, status=400)
+        t = self.get_tenant()
+        c, _ = ExpenseCategory.objects.get_or_create(tenant=t, name=name, defaults={'is_active': True})
+        return Response(ExpenseCategorySerializer(c).data, status=201)
+
+
+class ExpenseViewSet(_AllPagesMixin, BaseTenantViewSet):
+    model = Expense
+    serializer_class = ExpenseSerializer
+    http_method_names = ['get', 'post']
+
+    def get_queryset(self):
+        from django.db.models import Q as _Q
+        qs = super().get_queryset().select_related('category', 'treasury', 'created_by', 'approved_by', 'cancelled_by', 'shift')
+        p = self.request.query_params
+        if p.get('date_from'):
+            qs = qs.filter(expense_date__gte=p['date_from'])
+        if p.get('date_to'):
+            qs = qs.filter(expense_date__lte=p['date_to'])
+        if p.get('category'):
+            qs = qs.filter(category_id=p['category'])
+        if p.get('treasury'):
+            qs = qs.filter(treasury_id=p['treasury'])
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        q = (p.get('q') or '').strip()
+        if q:
+            qs = qs.filter(_Q(number__icontains=q) | _Q(paid_to__icontains=q) | _Q(description__icontains=q))
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from apps.treasury.models import Treasury, TreasuryTransactionType
+        from apps.treasury.services import record_treasury_transaction
+        from apps.shifts.models import Shift
+        t = self.get_tenant()
+        d = request.data
+        mgr = _verify_manager(t, d.get('manager_password'))
+        if not mgr:
+            return Response({'detail': 'لازم باسورد مدير صح عشان المصروف يتسجل'}, status=403)
+        amt = Decimal(str(d.get('amount') or '0'))
+        if amt <= 0:
+            return Response({'detail': 'اكتب المبلغ'}, status=400)
+        cat = ExpenseCategory.objects.filter(tenant=t, pk=d.get('category_id')).first()
+        tr = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first()
+        if not cat or not tr:
+            return Response({'detail': 'اختار البند والخزنة'}, status=400)
+        today = timezone.localdate()
+        edate = d.get('expense_date') or str(today)
+        seq = Expense.objects.filter(tenant=t, created_at__date=today).count() + 1
+        number = f"EXP-{today.strftime('%Y%m%d')}-{seq:03d}"
+        shift = Shift.objects.filter(tenant=t, status='OPEN', terminal__cash_drawer=tr).first()
+        try:
+            with dbt.atomic():
+                record_treasury_transaction(treasury_id=tr.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, source_document_type='Expense',
+                                            source_document_id=number, description=f"مصروف {number} - {cat.name} {d.get('paid_to') or ''}".strip())
+                e = Expense.objects.create(tenant=t, number=number, expense_date=edate, category=cat, amount=amt, treasury=tr, shift=shift, paid_to=d.get('paid_to'),
+                                           description=d.get('description'), created_by=request.user if request.user.is_authenticated else None, approved_by=mgr)
+                e.journal_posted = _expense_journal(t, number, amt, when=today)
+                e.save(update_fields=['journal_posted'])
+        except Exception as ex:
+            msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
+            return Response({'detail': 'الخزنة مفيهاش فلوس كفاية للمبلغ ده' if 'Insufficient' in msg else msg}, status=400)
+        return Response(ExpenseSerializer(e).data, status=201)
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from apps.treasury.models import TreasuryTransactionType
+        from apps.treasury.services import record_treasury_transaction
+        e = self.get_object()
+        if e.status != 'ACTIVE':
+            return Response({'detail': 'المصروف ده اتلغى قبل كده'}, status=400)
+        mgr = _verify_manager(e.tenant, request.data.get('manager_password'))
+        if not mgr:
+            return Response({'detail': 'لازم باسورد مدير صح عشان الإلغاء'}, status=403)
+        reason = (request.data.get('reason') or '').strip()
+        if not reason:
+            return Response({'detail': 'اكتب سبب الإلغاء'}, status=400)
+        with dbt.atomic():
+            record_treasury_transaction(treasury_id=e.treasury_id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=e.amount, source_document_type='ExpenseCancel',
+                                        source_document_id=e.number, description=f"إلغاء مصروف {e.number}")
+            if e.journal_posted:
+                _expense_journal(e.tenant, e.number, e.amount, reverse=True)
+            e.status = 'CANCELLED'
+            e.cancel_reason = reason
+            e.cancelled_by = mgr
+            e.cancelled_at = timezone.now()
+            e.save()
+        return Response(ExpenseSerializer(e).data)

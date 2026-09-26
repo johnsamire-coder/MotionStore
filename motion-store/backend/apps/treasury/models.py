@@ -77,3 +77,38 @@ class TreasuryTransaction(TenantAwareModel):
 
     def __str__(self):
         return f"[{self.get_transaction_type_display()}] {self.amount} EGP @ {self.treasury.name}"
+
+# ================= Expenses v2 =================
+from django.conf import settings as _es
+from apps.tenants.models import TenantAwareModel as _ETAM
+
+
+class ExpenseCategory(_ETAM):
+    name = models.CharField(max_length=100)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "expense_categories"
+        ordering = ["name"]
+
+
+class Expense(_ETAM):
+    number = models.CharField(max_length=40, db_index=True)
+    expense_date = models.DateField()
+    category = models.ForeignKey(ExpenseCategory, on_delete=models.PROTECT, related_name='expenses')
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    treasury = models.ForeignKey('treasury.Treasury', on_delete=models.PROTECT, related_name='expenses')
+    shift = models.ForeignKey('shifts.Shift', on_delete=models.SET_NULL, null=True, blank=True, related_name='expenses')
+    paid_to = models.CharField(max_length=150, blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(_es.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    approved_by = models.ForeignKey(_es.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    status = models.CharField(max_length=12, default='ACTIVE', db_index=True)
+    cancel_reason = models.TextField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(_es.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    journal_posted = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "expenses_v2"
+        ordering = ["-expense_date", "-created_at"]
