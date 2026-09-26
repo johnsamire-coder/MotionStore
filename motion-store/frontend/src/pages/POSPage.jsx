@@ -113,6 +113,7 @@ export default function POSPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [approvedBy, setApprovedBy] = useState(null);
+  const [approvedPwd, setApprovedPwd] = useState('');
   const [showMgr, setShowMgr] = useState(false);
   const [mgrPwd, setMgrPwd] = useState('');
   const [mgrErr, setMgrErr] = useState('');
@@ -188,7 +189,7 @@ export default function POSPage() {
     try { await axiosClient.post(`/deferred-sales/${defAct.ds.id}/cancel/`, { refund_deposit: defRefund }); setDefAct(null); await loadDef(); loadShop(terminal); }
     catch (e) { setDefErr(e.response?.data?.detail || e.message); } finally { setDefBusy(false); }
   };
-  const verifyMgr = async () => { try { const r = await axiosClient.post('/sales/verify_manager/', { password: mgrPwd }); setApprovedBy(r.data.manager); setShowMgr(false); setMgrPwd(''); setMgrErr(''); } catch (e) { setMgrErr(e.response?.data?.detail || e.message); } };
+  const verifyMgr = async () => { try { const r = await axiosClient.post('/sales/verify_manager/', { password: mgrPwd }); setApprovedBy(r.data.manager); setApprovedPwd(mgrPwd); setShowMgr(false); setMgrPwd(''); setMgrErr(''); } catch (e) { setMgrErr(e.response?.data?.detail || e.message); } };
   const codeRef = useRef(null);
 
   const showErr = (m) => { setErr(m); setTimeout(() => setErr(''), 4500); };
@@ -209,7 +210,7 @@ export default function POSPage() {
       setStock(listOf(stRes.data));
       setPayMethods(listOf(pmRes.data));
       setActiveOffers(listOf(ofRes.data));
-      try { setHeld(JSON.parse(localStorage.getItem(HOLD_KEY(term.id)) || '[]')); } catch (e) { setHeld([]); }
+      try { const allH = JSON.parse(localStorage.getItem(HOLD_KEY(term.id)) || '[]'); const keepH = allH.filter((h) => sh && h.shiftId === sh.id); setHeld(keepH); localStorage.setItem(HOLD_KEY(term.id), JSON.stringify(keepH)); } catch (e) { setHeld([]); }
     } catch (e) { apiErr(e); }
   };
 
@@ -303,11 +304,11 @@ export default function POSPage() {
     } catch (e) { apiErr(e); setCoupon(null); }
   };
 
-  const resetSale = () => { setApprovedBy(null); setCart([]); setBundle(null); setBundleCount(0); setDiscount(''); setDelivery(''); setPrevBal(''); setNotes(''); setCustQ(''); setCust(null); setCustNew(false); setCustNameIn(''); setPicked([]); setCoupon(null); setCouponIn(''); setPayRows([]); setCashGiven(''); };
+  const resetSale = () => { setApprovedBy(null); setApprovedPwd(''); setCart([]); setBundle(null); setBundleCount(0); setDiscount(''); setDelivery(''); setPrevBal(''); setNotes(''); setCustQ(''); setCust(null); setCustNew(false); setCustNameIn(''); setPicked([]); setCoupon(null); setCouponIn(''); setPayRows([]); setCashGiven(''); };
 
   const holdSale = () => {
     if (!cart.length) return;
-    const label = (window.prompt(isRTL ? 'اكتب علامة تفتكر بيها الزبون (اختياري) - مثلاً: الأستاذة اللي لابسة أحمر' : 'A label to recognize this customer (optional)') || '').trim(); saveHeld([...held, { id: `${Date.now()}`, label, at: new Date().toLocaleTimeString('en-GB'), cart, bundleCount, custQ, custNameIn, discount, delivery, prevBal, notes, picked, couponIn }]);
+    const label = (window.prompt(isRTL ? 'اكتب علامة تفتكر بيها الزبون (اختياري) - مثلاً: الأستاذة اللي لابسة أحمر' : 'A label to recognize this customer (optional)') || '').trim(); saveHeld([...held, { id: `${Date.now()}`, shiftId: shift ? shift.id : null, label, at: new Date().toLocaleTimeString('en-GB'), cart, bundleCount, custQ, custNameIn, discount, delivery, prevBal, notes, picked, couponIn }]);
     resetSale();
   };
   const resumeHeld = (h) => {
@@ -345,7 +346,7 @@ export default function POSPage() {
     const body = {
       shift_id: shift.id, items, payments: payRows.filter((r) => num(r.amount) > 0).map((r) => ({ payment_method_id: r.id, amount: num(r.amount).toFixed(2) })),
       discount_amount: r2(offersDisc + num(discount)).toFixed(2), delivery_fee: num(delivery).toFixed(2), previous_balance: num(prevBal).toFixed(2), notes: approvedBy ? `${notes} [موافقة المدير على تعديل السعر/الخصم: ${approvedBy}]`.trim() : notes,
-      coupon_code: coupon ? coupon.code : '', applied_offers: applied.map((x) => ({ id: x.o.id, name: x.o.name, discount: x.d.toFixed(2), coupon: x.coupon }))
+      coupon_code: coupon ? coupon.code : '', manager_password: approvedPwd || undefined, applied_offers: applied.map((x) => ({ id: x.o.id, name: x.o.name, discount: x.d.toFixed(2), coupon: x.coupon }))
     };
     if (cust) body.customer_id = cust.id; else if (phoneDigits) { body.customer_phone = phoneDigits; body.customer_name = custNameIn; }
     try {

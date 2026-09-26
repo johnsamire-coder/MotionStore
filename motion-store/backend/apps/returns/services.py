@@ -35,7 +35,7 @@ def process_sales_return(
 
     date_str = now.strftime('%Y%m%d')
     seq = SalesReturn.objects.filter(tenant=tenant, return_date_time__date=now.date()).count() + 1
-    return_number = f"RET-{terminal.code}-{date_str}-{seq:04d}"
+    return_number = __import__('apps.sales.services', fromlist=['next_number']).next_number(tenant, 'RETURN', SalesReturn, 'return_number')
 
     total_refund = Decimal('0.00')
     total_cogs_reversed = Decimal('0.00')
@@ -149,7 +149,7 @@ def process_sales_return_v2(invoice_id, shift_id, cashier, items: list, refund_m
     terminal = shift.terminal
     now = timezone.now()
     seq = SalesReturn.objects.filter(tenant=tenant, return_date_time__date=now.date()).count() + 1
-    return_number = f"RET-{terminal.code}-{now.strftime('%Y%m%d')}-{seq:04d}"
+    return_number = __import__('apps.sales.services', fromlist=['next_number']).next_number(tenant, 'RETURN', SalesReturn, 'return_number')
     sub = invoice.subtotal or Decimal('0')
     ratio = ((sub - (invoice.discount_amount or Decimal('0'))) / sub) if sub > 0 else Decimal('1')
     ratio = max(Decimal('0'), min(Decimal('1'), ratio))

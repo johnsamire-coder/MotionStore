@@ -799,6 +799,38 @@ class ShiftViewSet(BaseTenantViewSet):
 class SaleInvoiceViewSet(BaseTenantViewSet):
     model = SaleInvoice
     serializer_class = SaleInvoiceSerializer
+
+    @action(detail=False, methods=['get', 'post'])
+    def numbering(self, request):
+        from apps.sales.models import NumberSequence
+        from apps.returns.models import SalesReturn
+        from apps.sales.services import SEQ_DEFAULTS
+        t = self.get_tenant()
+        used = lambda key, pre: [int(x[len(pre):]) for x in (SaleInvoice.objects.filter(tenant=t, invoice_number__startswith=pre).values_list('invoice_number', flat=True) if key == 'SALE' else SalesReturn.objects.filter(tenant=t, return_number__startswith=pre).values_list('return_number', flat=True)) if x[len(pre):].isdigit()]
+        if request.method == 'POST':
+            if not _verify_manager(t, request.data.get('manager_password')):
+                return Response({'detail': 'تغيير الترقيم محتاج باسورد المدير'}, status=403)
+            key = request.data.get('key')
+            if key not in SEQ_DEFAULTS:
+                return Response({'detail': 'نوع الترقيم غلط'}, status=400)
+            seq, _ = NumberSequence.objects.get_or_create(tenant=t, key=key, defaults={'prefix': SEQ_DEFAULTS[key], 'next_value': 1, 'padding': 6})
+            pre = (request.data.get('prefix') if request.data.get('prefix') is not None else seq.prefix).strip()
+            try:
+                nv = int(request.data.get('next_value') or seq.next_value); pad = int(request.data.get('padding') or seq.padding)
+            except Exception:
+                return Response({'detail': 'اكتب أرقام صح'}, status=400)
+            mx = max(used(key, pre) + [0])
+            if nv <= mx:
+                return Response({'detail': f'آخر رقم اتستعمل بالبادئة دي هو {mx}، فلازم الرقم الجديد يبقى أكبر منه'}, status=400)
+            if nv < 1 or pad < 1 or pad > 10:
+                return Response({'detail': 'الأرقام مش مظبوطة'}, status=400)
+            seq.prefix = pre; seq.next_value = nv; seq.padding = pad; seq.save()
+        out = []
+        for key, dpre in SEQ_DEFAULTS.items():
+            seq = NumberSequence.objects.filter(tenant=t, key=key).first()
+            pre = seq.prefix if seq else dpre; nv = seq.next_value if seq else 1; pad = seq.padding if seq else 6
+            out.append({'key': key, 'prefix': pre, 'next_value': nv, 'padding': pad, 'last_used': max(used(key, pre) + [0]), 'example': f"{pre}{nv:0{pad}d}"})
+        return Response(out)
     def get_queryset(self):
         from django.db.models import Q as _Q
         from apps.sales.models import SalePayment
@@ -860,6 +892,9 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
                 customer_obj.name = _cname
                 customer_obj.save(update_fields=['name'])
 
+        _vmsg = _verify_checkout(self.get_tenant(), request.data, __import__('apps.shifts.models', fromlist=['Shift']).Shift.objects.filter(pk=request.data.get('shift_id')).select_related('terminal').first().terminal if request.data.get('shift_id') else None)
+        if _vmsg:
+            return Response({'detail': _vmsg}, status=400)
         from django.core.exceptions import ValidationError as _DjVE
         try:
             invoice = process_pos_sale(
@@ -2137,3 +2172,95 @@ class ReportsV2ViewSet(_rvs.ViewSet):
         if out is None:
             return Response({'detail': 'التقرير ده مش موجود'}, status=404)
         return Response(out)
+
+def _offer_disc_py(o, lines, subtotal):
+    P = lambda k: float(((o.params or {}).get(k)) or 0)
+    t = o.targets or {}
+    sel = [l for l in lines if all(not t.get(k) or l.get(k) == t.get(k) for k in ('kind', 'segment', 'brand', 'grade', 'season'))]
+    lt = lambda l: l['qty'] * l['price'] if l['mode'] == 'PIECE' else l['kg'] * l['price']
+    cheaper = lambda arr, pr: sum(max(0.0, (l['price'] - pr) * l['kg']) for l in arr)
+    ty = o.offer_type; d = 0.0
+    if ty == 'QTY':
+        if sum(l['qty'] for l in sel if l['mode'] == 'PIECE') >= P('minQty'): d = sum(lt(l) for l in sel) * P('pct') / 100
+    elif ty == 'BXGY':
+        units = sorted([l['price'] for l in sel if l['mode'] == 'PIECE' for _ in range(int(l['qty']))], reverse=True); g = P('buy') + P('get')
+        if g > 0 and P('get') > 0:
+            sets = int(len(units) // g); free = units[len(units) - int(sets * P('get')):] if sets else []
+            d = sum(free) * (P('getPct') or 100) / 100
+    elif ty == 'WKG':
+        w = [l for l in sel if l['mode'] == 'KG']
+        if sum(l['kg'] for l in w) >= P('minKg') and P('kgPrice') > 0: d = cheaper(w, P('kgPrice'))
+    elif ty == 'TIERS':
+        w = [l for l in sel if l['mode'] == 'KG']; tk = sum(l['kg'] for l in w); tp = P('t3') if tk > 5 else (P('t2') if tk > 3 else P('t1'))
+        if tp > 0: d = cheaper(w, tp)
+    elif ty == 'KGDAY':
+        if P('kgPrice') > 0: d = cheaper([l for l in lines if l['mode'] == 'KG'], P('kgPrice'))
+    elif ty == 'SCALEFIX':
+        if P('kgPrice') > 0: d = cheaper([l for l in lines if l['bundle'] and l['mode'] == 'KG'], P('kgPrice'))
+    elif ty == 'BAG':
+        if P('price') > 0: d = max(0.0, subtotal - P('price'))
+    elif ty == 'COMBO':
+        codes = [x.strip() for x in str((o.params or {}).get('codes') or '').split(',') if x.strip()]
+        found = [next((l for l in lines if l['code'] == cd), None) for cd in codes]
+        if codes and all(found): d = max(0.0, sum(l['price'] for l in found) - P('price'))
+    elif ty == 'TARGET':
+        d = sum(lt(l) for l in sel) * P('pct') / 100
+    elif ty == 'INVOICE':
+        if subtotal >= P('minAmount'): d = P('fixed') if P('fixed') > 0 else subtotal * P('pct') / 100
+    elif ty == 'COUPON':
+        d = subtotal * P('pct') / 100
+    if o.max_discount and float(o.max_discount) > 0: d = min(d, float(o.max_discount))
+    return round(max(0.0, d), 2)
+
+
+def _verify_checkout(tenant, data, terminal):
+    """ Server-side guard: official prices, real offer discounts, manager password for overrides """
+    from apps.inventory.models import StockItem
+    from apps.discounts.models import Offer, Coupon
+    from apps.api.serializers import StockItemSerializer
+    mgr = _verify_manager(tenant, data.get('manager_password')) if data.get('manager_password') else None
+    ser = StockItemSerializer()
+    lines = []; price_changed = False
+    for it in data.get('items') or []:
+        mode = it.get('price_mode') or 'KG'
+        qty = float(it.get('quantity_pieces') or 0); kg = float(it.get('weight_kg') or 0); price = float(it.get('unit_price') or 0)
+        if it.get('piece_item_id'):
+            pc = PieceItem.objects.filter(tenant=tenant, pk=it['piece_item_id']).first()
+            if not pc:
+                return 'فيه قطعة مش موجودة'
+            official = float(pc.price_per_piece if mode == 'PIECE' else pc.price_per_kg)
+            lines.append({'mode': mode, 'qty': qty, 'kg': kg, 'price': price, 'code': pc.code, 'bundle': it.get('bundle_label'), 'kind': pc.source_kind, 'segment': pc.segment, 'brand': pc.brand, 'grade': None, 'season': pc.season})
+        else:
+            si = StockItem.objects.filter(tenant=tenant, pk=it.get('stock_item_id')).select_related('product', 'source_lot__purchase_line_item').first()
+            if not si:
+                return 'فيه صنف مش موجود'
+            official = float(ser.get_selling_price_per_kg(si) or 0)
+            li = gv_li = getattr(si.source_lot, 'purchase_line_item', None) if si.source_lot_id else None
+            lines.append({'mode': 'KG', 'qty': qty, 'kg': kg, 'price': price, 'code': si.product.code or '', 'bundle': it.get('bundle_label'), 'kind': getattr(li, 'purchase_kind', None) or 'BALE',
+                          'segment': getattr(li, 'segment', None), 'brand': getattr(li, 'brand', None), 'grade': si.grade, 'season': None})
+        if abs(price - official) > 0.005:
+            price_changed = True
+    if price_changed and not mgr:
+        return 'فيه سعر اتغيّر عن التسعير الرسمي: محتاج باسورد مدير صح'
+    subtotal = sum((l['qty'] * l['price'] if l['mode'] == 'PIECE' else l['kg'] * l['price']) for l in lines)
+    client_offers = 0.0; server_offers = 0.0
+    for ao in data.get('applied_offers') or []:
+        o = Offer.objects.filter(tenant=tenant, pk=ao.get('id')).first()
+        if not o:
+            return 'فيه عرض مش موجود'
+        live, why = _offer_is_live(o, str(terminal.default_warehouse_id) if terminal and terminal.default_warehouse_id else None)
+        if not live:
+            return f'العرض "{o.name}": {why}'
+        if o.offer_type == 'COUPON' or o.apply_mode == 'COUPON':
+            code = (data.get('coupon_code') or '').strip()
+            cp = Coupon.objects.filter(tenant=tenant, offer=o, code=code, is_active=True).first()
+            if not cp or (cp.max_uses is not None and cp.used_count >= cp.max_uses):
+                return 'الكوبون مش صالح'
+        client_offers += float(ao.get('discount') or 0)
+        server_offers += _offer_disc_py(o, lines, subtotal)
+    if client_offers > server_offers + 0.05:
+        return f'خصم العروض مش مظبوط (المسموح {round(server_offers, 2)})'
+    manual = float(data.get('discount_amount') or 0) - client_offers
+    if manual > 0.05 and not mgr:
+        return 'الخصم اليدوي محتاج باسورد مدير صح'
+    return None

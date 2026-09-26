@@ -63,8 +63,7 @@ def process_pos_sale(
 
     # 1. Generate Invoice #
     date_str = now.strftime('%Y%m%d')
-    seq = SaleInvoice.objects.filter(tenant=tenant, invoice_date_time__date=now.date()).count() + 1
-    invoice_number = f"INV-{terminal.code}-{date_str}-{seq:04d}"
+    invoice_number = next_number(tenant, 'SALE', SaleInvoice, 'invoice_number')
 
     # 2. Compute Lines, Stock Decrements & COGS
     subtotal = Decimal('0.00')
@@ -269,3 +268,18 @@ def process_pos_sale(
         redeem_coupon(tenant, coupon_code, invoice_number, cashier, coupon_disc)
 
     return invoice
+
+SEQ_DEFAULTS = {'SALE': 'INV-', 'RETURN': 'RET-'}
+
+
+def next_number(tenant, key, model=None, field=None):
+    """ Reserves the next serial for the company (locked, never repeats) """
+    from apps.sales.models import NumberSequence
+    seq, _ = NumberSequence.objects.select_for_update().get_or_create(tenant=tenant, key=key, defaults={'prefix': SEQ_DEFAULTS.get(key, key + '-'), 'next_value': 1, 'padding': 6})
+    while True:
+        n = seq.next_value
+        seq.next_value = n + 1
+        number = f"{seq.prefix}{n:0{seq.padding}d}"
+        if not model or not model.objects.filter(tenant=tenant, **{field: number}).exists():
+            seq.save(update_fields=['next_value'])
+            return number

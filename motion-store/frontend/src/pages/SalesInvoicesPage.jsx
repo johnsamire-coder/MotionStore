@@ -35,6 +35,13 @@ export default function SalesInvoicesPage() {
   const [methods, setMethods] = useState([]);
   const [openId, setOpenId] = useState(null);
   const [loading, setLoading] = useState(false);
+  // NUMBERING_UI
+  const [numOpen, setNumOpen] = useState(false);
+  const [nums, setNums] = useState([]);
+  const [numPwd, setNumPwd] = useState('');
+  const [numMsg, setNumMsg] = useState('');
+  const openNum = async () => { setNumMsg(''); setNumPwd(''); try { const r = await axiosClient.get('/sales/numbering/'); setNums(r.data); setNumOpen(true); } catch (e) { alert(e.message); } };
+  const saveNum = async (n) => { setNumMsg(''); try { const r = await axiosClient.post('/sales/numbering/', { key: n.key, prefix: n.prefix, next_value: n.next_value, padding: n.padding, manager_password: numPwd }); setNums(r.data); setNumMsg('✅'); } catch (e) { setNumMsg(e.response?.data?.detail || e.message); } };
 
   const load = async (x = f) => {
     setLoading(true);
@@ -90,6 +97,28 @@ export default function SalesInvoicesPage() {
       <div className="bg-white p-4 rounded-xl border border-slate-200">
         <h1 className="text-xl font-black text-slate-800">{T.title}</h1>
         <p className="text-xs text-slate-500 mt-1">{T.sub}</p>
+        <button type="button" onClick={openNum} className="mt-2 h-8 px-3 rounded-lg border border-slate-300 bg-white text-xs font-bold cursor-pointer">⚙️ {isRTL ? 'الترقيم' : 'Numbering'}</button>
+        {numOpen && (
+          <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
+            <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-3">
+              <div className="flex items-center justify-between"><div className="text-base font-bold">⚙️ {isRTL ? 'ترقيم الفواتير والمرتجعات' : 'Invoice & return numbering'}</div><button type="button" onClick={() => setNumOpen(false)} className="h-8 w-8 rounded-lg border border-slate-200 cursor-pointer">×</button></div>
+              <div className="text-xs text-slate-600">{isRTL ? 'لو العميل كان عنده سيستم قديم، اكتب الرقم اللي بعد آخر فاتورة عنده، والسيستم هيكمّل عليه.' : 'If the customer had an old system, enter the number after their last invoice.'}</div>
+              {nums.map((n, i) => (
+                <div key={n.key} className="border border-slate-200 rounded-lg p-3 space-y-2 text-xs">
+                  <div className="font-bold">{n.key === 'SALE' ? (isRTL ? 'فواتير المبيعات' : 'Sales invoices') : (isRTL ? 'المرتجعات' : 'Returns')} — {isRTL ? 'آخر رقم اتستعمل' : 'Last used'}: {n.last_used} — {isRTL ? 'الجاية' : 'Next'}: <span className="font-mono">{n.example}</span></div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="font-bold text-slate-600 space-y-1 block">{isRTL ? 'البادئة' : 'Prefix'}<input value={n.prefix} onChange={(e) => setNums(nums.map((x, j) => (j === i ? { ...x, prefix: e.target.value } : x)))} className="h-9 px-2 border border-slate-300 rounded-lg w-full font-mono" /></label>
+                    <label className="font-bold text-slate-600 space-y-1 block">{isRTL ? 'الرقم الجاي' : 'Next number'}<input type="number" min="1" value={n.next_value} onChange={(e) => setNums(nums.map((x, j) => (j === i ? { ...x, next_value: e.target.value } : x)))} className="h-9 px-2 border border-slate-300 rounded-lg w-full" /></label>
+                    <label className="font-bold text-slate-600 space-y-1 block">{isRTL ? 'عدد الخانات' : 'Digits'}<input type="number" min="1" max="10" value={n.padding} onChange={(e) => setNums(nums.map((x, j) => (j === i ? { ...x, padding: e.target.value } : x)))} className="h-9 px-2 border border-slate-300 rounded-lg w-full" /></label>
+                  </div>
+                  <button type="button" disabled={!numPwd} onClick={() => saveNum(n)} className="h-8 px-3 rounded-lg bg-slate-900 disabled:bg-slate-400 text-white font-bold cursor-pointer">{isRTL ? 'حفظ' : 'Save'}</button>
+                </div>
+              ))}
+              <input type="password" value={numPwd} onChange={(e) => setNumPwd(e.target.value)} placeholder={isRTL ? 'باسورد المدير' : 'Manager password'} className="h-10 px-3 border border-slate-300 rounded-lg w-full text-center" />
+              {numMsg && <div className={`text-xs font-bold ${numMsg === '✅' ? 'text-emerald-700' : 'text-rose-700'}`}>{numMsg}</div>}
+            </div>
+          </div>
+        )}
       </div>
       <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">

@@ -164,3 +164,17 @@ class DeferredSale(_DTAM):
 
     def __str__(self):
         return self.number
+
+from apps.tenants.models import TenantAwareModel as _NSTAM
+
+
+class NumberSequence(_NSTAM):
+    """ One continuous serial per company: SALE, RETURN ... (can start from any number) """
+    key = models.CharField(max_length=30)
+    prefix = models.CharField(max_length=20, blank=True, default='')
+    next_value = models.PositiveBigIntegerField(default=1)
+    padding = models.PositiveSmallIntegerField(default=6)
+
+    class Meta:
+        db_table = "number_sequences"
+        constraints = [models.UniqueConstraint(fields=["tenant", "key"], name="unique_number_sequence")]
