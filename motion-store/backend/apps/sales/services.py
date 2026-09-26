@@ -46,7 +46,8 @@ def process_pos_sale(
     customer = None,
     notes: str = None,
     coupon_code: str = None,
-    applied_offers: list = None
+    applied_offers: list = None,
+    allowed_warehouse_id=None
 ) -> SaleInvoice:
     """
     Central POS Sale Engine:
@@ -90,7 +91,7 @@ def process_pos_sale(
         else:
             stock_item = StockItem.objects.select_for_update().get(pk=item_data['stock_item_id'])
             weight_kg = Decimal(str(item_data['weight_kg']))
-        if terminal.default_warehouse_id and stock_item.warehouse_id != terminal.default_warehouse_id:
+        if terminal.default_warehouse_id and stock_item.warehouse_id not in (terminal.default_warehouse_id, allowed_warehouse_id):
             raise ValidationError(f"الصنف {stock_item.product.name} مش موجود في رصيد المحل ده")
 
         # Stock availability check
@@ -178,6 +179,7 @@ def process_pos_sale(
 
     # 5. Process Payments & Treasury Receipts
     cash_collected = Decimal('0.00')
+    credit_total = Decimal('0.00')
     for p_data in payments_data:
         from apps.payments.models import PaymentMethod
         pm = p_data.get('payment_method')
@@ -185,6 +187,18 @@ def process_pos_sale(
             pm_id = p_data.get('payment_method_id') or pm
             pm = PaymentMethod.objects.get(pk=pm_id, tenant=tenant)
         p_amount = Decimal(str(p_data['amount']))
+        if pm.method_type == 'CREDIT':
+            if not customer:
+                raise ValidationError('البيع على الحساب محتاج اسم العميل وتليفونه')
+            from apps.customers.models import Customer as _Cu
+            cu = _Cu.objects.select_for_update().get(pk=customer.pk)
+            if cu.credit_limit and cu.credit_limit > 0 and (cu.credit_balance + p_amount) > cu.credit_limit:
+                raise ValidationError(f'العميل {cu.name} هيعدّي حد الدين المسموح ({cu.credit_limit} ج.م)')
+            cu.credit_balance += p_amount
+            cu.save(update_fields=['credit_balance'])
+            credit_total += p_amount
+            SalePayment.objects.create(tenant=tenant, sale_invoice=invoice, payment_method=pm, amount=p_amount, reference_number=p_data.get('reference_number'))
+            continue
 
         SalePayment.objects.create(
             tenant=tenant,
@@ -224,6 +238,11 @@ def process_pos_sale(
         {'account_code': '1020', 'debit': Decimal('0.00'), 'credit': total_cogs, 'desc': f'Inventory Relief Inv #{invoice_number}'},
     ]
 
+    if credit_total > 0:
+        jv_lines[0]['debit'] = total_amount - credit_total
+        jv_lines.insert(1, {'account_code': '1050', 'debit': credit_total, 'credit': Decimal('0.00'), 'desc': f'Customer Credit Inv #{invoice_number}'})
+        if jv_lines[0]['debit'] <= 0:
+            jv_lines.pop(0)
     create_balanced_journal_entry(
         tenant=tenant,
         entry_number=f"JV-SALE-{invoice_number}",

@@ -125,6 +125,7 @@ class SortingOrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class StockItemSerializer(serializers.ModelSerializer):
+    product_code = serializers.ReadOnlyField(source='product.code')
     selling_price_per_kg = serializers.SerializerMethodField()
     line_info = serializers.SerializerMethodField()
     retail_price = serializers.ReadOnlyField(source='product.retail_price')
@@ -391,3 +392,24 @@ class OfferSerializer(serializers.ModelSerializer):
             if not str(params.get('price') or '').strip():
                 raise serializers.ValidationError({'detail': 'اكتب سعر العرض'})
         return attrs
+
+from apps.sales.models import DeferredSale
+
+class DeferredSaleSerializer(serializers.ModelSerializer):
+    customer_name = serializers.ReadOnlyField(source='customer.name')
+    customer_phone = serializers.ReadOnlyField(source='customer.phone')
+    customer_code = serializers.ReadOnlyField(source='customer.code')
+    cashier_name = serializers.ReadOnlyField(source='cashier.username')
+    closed_by_name = serializers.ReadOnlyField(source='closed_by.username')
+    deposit_method_name = serializers.ReadOnlyField(source='deposit_method.name')
+    terminal_code = serializers.ReadOnlyField(source='terminal.code')
+    sale_invoice_number = serializers.ReadOnlyField(source='sale_invoice.invoice_number')
+    is_overdue = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DeferredSale
+        fields = '__all__'
+
+    def get_is_overdue(self, o):
+        from django.utils import timezone
+        return o.status == 'OPEN' and o.due_date < timezone.localdate()

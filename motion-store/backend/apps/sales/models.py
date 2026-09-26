@@ -131,3 +131,36 @@ class SalePayment(TenantAwareModel):
 
     def __str__(self):
         return f"{self.payment_method.name}: {self.amount} EGP"
+
+# ================= Deferred sales (goods taken on approval) =================
+from django.conf import settings as _ds
+from apps.tenants.models import TenantAwareModel as _DTAM
+
+
+class DeferredSale(_DTAM):
+    number = models.CharField(max_length=40, db_index=True)
+    terminal = models.ForeignKey('pos.POSTerminal', on_delete=models.SET_NULL, null=True, blank=True, related_name='deferred_sales')
+    shift = models.ForeignKey('shifts.Shift', on_delete=models.SET_NULL, null=True, blank=True, related_name='deferred_sales')
+    cashier = models.ForeignKey(_ds.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='deferred_sales_made')
+    customer = models.ForeignKey('customers.Customer', on_delete=models.PROTECT, related_name='deferred_sales')
+    shop_warehouse = models.ForeignKey('warehouses.Warehouse', on_delete=models.PROTECT, related_name='+')
+    holding_warehouse = models.ForeignKey('warehouses.Warehouse', on_delete=models.PROTECT, related_name='+')
+    lines = models.JSONField(default=list, blank=True)
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    deposit_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    deposit_method = models.ForeignKey('payments.PaymentMethod', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    due_date = models.DateField()
+    status = models.CharField(max_length=12, default='OPEN', db_index=True)  # OPEN | SOLD | CANCELLED
+    transfer_out_code = models.CharField(max_length=40, blank=True, null=True)
+    transfer_back_code = models.CharField(max_length=40, blank=True, null=True)
+    sale_invoice = models.ForeignKey('sales.SaleInvoice', on_delete=models.SET_NULL, null=True, blank=True, related_name='from_deferred')
+    closed_by = models.ForeignKey(_ds.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    closed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = "deferred_sales"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.number

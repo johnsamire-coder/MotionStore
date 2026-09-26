@@ -125,6 +125,70 @@ class CustomerViewSet(BaseTenantViewSet):
     model = Customer
     serializer_class = CustomerSerializer
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        q = (self.request.query_params.get('q') or '').strip()
+        if q:
+            from django.db.models import Q as _Q
+            qs = qs.filter(_Q(name__icontains=q) | _Q(phone__icontains=q) | _Q(code__icontains=q))
+        return qs.order_by('code', 'name')
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('all') == '1':
+            return None
+        return super().paginate_queryset(queryset)
+
+    @action(detail=False, methods=['get'])
+    def by_phone(self, request):
+        phone = ''.join(ch for ch in str(request.query_params.get('phone') or '') if ch.isdigit())
+        c = Customer.objects.filter(tenant=self.get_tenant(), phone=phone).first() if phone else None
+        if not c:
+            return Response({'detail': 'عميل جديد'}, status=404)
+        return Response(CustomerSerializer(c).data)
+
+    @action(detail=False, methods=['get'])
+    def lookup(self, request):
+        q = (request.query_params.get('q') or '').strip()
+        t = self.get_tenant()
+        c = None
+        if q:
+            c = Customer.objects.filter(tenant=t, code__iexact=q).first()
+            if not c:
+                digits = ''.join(ch for ch in q if ch.isdigit())
+                if digits:
+                    c = Customer.objects.filter(tenant=t, phone=digits).first()
+        if not c:
+            return Response({'detail': 'عميل جديد'}, status=404)
+        return Response(CustomerSerializer(c).data)
+
+    @action(detail=True, methods=['get'])
+    def history(self, request, pk=None):
+        from apps.sales.models import SaleInvoice, SaleLineItem, SalePayment
+        c = self.get_object()
+        out = []
+        total = Decimal('0.00')
+        for inv in SaleInvoice.objects.filter(tenant=c.tenant, customer=c).order_by('-invoice_date_time'):
+            total += inv.total_amount
+            out.append({
+                'id': str(inv.id), 'number': inv.invoice_number, 'date': inv.invoice_date_time, 'total': str(inv.total_amount),
+                'payments': [{'method': p.payment_method.name, 'type': p.payment_method.method_type, 'amount': str(p.amount)} for p in SalePayment.objects.filter(sale_invoice=inv).select_related('payment_method')],
+                'lines': [{'name': l.display_name or l.product.name, 'pieces': l.quantity_pieces, 'kg': str(l.weight_kg), 'total': str(l.total_price), 'bundle': l.bundle_label} for l in SaleLineItem.objects.filter(sale_invoice=inv).select_related('product')]
+            })
+        return Response({'customer': CustomerSerializer(c).data, 'invoices_count': len(out), 'total_spent': str(total), 'invoices': out})
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        from apps.sales.models import SaleInvoice, SaleLineItem
+        from django.db.models import Sum, Count, Max
+        t = self.get_tenant()
+        stats = {str(r['customer']): r for r in SaleInvoice.objects.filter(tenant=t, customer__isnull=False).values('customer').annotate(n=Count('id'), total=Sum('total_amount'), last=Max('invoice_date_time'))}
+        rows = []
+        for c in Customer.objects.filter(tenant=t).order_by('code', 'name'):
+            st = stats.get(str(c.id), {})
+            top = list(SaleLineItem.objects.filter(sale_invoice__customer=c).values('display_name').annotate(q=Count('id')).order_by('-q')[:3])
+            rows.append({'id': str(c.id), 'code': c.code, 'name': c.name, 'phone': c.phone, 'invoices': st.get('n', 0), 'total': str(st.get('total') or 0), 'last': st.get('last'), 'credit_balance': str(c.credit_balance), 'top_items': [x['display_name'] for x in top if x['display_name']]})
+        return Response(rows)
+
 class PaymentMethodViewSet(BaseTenantViewSet):
     model = PaymentMethod
     serializer_class = PaymentMethodSerializer
@@ -473,6 +537,19 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
     serializer_class = SaleInvoiceSerializer
 
     @action(detail=False, methods=['post'])
+    def verify_manager(self, request):
+        from django.contrib.auth import get_user_model
+        from django.db.models import Q
+        pwd = request.data.get('password') or ''
+        tenant = self.get_tenant()
+        managers = get_user_model().objects.filter(is_active=True).filter(Q(tenant=tenant) | Q(is_superuser=True)).filter(Q(role__in=['ADMIN', 'MANAGER']) | Q(is_superuser=True))
+        if pwd:
+            for m in managers:
+                if m.check_password(pwd):
+                    return Response({'ok': True, 'manager': m.username})
+        return Response({'ok': False, 'detail': 'الباسورد غلط أو صاحبه مش مدير'}, status=403)
+
+    @action(detail=False, methods=['post'])
     def checkout(self, request):
         # Resolve customer if sent
         customer_id = request.data.get('customer_id')
@@ -480,6 +557,18 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         if customer_id:
             from apps.customers.models import Customer
             customer_obj = Customer.objects.filter(id=customer_id).first()
+        _phone = ''.join(ch for ch in str(request.data.get('customer_phone') or '') if ch.isdigit())
+        _cname = (request.data.get('customer_name') or '').strip()
+        if not customer_obj and _phone:
+            from apps.customers.models import Customer
+            _t = self.get_tenant()
+            customer_obj = Customer.objects.filter(tenant=_t, phone=_phone).first()
+            if not customer_obj:
+                _nums = [int(x[1:]) for x in Customer.objects.filter(tenant=_t).values_list('code', flat=True) if x and x[1:].isdigit()]
+                customer_obj = Customer.objects.create(tenant=_t, name=_cname or _phone, phone=_phone, code=f"C{(max(_nums + [0]) + 1):04d}", is_active=True)
+            elif _cname and (not customer_obj.name or customer_obj.name == customer_obj.phone):
+                customer_obj.name = _cname
+                customer_obj.save(update_fields=['name'])
 
         from django.core.exceptions import ValidationError as _DjVE
         try:
@@ -1201,3 +1290,236 @@ class OfferViewSet(_AllPagesMixin, BaseTenantViewSet):
                 continue
             out.append(o)
         return Response(OfferSerializer(out, many=True).data)
+
+from apps.sales.models import DeferredSale
+from apps.api.serializers import DeferredSaleSerializer
+
+
+def _resolve_customer(tenant, data):
+    from apps.customers.models import Customer
+    cid = data.get('customer_id')
+    if cid:
+        c = Customer.objects.filter(tenant=tenant, pk=cid).first()
+        if c:
+            return c
+    phone = ''.join(ch for ch in str(data.get('customer_phone') or '') if ch.isdigit())
+    name = (data.get('customer_name') or '').strip()
+    if not phone:
+        return None
+    c = Customer.objects.filter(tenant=tenant, phone=phone).first()
+    if not c:
+        nums = [int(x[1:]) for x in Customer.objects.filter(tenant=tenant).values_list('code', flat=True) if x and x[1:].isdigit()]
+        c = Customer.objects.create(tenant=tenant, name=name or phone, phone=phone, code=f"C{(max(nums + [0]) + 1):04d}", is_active=True)
+    elif name and (not c.name or c.name == c.phone):
+        c.name = name
+        c.save(update_fields=['name'])
+    return c
+
+
+def _holding_for(shop):
+    w = Warehouse.objects.filter(tenant=shop.tenant, warehouse_type='TRANSIT', name=f"أمانات عند العملاء - {shop.name}").first()
+    if w:
+        return w
+    skip = ('id', 'created_at', 'updated_at', 'name', 'warehouse_type')
+    vals = {f.attname: getattr(shop, f.attname) for f in Warehouse._meta.concrete_fields if f.name not in skip and not f.primary_key}
+    w = Warehouse(**vals)
+    w.name = f"أمانات عند العملاء - {shop.name}"
+    w.warehouse_type = 'TRANSIT'
+    if hasattr(w, 'code'):
+        base = f"HOLD-{getattr(shop, 'code', '') or str(shop.pk)[:6]}"
+        w.code = base[:Warehouse._meta.get_field('code').max_length]
+    w.save()
+    return w
+
+
+class DeferredSaleViewSet(_AllPagesMixin, BaseTenantViewSet):
+    model = DeferredSale
+    serializer_class = DeferredSaleSerializer
+    http_method_names = ['get', 'post']
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('customer', 'cashier', 'deposit_method', 'terminal', 'sale_invoice').order_by('-created_at')
+        p = self.request.query_params
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        if p.get('terminal'):
+            qs = qs.filter(terminal_id=p['terminal'])
+        q = (p.get('q') or '').strip()
+        if q:
+            from django.db.models import Q as _Q
+            qs = qs.filter(_Q(number__icontains=q) | _Q(customer__phone__icontains=q) | _Q(customer__name__icontains=q) | _Q(customer__code__iexact=q))
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        from datetime import timedelta
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from django.core.exceptions import ValidationError as _DjVE
+        from apps.shifts.models import Shift
+        from apps.payments.models import PaymentMethod
+        from apps.sales.services import _find_stock_for_piece
+        from apps.transfers.services import create_transfer_order, ship_transfer_order, receive_transfer_order
+        from apps.treasury.services import record_treasury_transaction
+        from apps.treasury.models import TreasuryTransactionType
+        tenant = self.get_tenant()
+        d = request.data
+        shift = Shift.objects.filter(pk=d.get('shift_id'), status='OPEN').first()
+        if not shift:
+            return Response({'detail': 'لازم تفتح وردية الأول'}, status=400)
+        terminal = shift.terminal
+        shop = terminal.default_warehouse
+        if not shop:
+            return Response({'detail': 'نقطة البيع دي مش مربوطة بمحل'}, status=400)
+        items_in = d.get('items') or []
+        if not items_in:
+            return Response({'detail': 'الفاتورة فاضية'}, status=400)
+        try:
+            with dbt.atomic():
+                customer = _resolve_customer(tenant, d)
+                if not customer:
+                    raise _DjVE('الفاتورة المؤجلة لازم يكون فيها اسم العميل وتليفونه')
+                holding = _holding_for(shop)
+                today = timezone.localdate()
+                seq = DeferredSale.objects.filter(tenant=tenant, created_at__date=today).count() + 1
+                number = f"DEF-{terminal.code}-{today.strftime('%Y%m%d')}-{seq:03d}"
+                transfer_items, metas, total = [], [], Decimal('0.00')
+                for it in items_in:
+                    mode = it.get('price_mode') or 'KG'
+                    qty = int(it.get('quantity_pieces') or 0)
+                    price = Decimal(str(it.get('unit_price') or '0'))
+                    if it.get('piece_item_id'):
+                        piece = PieceItem.objects.get(pk=it['piece_item_id'], tenant=tenant)
+                        qty = max(1, qty)
+                        si = _find_stock_for_piece(piece, terminal, qty)
+                        w = Decimal(str(it.get('weight_kg') or '0'))
+                        if w <= 0:
+                            per = (si.total_weight_kg / si.total_quantity_pieces) if si.total_quantity_pieces else Decimal('0')
+                            w = (per * qty).quantize(Decimal('0.001'))
+                    else:
+                        si = StockItem.objects.filter(tenant=tenant, pk=it.get('stock_item_id'), warehouse=shop).first()
+                        if not si:
+                            raise _DjVE('فيه صنف مش موجود في رصيد المحل ده')
+                        w = Decimal(str(it.get('weight_kg') or '0'))
+                        if w <= 0:
+                            raise _DjVE('فيه سطر ناقص الوزن')
+                        if qty <= 0 and si.total_weight_kg > 0:
+                            qty = int(round(float(si.total_quantity_pieces) * float(w) / float(si.total_weight_kg)))
+                    if w > si.total_weight_kg:
+                        raise _DjVE(f'الوزن المطلوب من {si.product.name} أكبر من المتاح ({si.total_weight_kg} كجم)')
+                    qty = max(0, min(qty, int(si.total_quantity_pieces)))
+                    line_total = ((Decimal(qty) * price) if mode == 'PIECE' else (w * price)).quantize(Decimal('0.01'))
+                    total += line_total
+                    transfer_items.append({'stock_item_id': si.pk, 'weight_kg': w, 'quantity_pieces': qty})
+                    metas.append({'src': si, 'weight_kg': str(w), 'quantity_pieces': qty, 'unit_price': str(price), 'price_mode': mode, 'line_total': str(line_total),
+                                  'display_name': it.get('display_name') or si.product.name, 'bundle_label': it.get('bundle_label'), 'offer_label': it.get('offer_label')})
+                user = request.user if request.user.is_authenticated else None
+                tr = create_transfer_order(tenant, shop, holding, user, transfer_items, f"فاتورة مؤجلة {number} - {customer.name} {customer.phone}")
+                ship_transfer_order(tr.pk)
+                receive_transfer_order(tr.pk)
+                lines = []
+                for mt in metas:
+                    src = mt.pop('src')
+                    h = StockItem.objects.get(tenant=tenant, product=src.product, grade=src.grade, warehouse=holding, source_lot=src.source_lot)
+                    mt['holding_stock_item_id'] = str(h.pk)
+                    lines.append(mt)
+                deposit = Decimal(str(d.get('deposit_amount') or '0'))
+                dm = None
+                if deposit > 0:
+                    dm = PaymentMethod.objects.filter(tenant=tenant, pk=d.get('deposit_method_id')).first()
+                    if not dm or dm.method_type == 'CREDIT':
+                        raise _DjVE('اختار طريقة دفع العربون')
+                    if deposit > total:
+                        raise _DjVE('العربون أكبر من قيمة الفاتورة')
+                    target = dm.treasury or terminal.cash_drawer
+                    record_treasury_transaction(treasury_id=target.id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=deposit, payment_method=dm,
+                                                source_document_type='DeferredSale', source_document_id=number, description=f"عربون فاتورة مؤجلة {number}")
+                    if dm.method_type == 'CASH':
+                        shift.cash_sales_total += deposit
+                        shift.save()
+                days = int(d.get('due_days') or 3)
+                ds = DeferredSale.objects.create(tenant=tenant, number=number, terminal=terminal, shift=shift, cashier=user, customer=customer, shop_warehouse=shop,
+                                                 holding_warehouse=holding, lines=lines, total_amount=total, deposit_amount=deposit, deposit_method=dm,
+                                                 due_date=today + timedelta(days=max(0, days)), transfer_out_code=tr.transfer_code, notes=d.get('notes'))
+        except _DjVE as e:
+            return Response({'detail': '; '.join(e.messages)}, status=400)
+        return Response(DeferredSaleSerializer(ds).data, status=201)
+
+    @action(detail=True, methods=['post'])
+    def convert(self, request, pk=None):
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from django.core.exceptions import ValidationError as _DjVE
+        from apps.shifts.models import Shift
+        from apps.sales.services import process_pos_sale
+        from apps.treasury.services import record_treasury_transaction
+        from apps.treasury.models import TreasuryTransactionType
+        ds = self.get_object()
+        if ds.status != 'OPEN':
+            return Response({'detail': 'الفاتورة دي اتقفلت قبل كده'}, status=400)
+        d = request.data
+        shift = Shift.objects.filter(pk=d.get('shift_id'), status='OPEN').first()
+        if not shift:
+            return Response({'detail': 'لازم تفتح وردية الأول'}, status=400)
+        try:
+            with dbt.atomic():
+                payments = list(d.get('payments') or [])
+                if ds.deposit_amount > 0 and ds.deposit_method:
+                    target = ds.deposit_method.treasury or ds.terminal.cash_drawer
+                    record_treasury_transaction(treasury_id=target.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=ds.deposit_amount, payment_method=ds.deposit_method,
+                                                source_document_type='DeferredSale', source_document_id=ds.number, description=f"تحويل عربون {ds.number} لفاتورة بيع", allow_negative=True)
+                    if ds.deposit_method.method_type == 'CASH':
+                        shift.cash_sales_total -= ds.deposit_amount
+                        shift.save()
+                    payments.append({'payment_method_id': str(ds.deposit_method_id), 'amount': str(ds.deposit_amount)})
+                items = [{'stock_item_id': l['holding_stock_item_id'], 'weight_kg': l['weight_kg'], 'quantity_pieces': l['quantity_pieces'], 'unit_price': l['unit_price'],
+                          'price_mode': l['price_mode'], 'display_name': l.get('display_name'), 'bundle_label': l.get('bundle_label'), 'offer_label': l.get('offer_label')} for l in ds.lines]
+                inv = process_pos_sale(shift_id=shift.pk, cashier=request.user, items_data=items, payments_data=payments,
+                                       discount_amount=Decimal(str(d.get('discount_amount') or '0')), customer=ds.customer,
+                                       notes=(f"تحويل الفاتورة المؤجلة {ds.number} " + (d.get('notes') or '')).strip(), allowed_warehouse_id=ds.holding_warehouse_id)
+                ds.status = 'SOLD'
+                ds.sale_invoice = inv
+                ds.closed_by = request.user if request.user.is_authenticated else None
+                ds.closed_at = timezone.now()
+                ds.save()
+        except _DjVE as e:
+            return Response({'detail': '; '.join(e.messages)}, status=400)
+        return Response({'deferred': DeferredSaleSerializer(ds).data, 'invoice_number': inv.invoice_number, 'invoice_id': str(inv.id)})
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from django.core.exceptions import ValidationError as _DjVE
+        from apps.shifts.models import Shift
+        from apps.transfers.services import create_transfer_order, ship_transfer_order, receive_transfer_order
+        from apps.treasury.services import record_treasury_transaction
+        from apps.treasury.models import TreasuryTransactionType
+        ds = self.get_object()
+        if ds.status != 'OPEN':
+            return Response({'detail': 'الفاتورة دي اتقفلت قبل كده'}, status=400)
+        refund = str(request.data.get('refund_deposit', 'true')).lower() not in ('false', '0', 'no')
+        try:
+            with dbt.atomic():
+                user = request.user if request.user.is_authenticated else None
+                back = [{'stock_item_id': l['holding_stock_item_id'], 'weight_kg': Decimal(str(l['weight_kg'])), 'quantity_pieces': int(l['quantity_pieces'])} for l in ds.lines]
+                tr = create_transfer_order(ds.tenant, ds.holding_warehouse, ds.shop_warehouse, user, back, f"إلغاء فاتورة مؤجلة {ds.number}")
+                ship_transfer_order(tr.pk)
+                receive_transfer_order(tr.pk)
+                if refund and ds.deposit_amount > 0 and ds.deposit_method:
+                    target = ds.deposit_method.treasury or ds.terminal.cash_drawer
+                    record_treasury_transaction(treasury_id=target.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=ds.deposit_amount, payment_method=ds.deposit_method,
+                                                source_document_type='DeferredSale', source_document_id=ds.number, description=f"رد عربون {ds.number}", allow_negative=True)
+                    if ds.deposit_method.method_type == 'CASH':
+                        sh = Shift.objects.filter(terminal=ds.terminal, status='OPEN').first()
+                        if sh:
+                            sh.cash_sales_total -= ds.deposit_amount
+                            sh.save()
+                ds.status = 'CANCELLED'
+                ds.transfer_back_code = tr.transfer_code
+                ds.closed_by = user
+                ds.closed_at = timezone.now()
+                ds.notes = ((ds.notes or '') + (' | العربون اترجع للعميل' if refund and ds.deposit_amount > 0 else (' | العربون ماترجعش' if ds.deposit_amount > 0 else ''))).strip(' |')
+                ds.save()
+        except _DjVE as e:
+            return Response({'detail': '; '.join(e.messages)}, status=400)
+        return Response(DeferredSaleSerializer(ds).data)
