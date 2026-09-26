@@ -1171,6 +1171,104 @@ class TreasuryViewSet(BaseTenantViewSet):
     model = Treasury
     serializer_class = TreasurySerializer
 
+    def _money_err(self, ex):
+        msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
+        return Response({'detail': 'الخزنة مفيهاش فلوس كفاية للمبلغ ده' if 'Insufficient' in msg else msg}, status=400)
+
+    @action(detail=False, methods=['post'])
+    def transfer(self, request):
+        from django.db import transaction as dbt
+        from apps.treasury.models import Treasury
+        from apps.treasury.services import transfer_between_treasuries
+        t = self.get_tenant(); d = request.data
+        mgr = _verify_manager(t, d.get('manager_password'))
+        if not mgr:
+            return Response({'detail': 'التحويل محتاج باسورد المدير'}, status=403)
+        src = Treasury.objects.filter(tenant=t, pk=d.get('from_id')).first(); dst = Treasury.objects.filter(tenant=t, pk=d.get('to_id')).first()
+        amt = Decimal(str(d.get('amount') or '0'))
+        if not src or not dst or src.pk == dst.pk or amt <= 0:
+            return Response({'detail': 'اختار خزنتين مختلفتين واكتب المبلغ'}, status=400)
+        try:
+            with dbt.atomic():
+                transfer_between_treasuries(src.id, dst.id, amt, f"تحويل من {src.name} إلى {dst.name} - {d.get('notes') or ''} (بموافقة {mgr.username})".strip())
+        except Exception as ex:
+            return self._money_err(ex)
+        return Response({'ok': True})
+
+    @action(detail=False, methods=['post'])
+    def adjust(self, request):
+        from django.db import transaction as dbt
+        from apps.treasury.models import Treasury, TreasuryTransactionType
+        from apps.treasury.services import record_treasury_transaction
+        t = self.get_tenant(); d = request.data
+        mgr = _verify_manager(t, d.get('manager_password'))
+        if not mgr:
+            return Response({'detail': 'الإيداع والسحب محتاجين باسورد المدير'}, status=403)
+        tr = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first()
+        amt = Decimal(str(d.get('amount') or '0')); kind = d.get('kind'); reason = (d.get('reason') or '').strip()
+        if not tr or amt <= 0 or kind not in ('DEPOSIT', 'WITHDRAWAL') or not reason:
+            return Response({'detail': 'اختار الخزنة والنوع واكتب المبلغ والسبب'}, status=400)
+        try:
+            with dbt.atomic():
+                record_treasury_transaction(treasury_id=tr.id, transaction_type=getattr(TreasuryTransactionType, kind), amount=amt, source_document_type='Manual' + kind.title(),
+                                            source_document_id=mgr.username, description=f"{'إيداع' if kind == 'DEPOSIT' else 'سحب'} يدوي: {reason} (بموافقة {mgr.username})")
+        except Exception as ex:
+            return self._money_err(ex)
+        return Response({'ok': True})
+
+    @action(detail=True, methods=['get'])
+    def statement(self, request, pk=None):
+        from apps.treasury.models import TreasuryTransaction
+        tr = self.get_object(); tr.refresh_from_db()
+        p = request.query_params
+        sgn = lambda x: x.amount if x.amount < 0 else (x.amount if x.transaction_type in ('DEPOSIT', 'TRANSFER_IN') else -x.amount)
+        allq = TreasuryTransaction.objects.filter(treasury=tr)
+        later = allq
+        if p.get('date_from'):
+            later = allq.filter(created_at__date__gte=p['date_from'])
+        bal = tr.current_balance - sum((sgn(x) for x in later), Decimal('0'))
+        opening = bal
+        rows = []
+        qs = later.order_by('created_at')
+        if p.get('date_to'):
+            qs = qs.filter(created_at__date__lte=p['date_to'])
+        for x in qs:
+            bal += sgn(x)
+            rows.append({'date': x.created_at, 'type': x.transaction_type, 'doc': x.source_document_type or '', 'ref': x.source_document_id or '', 'desc': x.description or '', 'amount': str(sgn(x)), 'balance': str(bal)})
+        return Response({'treasury': tr.name, 'current_balance': str(tr.current_balance), 'opening': str(opening), 'rows': rows})
+
+    @action(detail=False, methods=['get'])
+    def custodies(self, request):
+        from apps.shifts.models import CashierCustody
+        qs = CashierCustody.objects.filter(tenant=self.get_tenant()).select_related('cashier', 'shift').order_by('status', '-created_at')
+        if request.query_params.get('status'):
+            qs = qs.filter(status=request.query_params['status'])
+        return Response([{'id': str(c.id), 'cashier': c.cashier.username, 'shift': c.shift.shift_code if c.shift_id else '', 'amount': str(c.amount), 'status': c.status, 'notes': c.notes, 'date': c.created_at, 'settled_at': c.settled_at} for c in qs])
+
+    @action(detail=False, methods=['post'])
+    def settle_custody(self, request):
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from apps.shifts.models import CashierCustody
+        from apps.treasury.models import Treasury, TreasuryTransactionType
+        from apps.treasury.services import record_treasury_transaction
+        t = self.get_tenant(); d = request.data
+        c = CashierCustody.objects.filter(tenant=t, pk=d.get('custody_id'), status='OPEN').first()
+        tr = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first()
+        amt = Decimal(str(d.get('amount') or '0'))
+        if not c or not tr or amt <= 0 or amt > c.amount:
+            return Response({'detail': 'اختار العهدة والخزنة واكتب مبلغ مش أكبر من العهدة'}, status=400)
+        with dbt.atomic():
+            record_treasury_transaction(treasury_id=tr.id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=amt, source_document_type='CustodySettle',
+                                        source_document_id=str(c.id), description=f"تسديد عهدة {c.cashier.username}")
+            if amt < c.amount:
+                CashierCustody.objects.create(tenant=t, cashier=c.cashier, shift=c.shift, amount=amt, status='SETTLED', notes=f"تسديد جزء من عهدة ({c.notes or ''})", settled_at=timezone.now())
+                c.amount -= amt
+                c.save(update_fields=['amount'])
+            else:
+                c.status = 'SETTLED'; c.settled_at = timezone.now(); c.save(update_fields=['status', 'settled_at'])
+        return Response({'ok': True})
+
 
 from apps.customers.models import Customer
 from apps.payments.models import PaymentMethod
