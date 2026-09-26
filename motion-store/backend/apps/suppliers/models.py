@@ -36,3 +36,19 @@ class Supplier(TenantAwareModel):
             count = Supplier.objects.filter(tenant_id=self.tenant_id).count() + 1
             self.code = f"SUP-{count:04d}"
         super().save(*args, **kwargs)
+
+from django.conf import settings as _sps
+from apps.tenants.models import TenantAwareModel as _SPTAM
+
+
+class SupplierPayment(_SPTAM):
+    supplier = models.ForeignKey('suppliers.Supplier', on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    payment_method = models.ForeignKey('payments.PaymentMethod', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    purchase_invoice = models.ForeignKey('purchasing.PurchaseInvoice', on_delete=models.SET_NULL, null=True, blank=True, related_name='supplier_payments')
+    paid_by = models.ForeignKey(_sps.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    notes = models.TextField(blank=True, null=True)
+
+    class Meta:
+        db_table = "supplier_payments"
+        ordering = ["-created_at"]

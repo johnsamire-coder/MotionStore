@@ -102,6 +102,75 @@ class SupplierViewSet(BaseTenantViewSet):
     model = Supplier
     serializer_class = SupplierSerializer
 
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        from django.db.models import Sum, Count, Max
+        from apps.purchasing.models import PurchaseInvoice
+        from apps.suppliers.models import SupplierPayment
+        t = self.get_tenant()
+        inv = {str(r['supplier']): r for r in PurchaseInvoice.objects.filter(tenant=t).values('supplier').annotate(n=Count('id'), total=Sum('total_cost'), last=Max('invoice_date'))}
+        pay = {str(r['supplier']): r['s'] for r in SupplierPayment.objects.filter(tenant=t).values('supplier').annotate(s=Sum('amount'))}
+        rows = []
+        for sp in Supplier.objects.filter(tenant=t).order_by('name'):
+            i = inv.get(str(sp.id), {}); total = i.get('total') or Decimal('0'); paid = pay.get(str(sp.id)) or Decimal('0')
+            rows.append({'id': str(sp.id), 'code': sp.code, 'name': sp.name, 'phone': sp.phone, 'invoices': i.get('n', 0), 'total': str(Decimal(total).quantize(Decimal('0.01'))), 'paid': str(Decimal(paid).quantize(Decimal('0.01'))), 'balance': str((Decimal(total) - Decimal(paid)).quantize(Decimal('0.01'))), 'last': i.get('last')})
+        return Response(rows)
+
+    @action(detail=True, methods=['get'])
+    def statement(self, request, pk=None):
+        from apps.purchasing.models import PurchaseInvoice
+        from apps.suppliers.models import SupplierPayment
+        sp = self.get_object()
+        from apps.purchasing.models import PurchaseLineItem
+        _fk = next(f.name for f in PurchaseLineItem._meta.fields if f.is_relation and f.related_model is PurchaseInvoice)
+        ev = []
+        for pi in PurchaseInvoice.objects.filter(tenant=sp.tenant, supplier=sp):
+            lines = []
+            for l in PurchaseLineItem.objects.filter(**{_fk: pi}):
+                desc = ' - '.join([str(getattr(l, f)) for f in ('bale_type', 'segment', 'grade', 'brand', 'item_name', 'description') if getattr(l, f, None)])
+                tot = next((getattr(l, f) for f in ('total_price', 'line_total', 'subtotal', 'total_cost', 'total') if getattr(l, f, None) is not None), '')
+                lines.append({'desc': desc, 'kg': str(getattr(l, 'weight_kg', '') or ''), 'total': str(tot)})
+            ev.append({'kind': 'INVOICE', 'id': str(pi.id), 'date': str(pi.invoice_date), 'at': pi.created_at, 'ref': pi.invoice_number, 'amount': pi.total_cost, 'lines': lines, 'notes': pi.notes})
+        for p in SupplierPayment.objects.filter(tenant=sp.tenant, supplier=sp).select_related('payment_method', 'paid_by', 'purchase_invoice'):
+            ev.append({'kind': 'PAYMENT', 'id': str(p.id), 'date': str(p.created_at.date()), 'at': p.created_at, 'ref': p.purchase_invoice.invoice_number if p.purchase_invoice_id else '', 'amount': p.amount,
+                       'method': p.payment_method.name if p.payment_method_id else '', 'by': p.paid_by.username if p.paid_by_id else '', 'notes': p.notes})
+        ev.sort(key=lambda e: (e['date'], e['at']))
+        bal = Decimal('0')
+        for e in ev:
+            bal += e['amount'] if e['kind'] == 'INVOICE' else -e['amount']
+            e['balance'] = str(bal.quantize(Decimal('0.01'))); e['amount'] = str(Decimal(e['amount']).quantize(Decimal('0.01'))); e['at'] = e['at'].isoformat()
+        return Response({'supplier': {'id': str(sp.id), 'code': sp.code, 'name': sp.name, 'phone': sp.phone}, 'balance': str(bal.quantize(Decimal('0.01'))), 'entries': ev})
+
+    @action(detail=True, methods=['post'])
+    def pay(self, request, pk=None):
+        from django.db import transaction as dbt
+        from apps.payments.models import PaymentMethod
+        from apps.purchasing.models import PurchaseInvoice
+        from apps.suppliers.models import SupplierPayment
+        from apps.treasury.services import record_treasury_transaction
+        from apps.treasury.models import TreasuryTransactionType
+        sp = self.get_object()
+        amt = Decimal(str(request.data.get('amount') or '0'))
+        if amt <= 0:
+            return Response({'detail': 'اكتب المبلغ'}, status=400)
+        pm = PaymentMethod.objects.filter(tenant=sp.tenant, pk=request.data.get('payment_method_id')).first()
+        if not pm or pm.method_type == 'CREDIT' or not pm.treasury_id:
+            return Response({'detail': 'اختار طريقة دفع ليها خزنة'}, status=400)
+        pi = PurchaseInvoice.objects.filter(tenant=sp.tenant, supplier=sp, pk=request.data.get('purchase_invoice_id')).first() if request.data.get('purchase_invoice_id') else None
+        try:
+            with dbt.atomic():
+                p = SupplierPayment.objects.create(tenant=sp.tenant, supplier=sp, amount=amt, payment_method=pm, purchase_invoice=pi,
+                                                   paid_by=request.user if request.user.is_authenticated else None, notes=request.data.get('notes'))
+                record_treasury_transaction(treasury_id=pm.treasury_id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, payment_method=pm,
+                                            source_document_type='SupplierPayment', source_document_id=str(p.id), description=f"دفع للمورد {sp.name}")
+                if pi:
+                    pi.paid_amount = (pi.paid_amount or Decimal('0')) + amt
+                    pi.save(update_fields=['paid_amount'])
+        except Exception as e:
+            msg = '; '.join(getattr(e, 'messages', []) or [str(e)])
+            return Response({'detail': ('الخزنة مفيهاش فلوس كفاية للمبلغ ده' if 'Insufficient' in msg else msg) or 'حصلت مشكلة'}, status=400)
+        return Response({'ok': True, 'payment_id': str(p.id)}, status=201)
+
     def create(self, request, *args, **kwargs):
         tenant = self.get_tenant()
         name = request.data.get('name', '').strip()

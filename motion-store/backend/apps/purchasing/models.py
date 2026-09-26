@@ -61,6 +61,7 @@ class PurchaseInvoice(TenantAwareModel):
         help_text="Freight, customs, transport costs to be absorbed"
     )
     total_cost = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    paid_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     notes = models.TextField(blank=True, null=True)
 
     class Meta:

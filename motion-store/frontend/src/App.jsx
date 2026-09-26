@@ -11,6 +11,7 @@ import ProductCodingPage from './pages/ProductCodingPage';
 import ReturnsPage from './pages/ReturnsPage';
 import SalesInvoicesPage from './pages/SalesInvoicesPage';
 import CustomersPage from './pages/CustomersPage';
+import SuppliersPage from './pages/SuppliersPage';
 import SortingPage from './pages/SortingPage';
 import InventoryPage from './pages/InventoryPage';
 import PurchasingPage from './pages/PurchasingPage';
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="returns" element={<ReturnsPage />} />
           <Route path="invoices" element={<SalesInvoicesPage />} />
           <Route path="customers" element={<CustomersPage />} />
+          <Route path="suppliers" element={<SuppliersPage />} />
               <Route path="sorting" element={<SortingPage />} />
               <Route path="inventory" element={<InventoryPage />} />
               <Route path="purchasing" element={<PurchasingPage />} />
