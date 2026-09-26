@@ -30,6 +30,7 @@ class PurchaseOptionType(models.TextChoices):
     SEGMENT = 'SEGMENT', 'Segment (الصنف)'
     BRAND = 'BRAND', 'Brand (البراند)'
     SPECIAL_ITEM = 'SPECIAL_ITEM', 'Special Item (بند خاص)'
+    SEASON = 'SEASON', 'Season (الموسم)'
 
 
 class PurchaseInvoice(TenantAwareModel):

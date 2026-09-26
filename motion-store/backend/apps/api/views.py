@@ -827,3 +827,194 @@ class TransferOrderViewSet(BaseTenantViewSet):
             return Response({'detail': '; '.join(e.messages)}, status=400)
         tr.refresh_from_db()
         return Response(TransferOrderSerializer(tr).data, status=201)
+
+from apps.pricing.models import WeightPrice, PieceItem, PriceChangeLog, PriceKind, SortedGrade
+from apps.api.serializers import WeightPriceSerializer, PieceItemSerializer, PriceChangeLogSerializer
+
+BALE_PURCHASE_GRADES = ['سوبر كريم', 'كريم', 'كريم في واحد', 'نمرة 1', 'نمرة 2', 'سحبة']
+
+
+def _dec(v):
+    try:
+        return Decimal(str(v if v not in (None, '') else '0'))
+    except Exception:
+        return None
+
+
+def _log_price(tenant, user, target, field, old, new, **kw):
+    if old is not None and Decimal(str(old)) == Decimal(str(new)):
+        return
+    PriceChangeLog.objects.create(
+        tenant=tenant, target=target, field=field, old_price=old, new_price=new,
+        changed_by=user if (user is not None and user.is_authenticated) else None, **kw
+    )
+
+
+class _AllPagesMixin:
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('all') == '1':
+            return None
+        return super().paginate_queryset(queryset)
+
+
+class WeightPriceViewSet(_AllPagesMixin, BaseTenantViewSet):
+    model = WeightPrice
+    serializer_class = WeightPriceSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        p = self.request.query_params
+        if p.get('kind'):
+            qs = qs.filter(kind=p['kind'])
+        if p.get('key') is not None and p.get('key') != '':
+            qs = qs.filter(key=p['key'])
+        return qs.order_by('kind', 'key', 'grade')
+
+    @action(detail=False, methods=['post'])
+    def set_prices(self, request):
+        from django.db import transaction as dbt
+        tenant = self.get_tenant()
+        kind = request.data.get('kind')
+        key = (request.data.get('key') or '').strip()
+        prices = request.data.get('prices') or {}
+        if kind not in PriceKind.values:
+            return Response({'detail': 'نوع التسعير غلط'}, status=400)
+        if kind == 'BALE':
+            key = ''
+        elif not key:
+            return Response({'detail': 'اختار البراند أو النوع الأول'}, status=400)
+        with dbt.atomic():
+            for grade, val in prices.items():
+                if grade not in SortedGrade.values:
+                    continue
+                new = _dec(val)
+                if new is None or new < 0:
+                    return Response({'detail': 'فيه سعر مكتوب غلط'}, status=400)
+                obj, created = WeightPrice.objects.get_or_create(tenant=tenant, kind=kind, key=key, grade=grade, defaults={'price_per_kg': new})
+                old = None if created else obj.price_per_kg
+                if not created and obj.price_per_kg != new:
+                    obj.price_per_kg = new
+                    obj.save()
+                _log_price(tenant, request.user, 'WEIGHT', 'per_kg', old, new, kind=kind, key=key, grade=grade, name=(key or 'بالة'))
+        qs = WeightPrice.objects.filter(tenant=tenant, kind=kind, key=key)
+        return Response(WeightPriceSerializer(qs, many=True).data)
+
+
+class PieceItemViewSet(_AllPagesMixin, BaseTenantViewSet):
+    model = PieceItem
+    serializer_class = PieceItemSerializer
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        p = self.request.query_params
+        if p.get('include_inactive') != '1':
+            qs = qs.filter(is_active=True)
+        if p.get('source_kind'):
+            qs = qs.filter(source_kind=p['source_kind'])
+        return qs.order_by('code')
+
+    def _clean(self, data, instance=None):
+        tenant = self.get_tenant()
+        out = {}
+        code = (data.get('code', instance.code if instance else '') or '').strip()
+        name = (data.get('name', instance.name if instance else '') or '').strip()
+        kind = data.get('source_kind', instance.source_kind if instance else None)
+        if not code:
+            return None, 'اكتب كود القطعة'
+        if not name:
+            return None, 'اكتب اسم القطعة'
+        if kind not in PriceKind.values:
+            return None, 'اختار تصنيف القطعة (بالة / استوك / شراء مباشر)'
+        dup = PieceItem.objects.filter(tenant=tenant, code=code)
+        if instance:
+            dup = dup.exclude(pk=instance.pk)
+        if dup.exists():
+            return None, f'الكود {code} مستعمل قبل كده'
+        grade = data.get('purchase_grade', instance.purchase_grade if instance else None)
+        if kind == 'BALE':
+            if grade and grade not in BALE_PURCHASE_GRADES:
+                return None, 'درجة البالة غلط'
+        else:
+            grade = None
+        pp = _dec(data.get('price_per_piece', instance.price_per_piece if instance else 0))
+        pk_ = _dec(data.get('price_per_kg', instance.price_per_kg if instance else 0))
+        if pp is None or pk_ is None or pp < 0 or pk_ < 0:
+            return None, 'فيه سعر مكتوب غلط'
+        if pp == 0 and pk_ == 0:
+            return None, 'اكتب سعر القطعة أو سعر الكيلو'
+        out.update({'code': code, 'name': name, 'source_kind': kind, 'purchase_grade': grade,
+                    'segment': data.get('segment', instance.segment if instance else None) or None,
+                    'season': data.get('season', instance.season if instance else None) or None,
+                    'brand': data.get('brand', instance.brand if instance else None) or None,
+                    'price_per_piece': pp, 'price_per_kg': pk_})
+        return out, None
+
+    def create(self, request, *args, **kwargs):
+        tenant = self.get_tenant()
+        clean, err = self._clean(request.data)
+        if err:
+            return Response({'detail': err}, status=400)
+        obj = PieceItem.objects.create(tenant=tenant, is_active=True, **clean)
+        meta = {'code': obj.code, 'name': f'{obj.name} {obj.segment or ""}'.strip(), 'kind': obj.source_kind, 'key': obj.brand, 'segment': obj.segment, 'grade': obj.purchase_grade, 'season': obj.season}
+        if obj.price_per_piece > 0:
+            _log_price(tenant, request.user, 'PIECE', 'per_piece', None, obj.price_per_piece, **meta)
+        if obj.price_per_kg > 0:
+            _log_price(tenant, request.user, 'PIECE', 'per_kg', None, obj.price_per_kg, **meta)
+        return Response(PieceItemSerializer(obj).data, status=201)
+
+    def update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        tenant = self.get_tenant()
+        old_pp, old_kg = obj.price_per_piece, obj.price_per_kg
+        clean, err = self._clean(request.data, instance=obj)
+        if err:
+            return Response({'detail': err}, status=400)
+        for k, val in clean.items():
+            setattr(obj, k, val)
+        if 'is_active' in request.data:
+            obj.is_active = bool(request.data.get('is_active'))
+        obj.save()
+        meta = {'code': obj.code, 'name': f'{obj.name} {obj.segment or ""}'.strip(), 'kind': obj.source_kind, 'key': obj.brand, 'segment': obj.segment, 'grade': obj.purchase_grade, 'season': obj.season}
+        _log_price(tenant, request.user, 'PIECE', 'per_piece', old_pp, obj.price_per_piece, **meta)
+        _log_price(tenant, request.user, 'PIECE', 'per_kg', old_kg, obj.price_per_kg, **meta)
+        return Response(PieceItemSerializer(obj).data)
+
+    def partial_update(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        obj.is_active = False
+        obj.save()
+        return Response(status=204)
+
+    @action(detail=False, methods=['get'])
+    def by_code(self, request):
+        code = (request.query_params.get('code') or '').strip()
+        obj = PieceItem.objects.filter(tenant=self.get_tenant(), code=code, is_active=True).first()
+        if not obj:
+            return Response({'detail': 'الكود ده مش موجود'}, status=404)
+        return Response(PieceItemSerializer(obj).data)
+
+
+class PriceChangeLogViewSet(_AllPagesMixin, BaseTenantViewSet):
+    model = PriceChangeLog
+    serializer_class = PriceChangeLogSerializer
+    http_method_names = ['get']
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('changed_by').order_by('-created_at')
+        p = self.request.query_params
+        if p.get('date_from'):
+            qs = qs.filter(created_at__date__gte=p['date_from'])
+        if p.get('date_to'):
+            qs = qs.filter(created_at__date__lte=p['date_to'])
+        if p.get('target'):
+            qs = qs.filter(target=p['target'])
+        if p.get('kind'):
+            qs = qs.filter(kind=p['kind'])
+        if p.get('code'):
+            qs = qs.filter(code=p['code'])
+        if p.get('user'):
+            qs = qs.filter(changed_by_id=p['user'])
+        return qs

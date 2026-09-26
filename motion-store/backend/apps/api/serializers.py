@@ -125,6 +125,8 @@ class SortingOrderSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class StockItemSerializer(serializers.ModelSerializer):
+    selling_price_per_kg = serializers.SerializerMethodField()
+    line_info = serializers.SerializerMethodField()
     retail_price = serializers.ReadOnlyField(source='product.retail_price')
     warehouse_type = serializers.ReadOnlyField(source='warehouse.warehouse_type')
     product_name = serializers.ReadOnlyField(source='product.name')
@@ -133,6 +135,29 @@ class StockItemSerializer(serializers.ModelSerializer):
         model = StockItem
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+    def get_selling_price_per_kg(self, obj):  # pricing_v2
+        from apps.pricing.models import WeightPrice
+        info = self.get_line_info(obj)
+        kind = info['kind'] if info else None
+        key = ''
+        if kind == 'STOCK':
+            key = info.get('brand') if (info.get('stock_type') == 'ONE_BRAND' and info.get('brand')) else 'MIX'
+        elif kind == 'DIRECT':
+            key = info.get('item_name') or ''
+        if kind:
+            wp = WeightPrice.objects.filter(tenant=obj.tenant, kind=kind, key=key, grade=obj.grade).first()
+            if wp and wp.price_per_kg > 0:
+                return str(wp.price_per_kg)
+        rp = getattr(obj.product, 'retail_price', None)
+        return str(rp) if rp else None
+
+    def get_line_info(self, obj):  # stock_line_info
+        lot = getattr(obj, 'source_lot', None)
+        li = getattr(lot, 'purchase_line_item', None) if lot else None
+        if not li or not li.purchase_kind:
+            return None
+        return {'kind': li.purchase_kind, 'bale_type': li.bale_type, 'segment': li.segment, 'stock_type': li.stock_type, 'brand': li.brand, 'item_name': li.item_name}
 
 class InventoryTransactionSerializer(serializers.ModelSerializer):
     warehouse_type = serializers.ReadOnlyField(source='warehouse.warehouse_type')
@@ -280,5 +305,26 @@ class TransferOrderSerializer(serializers.ModelSerializer):
     requested_by_name = serializers.ReadOnlyField(source='requested_by.username')
     class Meta:
         model = TransferOrder
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+from apps.pricing.models import WeightPrice, PieceItem, PriceChangeLog
+
+class WeightPriceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WeightPrice
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class PieceItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PieceItem
+        fields = '__all__'
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+class PriceChangeLogSerializer(serializers.ModelSerializer):
+    changed_by_name = serializers.ReadOnlyField(source='changed_by.username')
+    class Meta:
+        model = PriceChangeLog
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']

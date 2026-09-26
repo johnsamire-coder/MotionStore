@@ -83,3 +83,7 @@ htmlcov/
 # =====================
 *.bak
 *.tmp
+
+# local backups made during fixes
+*.bak*
+

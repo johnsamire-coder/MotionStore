@@ -135,6 +135,32 @@ export default function InventoryPage() {
   const sumVal = (list) => list.reduce((a, s) => a + num(s.current_total_value), 0);
   const sumSale = (list) => list.reduce((a, s) => a + num(s.total_weight_kg) * num(s.retail_price), 0);
 
+  const GRADES3 = ['NEW_COLLECTION', 'MIDDLE', 'CLEARANCE'];
+  const KIND_NAME = isRTL
+    ? { BALE: 'إجمالي البالات', STOCK: 'إجمالي الاستوك', DIRECT: 'إجمالي الأصناف الخاصة', OLD: 'بضاعة بدون تصنيف' }
+    : { BALE: 'Total Bales', STOCK: 'Total Stock', DIRECT: 'Total Special Items', OLD: 'Unclassified Goods' };
+  const summarize = (list) => {
+    const g = {};
+    GRADES3.forEach((k) => { g[k] = { kg: 0, pcs: 0 }; });
+    let kg = 0; let pcs = 0;
+    list.forEach((s) => {
+      const w = num(s.total_weight_kg); const p = num(s.total_quantity_pieces);
+      kg += w; pcs += p;
+      if (g[s.grade]) { g[s.grade].kg += w; g[s.grade].pcs += p; }
+    });
+    return { kg, pcs, g };
+  };
+  const kindOf = (s) => (s.line_info && s.line_info.kind) || 'OLD';
+  const kindGroups = ['BALE', 'STOCK', 'DIRECT', 'OLD']
+    .map((k) => ({ key: k, title: KIND_NAME[k], ...summarize(rows.filter((s) => kindOf(s) === k)) }))
+    .filter((x) => x.kg > 0);
+  const baleTypes = Array.from(new Set(rows.filter((s) => kindOf(s) === 'BALE').map((s) => s.line_info.bale_type).filter(Boolean)));
+  const typeGroups = baleTypes.map((tn) => ({
+    key: 'type-' + tn,
+    title: (isRTL ? 'بالات ' : 'Bales: ') + tn,
+    ...summarize(rows.filter((s) => kindOf(s) === 'BALE' && s.line_info.bale_type === tn))
+  }));
+
   const stockReport = () => ({
     title: T.rStock + ' - ' + (locId ? whById[locId]?.name : (locTab === 'shop' ? T.allShops : T.allWh)),
     filename: 'inventory-balances', filtersText: q,
@@ -261,6 +287,26 @@ export default function InventoryPage() {
             <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.kTotal}</div><div className="text-xl font-black mt-1">{kgf(sumKg(rows))} <span className="text-xs text-slate-500">{T.kg}</span></div></div>
             <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.kLow}</div><div className="text-xl font-black mt-1 text-amber-700">{rows.filter((s) => num(s.total_weight_kg) < 10).length}</div></div>
           </div>
+          {kindGroups.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+              {[...kindGroups.map((g) => ({ ...g, main: true })), ...typeGroups].map((grp, i) => (
+                <div key={grp.key + '-' + i} className={`bg-white p-4 rounded-xl border ${grp.main ? 'border-emerald-300' : 'border-slate-200'}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className={`text-sm font-black ${grp.main ? 'text-emerald-900' : 'text-slate-900'}`}>{grp.title}</div>
+                    <div className="text-xs font-bold text-slate-600 whitespace-nowrap">{kgf(grp.kg)} {T.kg} · {kgf(grp.pcs)} {T.pcs}</div>
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {GRADES3.map((gk) => (
+                      <div key={gk} className="flex items-center justify-between text-xs">
+                        <span className="px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-800 font-bold">{G[gk]}</span>
+                        <span className="text-slate-700">{kgf(grp.g[gk].kg)} {T.kg} · {kgf(grp.g[gk].pcs)} {T.pcs}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
             <div className="flex flex-wrap items-center gap-3">
               {searchBox(q, (e) => setQ(e.target.value), T.search)}
