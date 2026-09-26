@@ -206,6 +206,16 @@ class SaleInvoiceSerializer(serializers.ModelSerializer):
     lines = SaleLineItemSerializer(many=True, read_only=True)
     cashier_username = serializers.ReadOnlyField(source='cashier.username')
     branch_name = serializers.ReadOnlyField(source='branch.name')
+    customer_name = serializers.ReadOnlyField(source='customer.name')
+    customer_phone = serializers.ReadOnlyField(source='customer.phone')
+    customer_code = serializers.ReadOnlyField(source='customer.code')
+    terminal_code = serializers.ReadOnlyField(source='pos_terminal.code')
+    terminal_name = serializers.ReadOnlyField(source='pos_terminal.name')
+    payments_info = serializers.SerializerMethodField()
+
+    def get_payments_info(self, obj):
+        from apps.sales.models import SalePayment
+        return [{'method': p.payment_method.name, 'type': p.payment_method.method_type, 'amount': str(p.amount)} for p in SalePayment.objects.filter(sale_invoice=obj).select_related('payment_method')]
     class Meta:
         model = SaleInvoice
         fields = '__all__'

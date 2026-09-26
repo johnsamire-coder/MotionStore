@@ -93,6 +93,7 @@ export default function AppLayout() {
   const allNavigation = [
     { name: t('nav.dashboard'), to: '/', icon: BarChart3 },
     { name: 'شاشة المبيعات (Alt+2)', en: 'Sales (Alt+2)', to: '/pos', icon: ShoppingCart },
+    { name: 'فواتير المبيعات', en: 'Sales Invoices', to: '/invoices', icon: FileSpreadsheet },
     { name: 'شاشة المصروفات (Alt+3)', en: 'Expenses (Alt+3)', to: '/expenses', icon: DollarSign },
     { name: 'التسعير', en: 'Pricing', to: '/coding', icon: Tag },
     { name: 'مرتجعات المبيعات (Alt+0)', en: 'Sales Returns (Alt+0)', to: '/returns', icon: RotateCcw },

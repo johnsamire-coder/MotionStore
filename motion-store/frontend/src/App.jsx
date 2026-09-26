@@ -9,6 +9,7 @@ import POSPage from './pages/POSPage';
 import ExpensesPage from './pages/ExpensesPage';
 import ProductCodingPage from './pages/ProductCodingPage';
 import ReturnsPage from './pages/ReturnsPage';
+import SalesInvoicesPage from './pages/SalesInvoicesPage';
 import SortingPage from './pages/SortingPage';
 import InventoryPage from './pages/InventoryPage';
 import PurchasingPage from './pages/PurchasingPage';
@@ -38,6 +39,7 @@ export default function App() {
               <Route path="expenses" element={<ExpensesPage />} />
               <Route path="coding" element={<ProductCodingPage />} />
               <Route path="returns" element={<ReturnsPage />} />
+          <Route path="invoices" element={<SalesInvoicesPage />} />
               <Route path="sorting" element={<SortingPage />} />
               <Route path="inventory" element={<InventoryPage />} />
               <Route path="purchasing" element={<PurchasingPage />} />

@@ -535,6 +535,32 @@ class ShiftViewSet(BaseTenantViewSet):
 class SaleInvoiceViewSet(BaseTenantViewSet):
     model = SaleInvoice
     serializer_class = SaleInvoiceSerializer
+    def get_queryset(self):
+        from django.db.models import Q as _Q
+        from apps.sales.models import SalePayment
+        qs = super().get_queryset().select_related('customer', 'cashier', 'pos_terminal').prefetch_related('lines').order_by('-invoice_date_time')
+        p = self.request.query_params
+        if p.get('date_from'):
+            qs = qs.filter(invoice_date_time__date__gte=p['date_from'])
+        if p.get('date_to'):
+            qs = qs.filter(invoice_date_time__date__lte=p['date_to'])
+        if p.get('cashier'):
+            qs = qs.filter(cashier_id=p['cashier'])
+        if p.get('terminal'):
+            qs = qs.filter(pos_terminal_id=p['terminal'])
+        if p.get('customer'):
+            qs = qs.filter(customer_id=p['customer'])
+        if p.get('payment_method'):
+            qs = qs.filter(id__in=SalePayment.objects.filter(payment_method_id=p['payment_method']).values('sale_invoice_id'))
+        q = (p.get('q') or '').strip()
+        if q:
+            qs = qs.filter(_Q(invoice_number__icontains=q) | _Q(customer__phone__icontains=q) | _Q(customer__name__icontains=q) | _Q(customer__code__iexact=q))
+        return qs
+
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('all') == '1':
+            return None
+        return super().paginate_queryset(queryset)
 
     @action(detail=False, methods=['post'])
     def verify_manager(self, request):
