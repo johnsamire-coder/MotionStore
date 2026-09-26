@@ -138,6 +138,19 @@ class CustomerViewSet(BaseTenantViewSet):
             return None
         return super().paginate_queryset(queryset)
 
+    def create(self, request, *args, **kwargs):
+        t = self.get_tenant()
+        name = (request.data.get('name') or '').strip()
+        phone = ''.join(ch for ch in str(request.data.get('phone') or '') if ch.isdigit())
+        if not name or len(phone) < 6:
+            return Response({'detail': 'اكتب اسم العميل ورقم تليفونه'}, status=400)
+        if Customer.objects.filter(tenant=t, phone=phone).exists():
+            return Response({'detail': 'الرقم ده متسجل لعميل تاني'}, status=400)
+        nums = [int(x[1:]) for x in Customer.objects.filter(tenant=t).values_list('code', flat=True) if x and x[1:].isdigit()]
+        c = Customer.objects.create(tenant=t, name=name, phone=phone, code=f"C{(max(nums + [0]) + 1):04d}", address=request.data.get('address') or '',
+                                    notes=request.data.get('notes') or '', credit_limit=Decimal(str(request.data.get('credit_limit') or '0')), is_active=True)
+        return Response(CustomerSerializer(c).data, status=201)
+
     @action(detail=False, methods=['get'])
     def by_phone(self, request):
         phone = ''.join(ch for ch in str(request.query_params.get('phone') or '') if ch.isdigit())
