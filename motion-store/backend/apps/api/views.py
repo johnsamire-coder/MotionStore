@@ -2117,3 +2117,23 @@ class ExpenseViewSet(_AllPagesMixin, BaseTenantViewSet):
             e.cancelled_at = timezone.now()
             e.save()
         return Response(ExpenseSerializer(e).data)
+
+from rest_framework import viewsets as _rvs
+from rest_framework.permissions import IsAuthenticated as _RIsAuth
+
+
+class ReportsV2ViewSet(_rvs.ViewSet):
+    permission_classes = [_RIsAuth]
+
+    def list(self, request):
+        from apps.api import reports_v2 as R
+        return Response(R.catalog())
+
+    @action(detail=False, methods=['get'])
+    def run(self, request):
+        from apps.api import reports_v2 as R
+        t = getattr(request.user, 'tenant', None)
+        out = R.run_report(t, request.query_params.get('name'), request.query_params)
+        if out is None:
+            return Response({'detail': 'التقرير ده مش موجود'}, status=404)
+        return Response(out)
