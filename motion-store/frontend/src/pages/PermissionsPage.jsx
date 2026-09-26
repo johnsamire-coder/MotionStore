@@ -26,7 +26,7 @@ export default function PermissionsPage() {
     { path: '/expenses', name: 'شاشة المصروفات (F3)', category: 'المالية' },
     { path: '/coding', name: 'تكويد وتسعير الأصناف (F4)', category: 'إدارة المنتجات' },
     { path: '/returns', name: 'مرتجعات المبيعات (F10)', category: 'المبيعات' },
-    { path: '/sorting', name: 'ساحة الفرز ومطابقة الأوزان', category: 'المخازن والفرز' },
+    { path: '/sorting', name: 'الفرز', category: 'المخازن والفرز' },
     { path: '/inventory', name: 'المخزون التام وجرد الأصناف (F8)', category: 'المخازن والفرز' },
     { path: '/purchasing', name: 'المشتريات واستلام البالات (F1)', category: 'المشتريات' },
     { path: '/shifts', name: 'الورديات وإغلاق الخزينة (F9)', category: 'المالية' },

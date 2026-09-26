@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
+import ExportButtons from '../components/ExportButtons';
+import SupplierStatement from '../components/SupplierStatement';
+import PurchaseInvoiceForm from '../components/PurchaseInvoiceForm';
 import { useLanguage } from '../context/LanguageContext';
-import { Truck, Plus, Save, Users, FileText, CheckCircle2, X, Package, ShoppingBag, Trash2, ShoppingCart, Tag } from 'lucide-react';
+import { Truck, Plus, Save, Users, FileText, CheckCircle2, X, Package, ShoppingBag, Trash2, ShoppingCart, Tag, Search } from 'lucide-react';
 
 export default function PurchasingPage() {
   const { t, isRTL } = useLanguage();
@@ -11,6 +14,8 @@ export default function PurchasingPage() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [showSupStatement, setShowSupStatement] = useState(false);
 
   // Modals state
   const [showInvModal, setShowInvModal] = useState(false);
@@ -48,8 +53,7 @@ export default function PurchasingPage() {
 
   useEffect(() => {
     const handleShortcuts = (e) => {
-      if (e.key === 'F2') { e.preventDefault(); setShowSupModal(true); } 
-      else if (e.key === 'F3') { e.preventDefault(); setShowInvModal(true); }
+      if (e.key === 'F3') { e.preventDefault(); setShowInvModal(true); }
     };
     window.addEventListener('keydown', handleShortcuts);
     return () => window.removeEventListener('keydown', handleShortcuts);
@@ -268,7 +272,7 @@ export default function PurchasingPage() {
     setInvForm(prev => ({ ...prev, direct_items: newItems }));
   };
 
-  const totalProcurement = invoices.reduce((sum, inv) => sum + parseFloat(inv.total_amount || 0), 0);
+  const totalProcurement = invoices.reduce((sum, inv) => sum + parseFloat(inv.total_cost || inv.total_amount || 0), 0);
 
   const calculateInvoiceSubtotal = () => {
     if (invMode === 'BALE') {
@@ -284,6 +288,50 @@ export default function PurchasingPage() {
   const currentFreight = parseFloat(invForm.freight_cost || 0);
   const currentInvoiceTotal = calculateInvoiceSubtotal() + currentFreight;
 
+  const KIND_WORDS = { BALE: 'بالة bale', STOCK: 'استوك stock', DIRECT: 'شراء مباشر direct أصناف خاصة' };
+  const searchText = search.trim().toLowerCase();
+  const filteredInvoices = !searchText ? invoices : invoices.filter((inv) => {
+    const parts = [inv.invoice_number, inv.supplier_name, inv.warehouse_name, inv.notes];
+    (inv.items || []).forEach((it) => {
+      parts.push(it.description, it.bale_type, it.grade, it.segment, it.brand, it.item_name, it.extra_description, it.stock_type, KIND_WORDS[it.purchase_kind]);
+    });
+    return parts.filter(Boolean).join(' ').toLowerCase().includes(searchText);
+  });
+
+  const buildPurchaseReport = () => {
+    const rows = filteredInvoices.map((inv) => ({
+      no: inv.invoice_number,
+      date: inv.invoice_date,
+      supplier: inv.supplier_name || '—',
+      warehouse: inv.warehouse_name || '—',
+      details: (inv.items || []).map((it) => it.description).filter(Boolean).join(' | '),
+      weight: (inv.items || []).reduce((a, it) => a + parseFloat(it.weight_kg || 0), 0),
+      freight: parseFloat(inv.additional_costs || 0),
+      total: parseFloat(inv.total_cost || 0)
+    }));
+    return {
+      title: isRTL ? 'تقرير فواتير المشتريات' : 'Purchase Invoices Report',
+      filename: 'purchases',
+      filtersText: search,
+      columns: [
+        { key: 'no', header: isRTL ? 'رقم الفاتورة' : 'Invoice #', width: 22 },
+        { key: 'date', header: isRTL ? 'التاريخ' : 'Date', width: 13 },
+        { key: 'supplier', header: isRTL ? 'المورد' : 'Supplier', width: 22 },
+        { key: 'warehouse', header: isRTL ? 'المخزن' : 'Warehouse', width: 20 },
+        { key: 'details', header: isRTL ? 'التفاصيل' : 'Details', width: 45 },
+        { key: 'weight', header: isRTL ? 'الوزن (كجم)' : 'Weight (KG)', type: 'number' },
+        { key: 'freight', header: isRTL ? 'النقل' : 'Freight', type: 'money' },
+        { key: 'total', header: isRTL ? 'الإجمالي' : 'Total', type: 'money' }
+      ],
+      rows,
+      totals: {
+        weight: rows.reduce((a, r) => a + r.weight, 0),
+        freight: rows.reduce((a, r) => a + r.freight, 0),
+        total: rows.reduce((a, r) => a + r.total, 0)
+      }
+    };
+  };
+
   return (
     <div className="space-y-6 font-sans" dir={isRTL ? 'rtl' : 'ltr'}>
       {/* Top Header & Action Buttons */}
@@ -297,14 +345,6 @@ export default function PurchasingPage() {
         </div>
 
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setShowSupModal(true)}
-            className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Users size={14}/>
-            <span>{t('purchasing.newSupplier')}</span>
-          </button>
           <button
             type="button"
             onClick={() => setShowInvModal(true)}
@@ -329,14 +369,32 @@ export default function PurchasingPage() {
           <span className="text-xs text-slate-500 font-bold block">{t('purchasing.totalProcurement')}</span>
           <div className="text-2xl font-black text-emerald-900 mt-1">{totalProcurement.toFixed(2)} {t('common.currency')}</div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <button type="button" onClick={() => setShowSupStatement(true)} className="text-start bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:border-emerald-400 hover:shadow-md transition cursor-pointer">
           <span className="text-xs text-slate-500 font-bold block">{t('purchasing.registeredSuppliers')}</span>
           <div className="text-2xl font-black text-blue-900 mt-1">{suppliers.length}</div>
-        </div>
+          <span className="text-xs text-emerald-700 font-bold mt-1 block">{isRTL ? 'اضغط لعرض كشف الموردين' : 'Click to view suppliers statement'}</span>
+        </button>
       </div>
 
       {/* Invoices List Table */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex flex-col md:flex-row md:items-center gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" style={isRTL ? { right: 12 } : { left: 12 }} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={isRTL ? 'ابحث باسم المورد، رقم الفاتورة، نوع البالة، الدرجة، الصنف، البراند...' : 'Search by supplier, invoice #, bale type, grade, category, brand...'}
+              className="w-full h-10 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-emerald-500"
+              style={isRTL ? { paddingRight: 36, paddingLeft: 12 } : { paddingLeft: 36, paddingRight: 12 }}
+            />
+          </div>
+          <div className="text-xs font-bold text-slate-500 whitespace-nowrap">
+            {isRTL ? `عدد النتائج: ${filteredInvoices.length} من ${invoices.length}` : `Results: ${filteredInvoices.length} of ${invoices.length}`}
+          </div>
+          <ExportButtons getReport={buildPurchaseReport} />
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-right text-xs" dir={isRTL ? 'rtl' : 'ltr'}>
             <thead className="bg-slate-100 text-slate-700 font-black border-y">
@@ -349,7 +407,7 @@ export default function PurchasingPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {invoices.map(inv => (
+              {filteredInvoices.map(inv => (
                 <tr key={inv.id} className="hover:bg-slate-50">
                   <td className="p-3 font-mono font-bold text-slate-600">{inv.invoice_number}</td>
                   <td className="p-3 font-black text-slate-900">{inv.supplier_name || '—'}</td>
@@ -363,281 +421,16 @@ export default function PurchasingPage() {
         </div>
       </div>
 
-      {/* MODAL: NEW INVOICE WITH 3 MODES & FREIGHT & QUICK PRODUCT CODING */}
+      {showSupStatement && (<SupplierStatement suppliers={suppliers} invoices={invoices} onClose={() => setShowSupStatement(false)} />)}
+      {/* MODAL: NEW INVOICE (v2 - bale / stock / direct) */}
       {showInvModal && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleSaveInvoice} className="bg-white rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl border">
-            <div className="flex items-center justify-between border-b pb-3 font-black text-slate-800">
-              <span className="flex items-center gap-1.5"><FileText size={18}/> {t('purchasing.modalInvTitle')}</span>
-              <button type="button" onClick={() => setShowInvModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={18}/></button>
-            </div>
-
-            {/* Mode Switcher: 3 Tabs */}
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full gap-1">
-              <button
-                type="button"
-                onClick={() => setInvMode('BALE')}
-                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'BALE' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
-              >
-                <Package size={14}/>
-                <span>{t('purchasing.baleMode')}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setInvMode('STOCK')}
-                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'STOCK' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
-              >
-                <ShoppingBag size={14}/>
-                <span>{t('purchasing.stockMode')}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setInvMode('DIRECT')}
-                className={'flex-1 py-2 rounded-lg text-xs font-black transition flex justify-center items-center gap-1 cursor-pointer ' + (invMode === 'DIRECT' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-200')}
-              >
-                <ShoppingCart size={14}/>
-                <span>{t('purchasing.directMode')}</span>
-              </button>
-            </div>
-
-            {/* Supplier & Receiving Warehouse */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.selectSupplier')}</label>
-                <select
-                  value={invForm.supplier_id}
-                  onChange={e => setInvForm({...invForm, supplier_id: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
-                  required
-                >
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.selectWarehouse')}</label>
-                <select
-                  value={invForm.warehouse_id}
-                  onChange={e => setInvForm({...invForm, warehouse_id: e.target.value})}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-2 text-xs font-bold"
-                  required
-                >
-                  {warehouses.map(w => <option key={w.id} value={w.id}>{w.name} ({w.warehouse_type})</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* TAB 1: RAW BALE MODE */}
-            {invMode === 'BALE' && (
-              <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-200 space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">{isRTL ? 'تصنيف البالة *' : 'Bale Category *'}</label>
-                    <div className="flex gap-2">
-                      <select
-                        value={invForm.bale_category_id}
-                        onChange={e => setInvForm({...invForm, bale_category_id: e.target.value})}
-                        className="flex-1 bg-white border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
-                        required
-                      >
-                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={handleAddCategory}
-                        className="bg-slate-800 hover:bg-slate-700 text-white px-3 rounded-lg flex items-center justify-center transition cursor-pointer"
-                        title="إضافة تصنيف جديد"
-                      >
-                        <Plus size={16}/>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">{isRTL ? 'تفاصيل الإذون / العلامة' : 'Sub-details / Brand'}</label>
-                    <input
-                      type="text"
-                      value={invForm.bale_content_details}
-                      onChange={e => setInvForm({...invForm, bale_content_details: e.target.value})}
-                      placeholder="مثال: صيفي ميكس أجهزة"
-                      className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.baleWeight')}</label>
-                    <div className="flex gap-2">
-                      <select
-                        value={invForm.bale_weight_type}
-                        onChange={e => setInvForm({...invForm, bale_weight_type: e.target.value})}
-                        className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
-                      >
-                        <option value="40">{t('purchasing.w40')}</option>
-                        <option value="45">{t('purchasing.w45')}</option>
-                        <option value="50">{t('purchasing.w50')}</option>
-                        <option value="80">{t('purchasing.w80')}</option>
-                        <option value="100">{t('purchasing.w100')}</option>
-                        <option value="CUSTOM">{t('purchasing.customWeight')}</option>
-                      </select>
-                      {invForm.bale_weight_type === 'CUSTOM' && (
-                        <input
-                          type="number" step="0.5" placeholder="KG"
-                          value={invForm.bale_custom_weight}
-                          onChange={e => setInvForm({...invForm, bale_custom_weight: e.target.value})}
-                          className="w-24 bg-white border rounded-lg p-2.5 text-xs font-bold text-center"
-                          required
-                        />
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 mb-1">{t('purchasing.balePrice')}</label>
-                    <input
-                      type="number" step="0.01" placeholder="0.00"
-                      value={invForm.bale_price}
-                      onChange={e => setInvForm({...invForm, bale_price: e.target.value})}
-                      className="w-full bg-white border border-emerald-300 rounded-lg p-2.5 text-sm font-black text-emerald-900"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 2: CODED STOCK MODE */}
-            {invMode === 'STOCK' && (
-              <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-200 space-y-3">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-black text-blue-900">{isRTL ? 'أصناف الاستوك المكودة المتاحة بالمشروع' : 'Available Coded Stock Items'}</span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowQuickProdModal(true)}
-                      className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg font-black shadow cursor-pointer flex items-center gap-1"
-                    >
-                      <Tag size={12}/>
-                      <span>{t('purchasing.quickCodeProduct')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={addStockItem}
-                      className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg font-black shadow cursor-pointer"
-                    >
-                      {t('purchasing.addProduct')}
-                    </button>
-                  </div>
-                </div>
-
-                {invForm.stock_items.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-4">{isRTL ? 'اضغط إضافة لاختيار أصناف' : 'Click Add to select items'}</p>
-                ) : (
-                  invForm.stock_items.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
-                      <select
-                        value={item.product_id}
-                        onChange={e => updateStockItem(idx, 'product_id', e.target.value)}
-                        className="flex-1 bg-transparent border-0 outline-none text-xs font-bold text-slate-900"
-                      >
-                        {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.code || 'بدون كود'})</option>)}
-                      </select>
-                      <input
-                        type="number" placeholder={t('purchasing.qty')}
-                        value={item.qty}
-                        onChange={e => updateStockItem(idx, 'qty', e.target.value)}
-                        className="w-16 border rounded p-1 text-xs text-center font-bold"
-                      />
-                      <input
-                        type="number" step="0.01" placeholder={t('purchasing.unitPrice')}
-                        value={item.price}
-                        onChange={e => updateStockItem(idx, 'price', e.target.value)}
-                        className="w-20 border rounded p-1 text-xs text-center font-bold text-blue-800"
-                      />
-                      <button type="button" onClick={() => removeStockItem(idx)} className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"><Trash2 size={14}/></button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* TAB 3: DIRECT FREE PURCHASE MODE */}
-            {invMode === 'DIRECT' && (
-              <div className="bg-purple-50/50 p-4 rounded-xl border border-purple-200 space-y-3">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-black text-purple-900">{isRTL ? 'بنود الشراء المباشر الحر (بدون تكويد)' : 'Direct Free Purchase (Uncoded)'}</span>
-                  <button
-                    type="button"
-                    onClick={addDirectItem}
-                    className="text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded-lg font-black shadow cursor-pointer"
-                  >
-                    {t('purchasing.addDirectItem')}
-                  </button>
-                </div>
-
-                {invForm.direct_items.length === 0 ? (
-                  <p className="text-xs text-slate-400 text-center py-4">{isRTL ? 'اضغط إضافة بند حر' : 'Click Add Free Item'}</p>
-                ) : (
-                  invForm.direct_items.map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-2 bg-white p-2 rounded-lg border shadow-sm">
-                      <input
-                        type="text"
-                        placeholder={t('purchasing.freeTextItem')}
-                        value={item.description}
-                        onChange={e => updateDirectItem(idx, 'description', e.target.value)}
-                        className="flex-1 bg-transparent border-0 outline-none text-xs font-bold text-slate-900"
-                      />
-                      <input
-                        type="number" placeholder={t('purchasing.qty')}
-                        value={item.qty}
-                        onChange={e => updateDirectItem(idx, 'qty', e.target.value)}
-                        className="w-16 border rounded p-1 text-xs text-center font-bold"
-                      />
-                      <input
-                        type="number" step="0.01" placeholder={t('purchasing.unitPrice')}
-                        value={item.price}
-                        onChange={e => updateDirectItem(idx, 'price', e.target.value)}
-                        className="w-20 border rounded p-1 text-xs text-center font-bold text-purple-800"
-                      />
-                      <button type="button" onClick={() => removeDirectItem(idx)} className="text-rose-500 hover:text-rose-700 p-1 cursor-pointer"><Trash2 size={14}/></button>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-
-            {/* FREIGHT COST FIELD IN ALL 3 MODES */}
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-0.5">{t('purchasing.freightCost')}</label>
-                <span className="text-[10px] text-slate-400">{isRTL ? 'تُحمل وتضاف لتكلفة الفاتورة الإجمالية' : 'Absorbed into total invoice cost'}</span>
-              </div>
-              <input
-                type="number" step="0.01" placeholder="0.00"
-                value={invForm.freight_cost}
-                onChange={e => setInvForm({...invForm, freight_cost: e.target.value})}
-                className="w-32 bg-white border border-slate-300 rounded-lg p-2 text-xs font-black text-rose-600 text-center"
-              />
-            </div>
-
-            {/* TOTAL NET COST SUMMARY */}
-            <div className="bg-slate-900 text-white p-3 rounded-xl flex items-center justify-between">
-              <span className="text-xs font-black text-slate-300">{t('purchasing.netTotalCalc')}</span>
-              <span className="text-xl font-black text-emerald-400">{currentInvoiceTotal.toFixed(2)} {t('common.currency')}</span>
-            </div>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-black text-sm shadow transition cursor-pointer disabled:opacity-50"
-            >
-              {saving ? t('purchasing.saving') : t('purchasing.saveInvoice')}
-            </button>
-          </form>
-        </div>
+        <PurchaseInvoiceForm
+          suppliers={suppliers}
+          warehouses={warehouses}
+          onClose={() => setShowInvModal(false)}
+          onAddSupplier={() => setShowSupModal(true)}
+          onSaved={() => { setShowInvModal(false); setSuccessMsg(isRTL ? 'تم حفظ فاتورة الشراء وإرسالها للفرز' : 'Purchase invoice saved and sent to Sorting'); fetchData(); setTimeout(() => setSuccessMsg(''), 3000); }}
+        />
       )}
 
       {/* MODAL: QUICK PRODUCT CODING TO GLOBAL CATALOG */}

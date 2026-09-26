@@ -135,6 +135,25 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
 
         subtotal = Decimal('0.00')
         items_data = data.get('items', [])
+        # --- freight allocation by VALUE (last line takes the remainder) ---
+        def _line_value(it):
+            _w = Decimal(str(it.get('weight_kg', '0.000')))
+            _q = Decimal(str(int(it.get('quantity', 1))))
+            _u = Decimal(str(it.get('unit_price', '0.00')))
+            return (_w * _u) if _w > 0 else (_q * _u)
+        _values = [_line_value(it) for it in items_data]
+        _pre_subtotal = sum(_values, Decimal('0.00'))
+        _freight_shares = []
+        _allocated = Decimal('0.00')
+        for _i, _val in enumerate(_values):
+            if _pre_subtotal <= 0 or freight_cost <= 0:
+                _freight_shares.append(Decimal('0.00'))
+            elif _i == len(_values) - 1:
+                _freight_shares.append(freight_cost - _allocated)
+            else:
+                _s = (freight_cost * _val / _pre_subtotal).quantize(Decimal('0.01'))
+                _freight_shares.append(_s)
+                _allocated += _s
 
         for idx, item in enumerate(items_data):
             prod_id = item.get('product_id')
@@ -193,7 +212,7 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
                     category_id=cat_id if cat_id else None,
                     original_weight_kg=weight_kg,
                     original_quantity_pieces=qty_pcs,
-                    purchase_cost=line_total,
+                    purchase_cost=line_total + _freight_shares[idx],
                     status=RawLotStatus.RECEIVED,
                     received_date=timezone.now().date(),
                     notes=f"Auto-created from Invoice #{inv_num} ({desc})"

@@ -15,6 +15,19 @@ import {
 
 export default function SortingPage() {
   const { t, isRTL } = useLanguage();
+  const LOT_GRADE_EN = {
+    'سوبر كريم': 'Super Cream', 'كريم': 'Cream', 'كريم في واحد': 'Cream in One',
+    'نمرة 1': 'No. 1', 'نمرة 2': 'No. 2', 'سحبة': 'Sahba',
+    'ستوك بيور': 'Pure Stock', 'ستوك ديفوه': 'Defect Stock'
+  };
+  const lotLabel = (lot) => {
+    const i = lot?.line_info;
+    if (!i) return `${t('common.lot')}: ${lot?.lot_code || ''}`;
+    const g = (x) => (isRTL ? x : (LOT_GRADE_EN[x] || x));
+    if (i.kind === 'BALE') return [isRTL ? 'بالة' : 'Bale', i.grade && g(i.grade), i.bale_type, i.segment].filter(Boolean).join(' - ');
+    if (i.kind === 'STOCK') return [isRTL ? 'استوك' : 'Stock', i.stock_type === 'ONE_BRAND' ? 'One Brand' : 'Mix Brand', i.stock_type === 'ONE_BRAND' ? i.brand : null, i.grade && g(i.grade)].filter(Boolean).join(' - ');
+    return [isRTL ? 'شراء مباشر' : 'Direct Purchase', i.item_name].filter(Boolean).join(' - ');
+  };
 
   // Data States
   const [rawLots, setRawLots] = useState([]);
@@ -25,17 +38,17 @@ export default function SortingPage() {
 
   // Sorting Workspace States
   const [sortingOrder, setSortingOrder] = useState(null);
-  const [newWeight, setNewWeight] = useState('30.000');
-  const [newPieces, setNewPieces] = useState(30);
-  const [midWeight, setMidWeight] = useState('50.000');
-  const [midPieces, setMidPieces] = useState(50);
-  const [clrWeight, setClrWeight] = useState('10.000');
-  const [clrPieces, setClrPieces] = useState(10);
+  const [newWeight, setNewWeight] = useState('0.000');
+  const [newPieces, setNewPieces] = useState(0);
+  const [midWeight, setMidWeight] = useState('0.000');
+  const [midPieces, setMidPieces] = useState(0);
+  const [clrWeight, setClrWeight] = useState('0.000');
+  const [clrPieces, setClrPieces] = useState(0);
   
-  const [wasteWeight, setWasteWeight] = useState('10.000');
-  const [wastePieces, setWastePieces] = useState(10);
+  const [wasteWeight, setWasteWeight] = useState('0.000');
+  const [wastePieces, setWastePieces] = useState(0);
   const [wasteClass, setWasteClass] = useState('NORMAL');
-  const [wasteReason, setWasteReason] = useState('Stained and torn apparel');
+  const [wasteReason, setWasteReason] = useState('');
 
   const [adjWeight, setAdjWeight] = useState('0.000');
   const [adjReason, setAdjReason] = useState('');
@@ -70,6 +83,7 @@ export default function SortingPage() {
 
   const handleStartSorting = async (lot) => {
     setSelectedLot(lot);
+    setNewWeight('0.000'); setNewPieces(0); setMidWeight('0.000'); setMidPieces(0); setClrWeight('0.000'); setClrPieces(0); setWasteWeight('0.000'); setWastePieces(0); setWasteClass('NORMAL'); setWasteReason(''); setAdjWeight('0.000'); setAdjReason('');
     setSubmitting(true);
     try {
       const orderCode = `SRT-${lot.lot_code}`;
@@ -149,9 +163,10 @@ export default function SortingPage() {
   const handlePostToInventory = async () => {
     setSubmitting(true);
     try {
+      await axiosClient.post(`/sorting-orders/${sortingOrder.id}/calculate_costing/`);
       await axiosClient.post(`/sorting-orders/${sortingOrder.id}/post_inventory/`);
       setIsPosted(true);
-      alert("Successfully posted sorted grades to Finished Inventory Ledger!");
+      alert(isRTL ? 'تم ترحيل البضاعة المفروزة للمخزون بنجاح ✅' : 'Sorted goods posted to inventory successfully ✅');
       setSelectedLot(null);
       setSortingOrder(null);
       loadInitialData();
@@ -185,7 +200,7 @@ export default function SortingPage() {
               <div key={lot.id} className="p-5 flex items-center justify-between hover:bg-slate-50/50 transition">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-sm">{t('common.lot')}: {lot.lot_code}</span>
+                    <span className="font-bold text-slate-900 text-sm">{lotLabel(lot)}<span className="block text-[10px] text-slate-400 font-mono font-normal">{lot.lot_code}</span></span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase tracking-wider">
                       {lot.status?.replace('_', ' ')}
                     </span>
@@ -226,7 +241,9 @@ export default function SortingPage() {
             <div className="bg-slate-900 text-white p-5 rounded-2xl flex items-center justify-between shadow-md">
               <div className="space-y-1">
                 <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">{t('sorting.activeWorkspace')}</span>
-                <h3 className="text-lg font-bold">{selectedLot.lot_code}</h3>
+                <button type="button" onClick={() => { setSelectedLot(null); setSortingOrder(null); }} className="mb-2 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white cursor-pointer">{isRTL ? '→ رجوع للبالات' : '← Back to bales'}</button>
+                <h3 className="text-lg font-bold">{lotLabel(selectedLot)}</h3>
+                <div className="text-xs text-slate-400 font-mono">{selectedLot.lot_code}</div>
                 <p className="text-xs text-slate-400">{selectedLot.supplier_name} | {selectedLot.warehouse_name}</p>
               </div>
 
@@ -463,36 +480,19 @@ export default function SortingPage() {
                 {isReconciled && <CheckCircle2 size={16} className="text-emerald-600" />}
               </button>
 
-              <button
-                onClick={handleCalculateCosting}
-                disabled={!isReconciled || costingRecord || submitting}
-                className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-left transition ${
-                  !isReconciled || costingRecord
-                    ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed font-medium'
-                    : 'border-emerald-600 bg-emerald-50 text-emerald-800 font-bold hover:bg-emerald-100/50 cursor-pointer'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${costingRecord ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 text-white'}`}>
-                    2
-                  </div>
-                  <span className="text-xs">{t('sorting.step2')}</span>
-                </div>
-                {costingRecord && <CheckCircle2 size={16} className="text-emerald-600" />}
-              </button>
 
               <button
                 onClick={handlePostToInventory}
-                disabled={!costingRecord || isPosted || submitting}
+                disabled={!isReconciled || isPosted || submitting}
                 className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-left transition ${
-                  !costingRecord || isPosted
+                  !isReconciled || isPosted
                     ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed font-medium'
                     : 'border-emerald-600 bg-emerald-50 text-emerald-800 font-bold hover:bg-emerald-100/50 cursor-pointer'
                 }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${isPosted ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 text-white'}`}>
-                    3
+                    2
                   </div>
                   <span className="text-xs">{t('sorting.step3')}</span>
                 </div>

@@ -90,10 +90,18 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
 class RawLotSerializer(serializers.ModelSerializer):
     supplier_name = serializers.ReadOnlyField(source='supplier.name')
     warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
+    line_info = serializers.SerializerMethodField()
     class Meta:
         model = RawLot
         fields = '__all__'
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+    def get_line_info(self, obj):
+        li = getattr(obj, 'purchase_line_item', None)
+        if not li or not li.purchase_kind:
+            return None
+        return {'kind': li.purchase_kind, 'grade': li.grade, 'bale_type': li.bale_type, 'segment': li.segment,
+                'stock_type': li.stock_type, 'brand': li.brand, 'item_name': li.item_name}
 
 class SortingOutputLineSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
