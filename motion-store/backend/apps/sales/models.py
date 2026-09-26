@@ -54,6 +54,9 @@ class SaleInvoice(TenantAwareModel):
     gross_profit = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'), verbose_name="Gross Profit")
     notes = models.TextField(blank=True, null=True)
 
+    coupon_code = models.CharField(max_length=40, blank=True, null=True)
+    applied_offers = models.JSONField(default=list, blank=True)
+
     class Meta:
         db_table = "sales_invoices"
         ordering = ["-invoice_date_time", "-created_at"]
@@ -94,6 +97,11 @@ class SaleLineItem(TenantAwareModel):
     unit_cost = models.DecimalField(max_digits=12, decimal_places=2, verbose_name="Unit Cost (COGS/KG)")
     total_cost = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="Line Total COGS")
     gross_profit = models.DecimalField(max_digits=14, decimal_places=2, verbose_name="Line Gross Profit")
+
+    display_name = models.CharField(max_length=200, blank=True, null=True)
+    piece_item = models.ForeignKey('pricing.PieceItem', on_delete=models.SET_NULL, null=True, blank=True, related_name='sale_lines')
+    bundle_label = models.CharField(max_length=50, blank=True, null=True)
+    offer_label = models.CharField(max_length=150, blank=True, null=True)
 
     class Meta:
         db_table = "sale_line_items"

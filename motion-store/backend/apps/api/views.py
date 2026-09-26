@@ -481,17 +481,23 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
             from apps.customers.models import Customer
             customer_obj = Customer.objects.filter(id=customer_id).first()
 
-        invoice = process_pos_sale(
-            shift_id=request.data['shift_id'],
-            cashier=request.user,
-            items_data=request.data['items'],
-            payments_data=request.data['payments'],
-            discount_amount=Decimal(str(request.data.get('discount_amount', '0.00'))),
-            delivery_fee=Decimal(str(request.data.get('delivery_fee', '0.00'))),
-            previous_balance=Decimal(str(request.data.get('previous_balance', '0.00'))),
-            customer=customer_obj,
-            notes=request.data.get('notes')
-        )
+        from django.core.exceptions import ValidationError as _DjVE
+        try:
+            invoice = process_pos_sale(
+                shift_id=request.data['shift_id'],
+                cashier=request.user,
+                items_data=request.data['items'],
+                payments_data=request.data['payments'],
+                discount_amount=Decimal(str(request.data.get('discount_amount', '0.00'))),
+                delivery_fee=Decimal(str(request.data.get('delivery_fee', '0.00'))),
+                previous_balance=Decimal(str(request.data.get('previous_balance', '0.00'))),
+                customer=customer_obj,
+                notes=request.data.get('notes'),
+                coupon_code=(request.data.get('coupon_code') or '').strip() or None,
+                applied_offers=request.data.get('applied_offers') or []
+            )
+        except _DjVE as e:
+            return Response({'detail': '; '.join(e.messages)}, status=400)
         return Response(SaleInvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
 
 class JournalEntryViewSet(BaseTenantViewSet):

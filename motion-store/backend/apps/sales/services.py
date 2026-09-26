@@ -10,6 +10,30 @@ from apps.treasury.models import TreasuryTransactionType
 from apps.treasury.services import record_treasury_transaction
 from apps.accounting.services import create_balanced_journal_entry
 
+def _find_stock_for_piece(piece, terminal, qty):
+    """ Picks the shop stock matching the piece (source kind, category, grade, brand) with the most pieces """
+    qs = StockItem.objects.select_related('source_lot__purchase_line_item', 'product').filter(
+        tenant=piece.tenant, total_quantity_pieces__gte=qty, total_weight_kg__gt=0)
+    if terminal.default_warehouse_id:
+        qs = qs.filter(warehouse_id=terminal.default_warehouse_id)
+    best = None
+    for si in qs:
+        li = getattr(si.source_lot, 'purchase_line_item', None) if si.source_lot_id else None
+        if not li or li.purchase_kind != piece.source_kind:
+            continue
+        if piece.segment and li.segment and li.segment != piece.segment:
+            continue
+        if piece.source_kind == 'BALE' and piece.purchase_grade and li.grade != piece.purchase_grade:
+            continue
+        if piece.source_kind == 'STOCK' and piece.brand and li.brand != piece.brand:
+            continue
+        if best is None or si.total_quantity_pieces > best.total_quantity_pieces:
+            best = si
+    if not best:
+        raise ValidationError(f"مفيش رصيد في المحل للقطعة {piece.code} - {piece.name} {piece.segment or ''}".strip())
+    return StockItem.objects.select_for_update().get(pk=best.pk)
+
+
 @transaction.atomic
 def process_pos_sale(
     shift_id,
@@ -20,7 +44,9 @@ def process_pos_sale(
     delivery_fee: Decimal = Decimal('0.00'),
     previous_balance: Decimal = Decimal('0.00'),
     customer = None,
-    notes: str = None
+    notes: str = None,
+    coupon_code: str = None,
+    applied_offers: list = None
 ) -> SaleInvoice:
     """
     Central POS Sale Engine:
@@ -45,10 +71,27 @@ def process_pos_sale(
     line_objects = []
 
     for item_data in items_data:
-        stock_item = StockItem.objects.select_for_update().get(pk=item_data['stock_item_id'])
-        weight_kg = Decimal(str(item_data['weight_kg']))
-        qty_pieces = int(item_data.get('quantity_pieces', 0))
+        piece = None
+        price_mode = item_data.get('price_mode') or 'KG'
+        qty_pieces = int(item_data.get('quantity_pieces', 0) or 0)
         unit_price = Decimal(str(item_data['unit_price']))
+        if item_data.get('piece_item_id'):
+            from apps.pricing.models import PieceItem
+            piece = PieceItem.objects.get(pk=item_data['piece_item_id'], tenant=tenant)
+            if qty_pieces < 1:
+                qty_pieces = 1
+            stock_item = _find_stock_for_piece(piece, terminal, qty_pieces)
+            given_w = Decimal(str(item_data.get('weight_kg') or '0'))
+            if given_w > 0:
+                weight_kg = given_w
+            else:
+                per = (stock_item.total_weight_kg / stock_item.total_quantity_pieces) if stock_item.total_quantity_pieces else Decimal('0')
+                weight_kg = (per * qty_pieces).quantize(Decimal('0.001'))
+        else:
+            stock_item = StockItem.objects.select_for_update().get(pk=item_data['stock_item_id'])
+            weight_kg = Decimal(str(item_data['weight_kg']))
+        if terminal.default_warehouse_id and stock_item.warehouse_id != terminal.default_warehouse_id:
+            raise ValidationError(f"الصنف {stock_item.product.name} مش موجود في رصيد المحل ده")
 
         # Stock availability check
         if stock_item.total_weight_kg < weight_kg:
@@ -56,7 +99,7 @@ def process_pos_sale(
                 f"Insufficient stock for {stock_item.product.name} [{stock_item.get_grade_display()}]. Available: {stock_item.total_weight_kg} KG, Requested: {weight_kg} KG."
             )
 
-        line_subtotal = (weight_kg * unit_price).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        line_subtotal = ((Decimal(qty_pieces) * unit_price) if price_mode == 'PIECE' else (weight_kg * unit_price)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         line_discount = Decimal(str(item_data.get('discount_amount', '0.00')))
         line_total_revenue = line_subtotal - line_discount
         
@@ -92,7 +135,11 @@ def process_pos_sale(
             'total_price': line_total_revenue,
             'unit_cost': line_unit_cost,
             'total_cost': line_total_cost,
-            'gross_profit': line_gross_profit
+            'gross_profit': line_gross_profit,
+            'display_name': item_data.get('display_name') or None,
+            'piece_item': piece,
+            'bundle_label': item_data.get('bundle_label') or None,
+            'offer_label': item_data.get('offer_label') or None
         })
 
     total_amount = subtotal - discount_amount + delivery_fee
@@ -116,7 +163,9 @@ def process_pos_sale(
         total_amount=total_amount,
         total_cogs=total_cogs,
         gross_profit=gross_profit,
-        notes=notes
+        notes=notes,
+        coupon_code=coupon_code or None,
+        applied_offers=applied_offers or []
     )
 
     # 4. Save Line Items
@@ -184,5 +233,20 @@ def process_pos_sale(
         notes=f"POS Sale Invoice #{invoice_number}",
         lines_data=jv_lines
     )
+
+    # 8. Offers usage counters & coupon redemption
+    if applied_offers:
+        from apps.discounts.models import Offer
+        for ao in applied_offers:
+            o = Offer.objects.filter(tenant=tenant, pk=ao.get('id')).first()
+            if o:
+                o.usage_count += 1
+                o.total_sales += total_amount
+                o.total_discount += Decimal(str(ao.get('discount') or '0'))
+                o.save(update_fields=['usage_count', 'total_sales', 'total_discount'])
+    if coupon_code:
+        from apps.api.views import redeem_coupon
+        coupon_disc = sum((Decimal(str(a.get('discount') or '0')) for a in (applied_offers or []) if a.get('coupon')), Decimal('0.00'))
+        redeem_coupon(tenant, coupon_code, invoice_number, cashier, coupon_disc)
 
     return invoice
