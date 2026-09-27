@@ -1,60 +1,112 @@
 @echo off
 chcp 65001 > nul
-setlocal enabledelayedexpansion
-title Motion Store - Smart Portable Launcher
+setlocal EnableExtensions
 
-echo ============================================================
-echo   MOTION STORE - SMART MULTI-PC LAUNCHER
-echo ============================================================
+if /I "%~1"=="backend" goto run_backend
+if /I "%~1"=="frontend" goto run_frontend
+
+set "ROOT=%~dp0"
+set "BACKEND=%ROOT%backend"
+set "FRONTEND=%ROOT%frontend"
+set "VENV=%BACKEND%\.venv"
+
+echo ==========================================
+echo     MOTION STORE - MODERN POS VERSION
+echo ==========================================
 echo.
 
-:: 1. تحديد اسم الجهاز الحالي
-set "PC_NAME=%COMPUTERNAME%"
-set "VENV_NAME=venv_%PC_NAME%"
+if not exist "%BACKEND%\manage.py" goto missing_backend
+if not exist "%FRONTEND%\package.json" goto missing_frontend
 
-set "SCRIPT_DIR=%~dp0"
-cd /d "%SCRIPT_DIR%backend"
+where python >nul 2>&1
+if errorlevel 1 goto missing_python
+where npm >nul 2>&1
+if errorlevel 1 goto missing_node
 
-:: 2. فحص هل الجهاز ده ليه بيئة خاصة على الفلاشة؟
-if exist "%VENV_NAME%\Scripts\python.exe" (
-    echo [+] Found existing environment for this PC: %VENV_NAME%
-    echo [+] Waking up the engine...
-) else (
-    echo [!] New PC detected: %PC_NAME%
-    echo [+] Preparing a one-time setup for this machine...
-    
-    :: إنشاء بيئة جديدة خاصة بهذا الجهاز
-    python -m venv %VENV_NAME%
-    
-    echo [+] Installing necessary packages (one-time process)...
-    call %VENV_NAME%\Scripts\activate.bat
-    python -m pip install --upgrade pip --quiet
-    pip install Django djangorestframework djangorestframework-simplejwt django-cors-headers python-dotenv django-filter drf-spectacular --quiet
-)
+if exist "%VENV%\Scripts\python.exe" goto venv_ready
 
-:: 3. تفعيل البيئة وتجهيز البيانات
-call %VENV_NAME%\Scripts\activate.bat
+echo Creating Python environment...
+python -m venv "%VENV%"
+if errorlevel 1 goto venv_error
+
+:venv_ready
+echo Installing backend requirements...
+"%VENV%\Scripts\python.exe" -m pip install -r "%BACKEND%\requirements.txt" --quiet
+if errorlevel 1 goto backend_install_error
+
+echo Preparing SQLite database...
+cd /d "%BACKEND%"
 set USE_SQLITE=True
-echo [+] Checking Database & Demo Data...
-python manage.py migrate --noinput > nul
-python manage.py shell -c "from apps.tenants.models import Tenant; from apps.tenants.context import set_current_tenant; from apps.users.models import User; t, _ = Tenant.objects.get_or_create(slug='motion-main', defaults={'name': 'Motion Store Main'}); set_current_tenant(t); u, _ = User.objects.get_or_create(username='admin'); u.set_password('123456'); u.is_staff=True; u.is_superuser=True; u.role='ADMIN'; u.tenant=t; u.save(); print('--- User admin is ready ---')"
+"%VENV%\Scripts\python.exe" manage.py migrate --noinput
+if errorlevel 1 goto database_error
 
-echo.
-echo ============================================================
-echo   🚀 SYSTEM READY! STARTING SERVERS...
-echo ============================================================
+if exist "%FRONTEND%\node_modules" goto frontend_ready
 
-:: 4. تشغيل الباك إند في نافذة منفصلة
-start "Backend Server" cmd /k "cd /d %SCRIPT_DIR%backend && call %VENV_NAME%\Scripts\activate.bat && set USE_SQLITE=True && python manage.py runserver 8000"
+echo Installing frontend packages...
+cd /d "%FRONTEND%"
+call npm ci
+if errorlevel 1 goto frontend_install_error
 
-:: 5. تشغيل الفرونت إند في نافذة منفصلة
-timeout /t 2 > nul
-start "Frontend UI" cmd /k "cd /d %SCRIPT_DIR%frontend && npm run dev"
+:frontend_ready
+echo Starting modern backend...
+start "Motion Store Modern Backend" "%ComSpec%" /k ""%~f0" backend"
+timeout /t 3 /nobreak > nul
 
-:: 6. فتح المتصفح
-timeout /t 5 > nul
-explorer "http://localhost:3001"
+echo Starting modern frontend...
+start "Motion Store Modern Frontend" "%ComSpec%" /k ""%~f0" frontend"
+timeout /t 5 /nobreak > nul
+start "" "http://localhost:3001"
+exit /b 0
 
-echo.
-echo [DONE] Motion Store is now running on this %PC_NAME%.
-echo You can minimize this window.
+:run_backend
+set "ROOT=%~dp0"
+set "BACKEND=%ROOT%backend"
+set "VENV=%BACKEND%\.venv"
+cd /d "%BACKEND%"
+set USE_SQLITE=True
+echo Backend running on http://localhost:8000
+"%VENV%\Scripts\python.exe" manage.py runserver 0.0.0.0:8000
+pause
+exit /b 0
+
+:run_frontend
+set "ROOT=%~dp0"
+set "FRONTEND=%ROOT%frontend"
+cd /d "%FRONTEND%"
+echo Frontend running on http://localhost:3001
+call npm run dev -- --host 0.0.0.0 --port 3001
+pause
+exit /b 0
+
+:missing_backend
+echo ERROR: backend\manage.py was not found.
+pause
+exit /b 1
+:missing_frontend
+echo ERROR: frontend\package.json was not found.
+pause
+exit /b 1
+:missing_python
+echo ERROR: Python is not installed.
+pause
+exit /b 1
+:missing_node
+echo ERROR: Node.js/npm is not installed.
+pause
+exit /b 1
+:venv_error
+echo ERROR: Could not create Python environment.
+pause
+exit /b 1
+:backend_install_error
+echo ERROR: Could not install backend packages.
+pause
+exit /b 1
+:database_error
+echo ERROR: Database migration failed.
+pause
+exit /b 1
+:frontend_install_error
+echo ERROR: Could not install frontend packages.
+pause
+exit /b 1
