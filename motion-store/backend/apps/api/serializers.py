@@ -183,10 +183,13 @@ class PriceListItemSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class POSTerminalSerializer(serializers.ModelSerializer):
+    branch_name = serializers.ReadOnlyField(source='branch.name')
+    warehouse_name = serializers.ReadOnlyField(source='default_warehouse.name')
+    cash_drawer_name = serializers.ReadOnlyField(source='cash_drawer.name')
     class Meta:
         model = POSTerminal
-        fields = '__all__'
-        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+        fields = ['id', 'tenant', 'created_at', 'updated_at', 'name', 'code', 'branch', 'branch_name', 'default_warehouse', 'warehouse_name', 'cash_drawer', 'cash_drawer_name', 'is_active']
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'branch_name', 'warehouse_name', 'cash_drawer_name']
 
 class ShiftSerializer(serializers.ModelSerializer):
     cashier_username = serializers.ReadOnlyField(source='cashier.username')
@@ -314,10 +317,11 @@ class UserManagementSerializer(serializers.ModelSerializer):
         return inst
 
 class TreasurySerializer(serializers.ModelSerializer):
+    branch_name = serializers.ReadOnlyField(source='branch.name')
     class Meta:
         model = Treasury
-        fields = '__all__'
-        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+        fields = ['id', 'tenant', 'created_at', 'updated_at', 'name', 'treasury_type', 'branch', 'branch_name', 'current_balance', 'is_active']
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'branch_name', 'current_balance']
 
 
 class CustomerSerializer(serializers.ModelSerializer):
@@ -326,9 +330,11 @@ class CustomerSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class PaymentMethodSerializer(serializers.ModelSerializer):
+    treasury_name = serializers.ReadOnlyField(source='treasury.name')
     class Meta:
         model = PaymentMethod
-        fields = '__all__'
+        fields = ['id', 'tenant', 'created_at', 'updated_at', 'name', 'method_type', 'treasury', 'treasury_name', 'is_active']
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'treasury_name']
 
 from apps.purchasing.models import PurchaseOption
 
