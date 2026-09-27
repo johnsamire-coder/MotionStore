@@ -53,6 +53,9 @@ class ScreenPermission(BasePermission):
         if not u or not u.is_authenticated or u.is_superuser or getattr(u, 'role', None) == 'ADMIN':
             return True
         path = request.path
+        for _rx, _methods, _act in ACTION_RULES:
+            if re.match(_rx, path) and request.method in _methods and not can(u, _act):
+                return False
         for rx, methods, screens in RULES:
             if re.match(rx, path) and (methods is None or request.method in methods):
                 if '__ADMIN__' in screens:
@@ -60,3 +63,36 @@ class ScreenPermission(BasePermission):
                 mine = allowed_screens(u)
                 return '*' in mine or any(sc in mine for sc in screens)
         return True
+
+ACTIONS = ['view_cost_profit', 'view_others_invoices', 'sell_credit', 'make_returns', 'cancel_deferred', 'approve',
+           'cancel_expense', 'edit_prices', 'treasury_moves', 'settle_custody', 'export', 'view_stock_prices']
+DEFAULT_ACTIONS = {
+    'MANAGER': list(ACTIONS),
+    'ACCOUNTANT': ['view_cost_profit', 'view_others_invoices', 'treasury_moves', 'settle_custody', 'export', 'view_stock_prices'],
+    'CASHIER': ['make_returns', 'view_stock_prices'],
+    'WAREHOUSE_KEEPER': ['view_stock_prices'],
+    'SORTER': [],
+}
+ACTION_RULES = [
+    (r'^/api/v1/returns/?$', {'POST'}, 'make_returns'),
+    (r'^/api/v1/deferred-sales/[^/]+/cancel', {'POST'}, 'cancel_deferred'),
+    (r'^/api/v1/expenses/[^/]+/cancel', {'POST'}, 'cancel_expense'),
+    (r'^/api/v1/(weight-prices|piece-items|offers)/', {'POST', 'PUT', 'PATCH', 'DELETE'}, 'edit_prices'),
+    (r'^/api/v1/treasuries/(transfer|adjust)', {'POST'}, 'treasury_moves'),
+    (r'^/api/v1/treasuries/settle_custody', {'POST'}, 'settle_custody'),
+]
+
+
+def allowed_actions(user):
+    if user.is_superuser or getattr(user, 'role', None) == 'ADMIN':
+        return ['*']
+    from apps.users.models import RolePermission
+    rp = RolePermission.objects.filter(tenant_id=getattr(user, 'tenant_id', None), role=user.role).first()
+    if rp is not None and rp.allowed_actions is not None:
+        return rp.allowed_actions
+    return DEFAULT_ACTIONS.get(user.role, [])
+
+
+def can(user, action):
+    a = allowed_actions(user)
+    return '*' in a or action in a

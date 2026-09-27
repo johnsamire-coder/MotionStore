@@ -1,9 +1,14 @@
+import * as __R from 'react';
+import __ax from '../api/axiosClient';
 import React, { useState } from 'react';
 import { FileText, FileSpreadsheet } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { exportToPDF, exportToExcel } from '../utils/reportExport';
 
 export default function ExportButtons({ getReport, disabled }) {
+  // EXPORT_GUARD
+  const [__canExp, __setCanExp] = __R.useState(true);
+  __R.useEffect(() => { const ok = (a) => a.includes('*') || a.includes('export'); if (window.__msActions) { __setCanExp(ok(window.__msActions)); return; } __ax.get('/role-permissions/mine/').then((r) => { window.__msActions = r.data.is_admin ? ['*'] : (r.data.actions || []); __setCanExp(ok(window.__msActions)); }).catch(() => {}); }, []);
   const { isRTL } = useLanguage();
   const [busy, setBusy] = useState(null);
 
@@ -12,7 +17,8 @@ export default function ExportButtons({ getReport, disabled }) {
     const report = getReport ? getReport() : null;
     if (!report || !report.rows || report.rows.length === 0) {
       alert(isRTL ? 'مفيش بيانات للتصدير' : 'No data to export');
-      return;
+      if (!__canExp) return null;
+  return;
     }
     setBusy(kind);
     try {

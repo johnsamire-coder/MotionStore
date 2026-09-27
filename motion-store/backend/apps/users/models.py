@@ -39,6 +39,7 @@ class User(AbstractUser):
 
 
 class RolePermission(models.Model):
+    allowed_actions = models.JSONField(null=True, blank=True, default=None)
     tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE, null=True, blank=True, related_name='role_permissions')
     role = models.CharField(max_length=50, choices=User.ROLE_CHOICES, db_index=True)
     allowed_screens = models.JSONField(

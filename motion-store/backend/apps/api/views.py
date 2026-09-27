@@ -901,6 +901,8 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
 
         if getattr(request.user, 'pos_terminal_id', None) and request.data.get('shift_id') and not __import__('apps.shifts.models', fromlist=['Shift']).Shift.objects.filter(pk=request.data.get('shift_id'), terminal_id=request.user.pos_terminal_id).exists():
             return Response({'detail': 'إنت مربوط بنقطة بيع تانية'}, status=403)
+        if any(__import__('apps.payments.models', fromlist=['PaymentMethod']).PaymentMethod.objects.filter(pk=p.get('payment_method_id'), method_type='CREDIT').exists() for p in (request.data.get('payments') or [])) and not __import__('apps.api.screen_permissions', fromlist=['can']).can(request.user, 'sell_credit'):
+            return Response({'detail': 'البيع الآجل مش مسموح ليك - كلّم المدير'}, status=403)
         _vmsg = _verify_checkout(self.get_tenant(), request.data, __import__('apps.shifts.models', fromlist=['Shift']).Shift.objects.filter(pk=request.data.get('shift_id')).select_related('terminal').first().terminal if request.data.get('shift_id') else None)
         if _vmsg:
             return Response({'detail': _vmsg}, status=400)
@@ -1170,6 +1172,17 @@ class RolePermissionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(tenant_id=getattr(self.request.user, 'tenant_id', None))
+    @action(detail=False, methods=['get'])
+    def mine(self, request):
+        from apps.api.screen_permissions import allowed_screens, allowed_actions, ACTIONS
+        u = request.user
+        adm = u.is_superuser or getattr(u, 'role', None) == 'ADMIN'
+        return Response({'is_admin': adm, 'screens': ['*'] if adm else allowed_screens(u), 'actions': ['*'] if adm else allowed_actions(u), 'all_actions': ACTIONS})
+
+    @action(detail=False, methods=['get'])
+    def defaults(self, request):
+        from apps.api.screen_permissions import DEFAULTS, DEFAULT_ACTIONS, ACTIONS
+        return Response({'screens': DEFAULTS, 'actions': DEFAULT_ACTIONS, 'all_actions': ACTIONS})
     
     def get_permissions(self):
         # Only ADMIN should edit permissions, but anyone can read to know their own limits
@@ -2057,8 +2070,8 @@ def _verify_manager(tenant, pwd):
     from django.db.models import Q
     if not pwd:
         return None
-    for mgr in get_user_model().objects.filter(is_active=True).filter(Q(tenant=tenant) | Q(is_superuser=True)).filter(Q(role__in=['ADMIN', 'MANAGER']) | Q(is_superuser=True)):
-        if mgr.check_password(pwd):
+    for mgr in get_user_model().objects.filter(is_active=True).filter(Q(tenant=tenant) | Q(is_superuser=True)):
+        if mgr.check_password(pwd) and __import__('apps.api.screen_permissions', fromlist=['can']).can(mgr, 'approve'):
             return mgr
     return None
 
@@ -2217,6 +2230,15 @@ class ReportsV2ViewSet(_rvs.ViewSet):
         from apps.api import reports_v2 as R
         t = getattr(request.user, 'tenant', None)
         out = R.run_report(t, request.query_params.get('name'), request.query_params)
+        from apps.api.screen_permissions import can as _can
+        if out is not None and not _can(request.user, 'view_cost_profit'):
+            if request.query_params.get('name') in ('income_statement', 'profit_by_item', 'profit_by_grade', 'profit_by_cashier', 'profit_by_shop', 'bale_profit', 'monthly_compare'):
+                return Response({'detail': 'مش مسموحلك تشوف التكلفة والربح'}, status=403)
+            _hide = {'cost', 'profit', 'margin', 'cogs', 'gross', 'leftv'}
+            out['columns'] = [c for c in out.get('columns', []) if c.get('key') not in _hide]
+            out['rows'] = [{k: v for k, v in r.items() if k not in _hide} for r in out.get('rows', [])]
+            out['totals'] = {k: v for k, v in (out.get('totals') or {}).items() if k not in _hide}
+            out['cards'] = [c for c in out.get('cards', []) if 'تكلفة' not in c.get('label', '') and 'ربح' not in c.get('label', '')]
         if out is None:
             return Response({'detail': 'التقرير ده مش موجود'}, status=404)
         return Response(out)
