@@ -27,6 +27,7 @@ export default function AppLayout() {
   const { user, tenant, logout } = useAuth();
   const { t, lang, isRTL, toggleLanguage } = useLanguage();
   const navigate = useNavigate();
+  const location = useLocation();
   const [allowedScreens, setAllowedScreens] = useState(['*']);
 
   useEffect(() => {
@@ -61,9 +62,16 @@ export default function AppLayout() {
     return allowedScreens.includes(path);
   };
 
-  // Global Alt+Number Navigation Listener
+  // Global navigation shortcuts. Alt+number remains available without showing it in the UI.
   useEffect(() => {
     const handleKeyDown = (e) => {
+      if (e.key === 'F2' && !e.altKey && !e.ctrlKey && !e.metaKey && isAllowed('/pos')) {
+        if (location.pathname !== '/pos') {
+          e.preventDefault();
+          navigate('/pos');
+        }
+        return;
+      }
       if (e.altKey) {
         if (e.key === '1' && isAllowed('/purchasing')) { e.preventDefault(); navigate('/purchasing'); }
         else if (e.key === '2' && isAllowed('/pos')) { e.preventDefault(); navigate('/pos'); }
@@ -77,29 +85,29 @@ export default function AppLayout() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, allowedScreens, user]);
+  }, [navigate, location.pathname, allowedScreens, user]);
 
   const allRibbonItems = [
-    { name: 'مشتريات Alt+1', en: 'Purchases Alt+1', to: '/purchasing', icon: Truck },
-    { name: 'مبيعات Alt+2', en: 'Sales Alt+2', to: '/pos', icon: ShoppingCart },
-    { name: 'مصروفات Alt+3', en: 'Expenses Alt+3', to: '/expenses', icon: DollarSign },
-    { name: 'تسعير Alt+4', en: 'Pricing Alt+4', to: '/coding', icon: Tag },
-    { name: 'الخزينة Alt+7', en: 'Treasury Alt+7', to: '/treasury', icon: Vault },
-    { name: 'المخزون Alt+8', en: 'Inventory Alt+8', to: '/inventory', icon: Package },
-    { name: 'الورديات Alt+9', en: 'Shifts Alt+9', to: '/shifts', icon: Clock },
-    { name: 'مرتجعات Alt+0', en: 'Returns Alt+0', to: '/returns', icon: RotateCcw },
+    { name: 'مشتريات', en: 'Purchases', to: '/purchasing', icon: Truck },
+    { name: 'مبيعات', en: 'Sales', to: '/pos', icon: ShoppingCart },
+    { name: 'مصروفات', en: 'Expenses', to: '/expenses', icon: DollarSign },
+    { name: 'تسعير', en: 'Pricing', to: '/coding', icon: Tag },
+    { name: 'الخزينة', en: 'Treasury', to: '/treasury', icon: Vault },
+    { name: 'المخزون', en: 'Inventory', to: '/inventory', icon: Package },
+    { name: 'الورديات', en: 'Shifts', to: '/shifts', icon: Clock },
+    { name: 'مرتجعات', en: 'Returns', to: '/returns', icon: RotateCcw },
     { name: 'التقارير', en: 'Reports', to: '/reports', icon: BarChart3 },
   ];
 
   const allNavigation = [
     { name: t('nav.dashboard'), to: '/', icon: BarChart3 },
-    { name: 'شاشة المبيعات (Alt+2)', en: 'Sales (Alt+2)', to: '/pos', icon: ShoppingCart },
+    { name: 'شاشة المبيعات', en: 'Sales', to: '/pos', icon: ShoppingCart },
     { name: 'فواتير المبيعات', en: 'Sales Invoices', to: '/invoices', icon: FileSpreadsheet },
     { name: 'العملاء', en: 'Customers', to: '/customers', icon: Users },
     { name: 'الموردين', en: 'Suppliers', to: '/suppliers', icon: Truck },
-    { name: 'شاشة المصروفات (Alt+3)', en: 'Expenses (Alt+3)', to: '/expenses', icon: DollarSign },
+    { name: 'شاشة المصروفات', en: 'Expenses', to: '/expenses', icon: DollarSign },
     { name: 'التسعير', en: 'Pricing', to: '/coding', icon: Tag },
-    { name: 'مرتجعات المبيعات (Alt+0)', en: 'Sales Returns (Alt+0)', to: '/returns', icon: RotateCcw },
+    { name: 'مرتجعات المبيعات', en: 'Sales Returns', to: '/returns', icon: RotateCcw },
     { name: t('nav.sorting'), to: '/sorting', icon: Layers },
     { name: t('nav.inventory'), to: '/inventory', icon: Package },
     { name: t('nav.purchasing'), to: '/purchasing', icon: Truck },
@@ -114,12 +122,11 @@ export default function AppLayout() {
   const ribbonItems = allRibbonItems.filter(item => isAllowed(item.to));
   const navigation = allNavigation.filter(item => isAllowed(item.to));
   // ROUTE_GUARD
-  const _guardLoc = useLocation();
   useEffect(() => {
     if (!user || !navigation.length) return;
-    const p = _guardLoc.pathname || '/';
+    const p = location.pathname || '/';
     if (p !== '/login' && !isAllowed(p)) navigate(navigation[0].to, { replace: true });
-  }, [_guardLoc.pathname, navigation.length]);
+  }, [location.pathname, navigation.length]);
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans" dir={isRTL ? 'rtl' : 'ltr'}>
