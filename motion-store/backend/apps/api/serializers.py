@@ -275,11 +275,43 @@ class UserManagementSerializer(serializers.ModelSerializer):
     tenant_name = serializers.ReadOnlyField(source='tenant.name')
     role_display = serializers.CharField(source='get_role_display', read_only=True)
     password = serializers.CharField(write_only=True, required=False)
+    pin = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    pos_terminal_name = serializers.ReadOnlyField(source='pos_terminal.name')
+    has_pin = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'role', 'role_display', 'tenant', 'tenant_name', 'assigned_branches', 'is_active', 'password', 'date_joined']
-        read_only_fields = ['id', 'tenant', 'date_joined']
+        fields = ['id', 'username', 'first_name', 'last_name', 'phone', 'email', 'role', 'role_display', 'tenant', 'tenant_name', 'assigned_branches', 'pos_terminal', 'pos_terminal_name',
+                  'is_active', 'password', 'pin', 'has_pin', 'last_login', 'date_joined']
+        read_only_fields = ['id', 'tenant', 'date_joined', 'last_login']
+
+    def get_has_pin(self, obj):
+        return bool(obj.pin_hash)
+
+    def validate_pin(self, value):
+        v = str(value or '').strip()
+        if v and v != 'CLEAR' and not (v.isdigit() and 4 <= len(v) <= 6):
+            raise serializers.ValidationError('الرقم السري لازم يبقى من 4 لـ 6 أرقام')
+        return v
+
+    def _apply_pin(self, inst, pin):
+        from django.contrib.auth.hashers import make_password
+        if not pin:
+            return
+        inst.pin_hash = '' if pin == 'CLEAR' else make_password(pin)
+        inst.save(update_fields=['pin_hash'])
+
+    def create(self, validated_data):
+        pin = validated_data.pop('pin', '')
+        inst = super().create(validated_data)
+        self._apply_pin(inst, pin)
+        return inst
+
+    def update(self, instance, validated_data):
+        pin = validated_data.pop('pin', '')
+        inst = super().update(instance, validated_data)
+        self._apply_pin(inst, pin)
+        return inst
 
 class TreasurySerializer(serializers.ModelSerializer):
     class Meta:

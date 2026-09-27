@@ -13,13 +13,37 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['tenant_slug'] = user.tenant.slug if user.tenant else None
         return token
 
+    def _pin_login(self, attrs, err):
+        from django.contrib.auth.hashers import check_password
+        from django.contrib.auth.models import update_last_login
+        from django.core.cache import cache
+        uname = attrs.get('username') or ''
+        pin = str(attrs.get('password') or '')
+        key = f'pinfail:{uname}'
+        if not (pin.isdigit() and 4 <= len(pin) <= 6) or cache.get(key, 0) >= 5:
+            raise err
+        u = User.objects.filter(username=uname, is_active=True).first()
+        if not u or not u.pin_hash or not check_password(pin, u.pin_hash):
+            cache.set(key, cache.get(key, 0) + 1, 300)
+            raise err
+        cache.delete(key)
+        self.user = u
+        refresh = self.get_token(u)
+        update_last_login(None, u)
+        return {'refresh': str(refresh), 'access': str(refresh.access_token)}
     def validate(self, attrs):
-        data = super().validate(attrs)
+        try:
+            data = super().validate(attrs)
+        except Exception as _login_err:
+            data = self._pin_login(attrs, _login_err)
         data['user'] = {
             'id': str(self.user.id),
             'username': self.user.username,
             'email': self.user.email,
             'role': self.user.role,
+            'first_name': self.user.first_name,
+            'last_name': self.user.last_name,
+            'pos_terminal': str(self.user.pos_terminal_id) if self.user.pos_terminal_id else None,
             'tenant': {
                 'id': str(self.user.tenant.id) if self.user.tenant else None,
                 'name': self.user.tenant.name if self.user.tenant else None,

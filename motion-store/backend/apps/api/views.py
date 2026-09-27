@@ -613,6 +613,11 @@ class POSTerminalViewSet(BaseTenantViewSet):
     model = POSTerminal
     serializer_class = POSTerminalSerializer
 
+    def get_queryset(self):  # bound cashier sees only his terminal
+        qs = super().get_queryset()
+        tid = getattr(self.request.user, 'pos_terminal_id', None)
+        return qs.filter(pk=tid) if tid else qs
+
 class ShiftViewSet(BaseTenantViewSet):
     model = Shift
     serializer_class = ShiftSerializer
@@ -646,6 +651,8 @@ class ShiftViewSet(BaseTenantViewSet):
         term = POSTerminal.objects.filter(tenant=t, pk=request.data.get('terminal_id')).first()
         if not term or not term.cash_drawer_id:
             return Response({'detail': 'نقطة البيع دي مالهاش درج'}, status=400)
+        if getattr(request.user, 'pos_terminal_id', None) and term.pk != request.user.pos_terminal_id:
+            return Response({'detail': 'إنت مربوط بنقطة بيع تانية'}, status=403)
         if Shift.objects.filter(terminal=term, status='OPEN').exists():
             return Response({'detail': 'فيه وردية مفتوحة بالفعل على نقطة البيع دي'}, status=400)
         drawer = term.cash_drawer
@@ -892,6 +899,8 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
                 customer_obj.name = _cname
                 customer_obj.save(update_fields=['name'])
 
+        if getattr(request.user, 'pos_terminal_id', None) and request.data.get('shift_id') and not __import__('apps.shifts.models', fromlist=['Shift']).Shift.objects.filter(pk=request.data.get('shift_id'), terminal_id=request.user.pos_terminal_id).exists():
+            return Response({'detail': 'إنت مربوط بنقطة بيع تانية'}, status=403)
         _vmsg = _verify_checkout(self.get_tenant(), request.data, __import__('apps.shifts.models', fromlist=['Shift']).Shift.objects.filter(pk=request.data.get('shift_id')).select_related('terminal').first().terminal if request.data.get('shift_id') else None)
         if _vmsg:
             return Response({'detail': _vmsg}, status=400)
@@ -1173,13 +1182,27 @@ class UserViewSet(BaseTenantViewSet):
     serializer_class = UserManagementSerializer
 
     def perform_create(self, serializer):
+        self._user_guard(True)
         tenant = self.get_tenant()
         password = self.request.data.get('password', '123456')
         user_inst = serializer.save(tenant=tenant)
         user_inst.set_password(password)
         user_inst.save()
 
+    def _user_guard(self, creating):
+        from rest_framework.exceptions import ValidationError as _VE, PermissionDenied as _PD
+        me = self.request.user; d = self.request.data
+        is_admin = me.is_superuser or getattr(me, 'role', None) == 'ADMIN'
+        if d.get('role') == 'ADMIN' and not is_admin:
+            raise _PD('مدير النظام بس يقدر يعمل حد مدير نظام')
+        if not creating:
+            inst = self.get_object()
+            if inst.pk == me.pk and (str(d.get('is_active', 'true')).lower() in ('false', '0') or ('role' in d and d.get('role') != inst.role)):
+                raise _VE({'detail': 'مينفعش توقّف نفسك أو تغيّر دورك بنفسك'})
+            if (inst.is_superuser or inst.role == 'ADMIN') and not is_admin:
+                raise _PD('مينفعش تعدّل مدير النظام')
     def perform_update(self, serializer):
+        self._user_guard(False)
         user_inst = serializer.save()
         password = self.request.data.get('password')
         if password and str(password).strip():

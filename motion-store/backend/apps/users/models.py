@@ -3,6 +3,9 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 class User(AbstractUser):
+    phone = models.CharField(max_length=30, blank=True, default='')
+    pos_terminal = models.ForeignKey('pos.POSTerminal', on_delete=models.SET_NULL, null=True, blank=True, related_name='bound_users')
+    pin_hash = models.CharField(max_length=200, blank=True, default='')
     ROLE_CHOICES = [
         ('ADMIN', 'Admin'),
         ('MANAGER', 'Manager'),
