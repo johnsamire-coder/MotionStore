@@ -3,7 +3,7 @@ from apps.users.models import RolePermission
 from apps.users.serializers import RolePermissionSerializer
 from apps.discounts.models import DiscountRule
 from apps.returns.models import SalesReturn
-from apps.treasury.models import TreasuryTransaction
+from apps.treasury.models import Treasury, TreasuryTransaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -296,6 +296,42 @@ class CustomerViewSet(BaseTenantViewSet):
 class PaymentMethodViewSet(BaseTenantViewSet):
     model = PaymentMethod
     serializer_class = PaymentMethodSerializer
+
+    def _admin_only(self):
+        u = self.request.user
+        return u.is_superuser or getattr(u, 'role', None) == 'ADMIN'
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if not self._admin_only():
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def _validate_treasury(self):
+        treasury_id = self.request.data.get('treasury')
+        if treasury_id and not Treasury.objects.filter(tenant=self.get_tenant(), pk=treasury_id).exists():
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'treasury': 'الخزنة لازم تكون من نفس الشركة'})
+
+    def create(self, request, *args, **kwargs):
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يعدّل طرق الدفع'}, status=403)
+        self._validate_treasury()
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يعدّل طرق الدفع'}, status=403)
+        self._validate_treasury()
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يعدّل طرق الدفع'}, status=403)
+        obj = self.get_object()
+        obj.is_active = False
+        obj.save(update_fields=['is_active'])
+        return Response(status=204)
 
 class PurchaseInvoiceViewSet(BaseTenantViewSet):
     model = PurchaseInvoice
@@ -613,10 +649,66 @@ class POSTerminalViewSet(BaseTenantViewSet):
     model = POSTerminal
     serializer_class = POSTerminalSerializer
 
+    def _admin_only(self):
+        u = self.request.user
+        return u.is_superuser or getattr(u, 'role', None) == 'ADMIN'
+
     def get_queryset(self):  # bound cashier sees only his terminal
         qs = super().get_queryset()
+        if not self._admin_only():
+            qs = qs.filter(is_active=True)
         tid = getattr(self.request.user, 'pos_terminal_id', None)
         return qs.filter(pk=tid) if tid else qs
+
+    def create(self, request, *args, **kwargs):
+        from django.db import transaction as dbt
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يضيف نقطة بيع'}, status=403)
+        tenant = self.get_tenant()
+        data = request.data.copy()
+        name = (data.get('name') or '').strip()
+        branch = Branch.objects.filter(tenant=tenant, pk=data.get('branch')).first()
+        warehouse = Warehouse.objects.filter(tenant=tenant, pk=data.get('default_warehouse')).first()
+        if not name or not branch or not warehouse:
+            return Response({'detail': 'اكتب اسم نقطة البيع واختار الفرع والمخزن'}, status=400)
+        if warehouse.branch_id != branch.id:
+            return Response({'detail': 'المخزن لازم يكون تابع لنفس الفرع'}, status=400)
+        if not data.get('code'):
+            n = POSTerminal.objects.filter(tenant=tenant).count() + 1
+            data['code'] = f'POS-{n:02d}'
+        with dbt.atomic():
+            drawer = None
+            if data.get('cash_drawer'):
+                drawer = Treasury.objects.filter(tenant=tenant, pk=data.get('cash_drawer')).first()
+                if not drawer or drawer.treasury_type != 'POS_DRAWER' or drawer.branch_id != branch.id:
+                    return Response({'detail': 'اختار درج كاشير صحيح تابع لنفس الفرع'}, status=400)
+            else:
+                drawer = Treasury.objects.create(tenant=tenant, branch=branch, name=f'درج كاشير - {name}', treasury_type='POS_DRAWER', current_balance=Decimal('0.00'), is_active=True)
+            data['cash_drawer'] = str(drawer.pk)
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            self.perform_create(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يعدّل نقطة البيع'}, status=403)
+        obj = self.get_object()
+        branch_id = request.data.get('branch', obj.branch_id)
+        warehouse_id = request.data.get('default_warehouse', obj.default_warehouse_id)
+        branch = Branch.objects.filter(tenant=obj.tenant, pk=branch_id).first()
+        warehouse = Warehouse.objects.filter(tenant=obj.tenant, pk=warehouse_id).first()
+        if not branch or not warehouse or warehouse.branch_id != branch.id:
+            return Response({'detail': 'الفرع والمخزن لازم يكونوا صحيحين وتابعين لبعض'}, status=400)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يوقف نقطة البيع'}, status=403)
+        obj = self.get_object()
+        obj.is_active = False
+        obj.save(update_fields=['is_active'])
+        return Response(status=204)
 
 class ShiftViewSet(BaseTenantViewSet):
     model = Shift
@@ -1256,6 +1348,39 @@ class TenantViewSet(viewsets.ModelViewSet):
 class TreasuryViewSet(BaseTenantViewSet):
     model = Treasury
     serializer_class = TreasurySerializer
+
+    def _admin_only(self):
+        u = self.request.user
+        return u.is_superuser or getattr(u, 'role', None) == 'ADMIN'
+
+    def get_queryset(self):  # drawers-only for roles without treasury screen
+        qs = super().get_queryset()
+        u = self.request.user
+        if u.is_authenticated and not self._admin_only():
+            from apps.api.screen_permissions import allowed_screens
+            mine = allowed_screens(u)
+            if not ('*' in mine or any(sc in mine for sc in ('/treasury', '/expenses', '/settings', '/'))):
+                qs = qs.filter(treasury_type='POS_DRAWER')
+            qs = qs.filter(is_active=True)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يضيف خزنة'}, status=403)
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يعدّل الخزن'}, status=403)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self._admin_only():
+            return Response({'detail': 'مدير النظام بس يقدر يوقف الخزنة'}, status=403)
+        obj = self.get_object()
+        obj.is_active = False
+        obj.save(update_fields=['is_active'])
+        return Response(status=204)
 
     def get_queryset(self):  # drawers-only for roles without treasury screen
         qs = super().get_queryset()
