@@ -1,3 +1,4 @@
+import ReceiptSettings from '../components/ReceiptSettings';
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
@@ -333,7 +334,7 @@ export default function SettingsPage() {
       )}
 
       {/* TAB 1: COMPANY PROFILE & LOGO */}
-      {activeTab === 'COMPANY' && (
+      {activeTab === 'COMPANY' && <ReceiptSettings />}{activeTab === 'COMPANY' && (
         <form onSubmit={handleSaveCompany} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 max-w-2xl space-y-6">
           <h2 className="text-sm font-black text-slate-800 border-b pb-2 flex items-center gap-2">
             <Building2 className="text-emerald-600" size={18} />

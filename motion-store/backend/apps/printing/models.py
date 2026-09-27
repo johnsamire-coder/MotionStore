@@ -13,6 +13,9 @@ class PrinterWidth(models.TextChoices):
 
 
 class PrintTemplate(TenantAwareModel):
+    show_address = models.BooleanField(default=True)
+    show_phone = models.BooleanField(default=True)
+    show_tax = models.BooleanField(default=False)
     name = models.CharField(max_length=255, verbose_name="Template Name")
     template_type = models.CharField(max_length=30, choices=PrintTemplateType.choices, default=PrintTemplateType.POS_RECEIPT)
     width = models.CharField(max_length=10, choices=PrinterWidth.choices, default=PrinterWidth.WIDTH_80MM)

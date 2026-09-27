@@ -4,13 +4,31 @@ import axiosClient from '../api/axiosClient';
 
 let companyCache = null;
 
+// RECEIPT_V2
+export function clearCompanyCache() { companyCache = null; }
+const escR = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+export function buildReceiptParts(d) {
+  const line = (x) => `<div style="text-align:center;font-size:11px">${escR(x)}</div>`;
+  let head = '';
+  if (d.header_text) head += `<div style="text-align:center;font-size:12px;font-weight:700">${escR(d.header_text)}</div>`;
+  if (d.show_address && d.address) head += line(d.address);
+  if (d.show_phone && d.phone) head += line(`ت: ${d.phone}`);
+  if (d.show_tax && d.tax_number) head += line(`رقم ضريبي: ${d.tax_number}`);
+  const foot = d.footer_text ? `<hr style="border:0;border-top:1px dashed #000"><div style="text-align:center;font-size:11px;white-space:pre-wrap">${escR(d.footer_text)}</div>` : '';
+  const paperMm = d.width === '58' ? 58 : 80;
+  return { headerHtml: head, footerHtml: foot, paperMm, bodyMm: paperMm - 6 };
+}
 export async function getCompanyInfo() {
   if (companyCache) return companyCache;
   try {
-    const res = await axiosClient.get('/tenants/public_info/');
-    companyCache = { name: res.data?.name || 'Motion Store', logo: res.data?.logo_base64 || null };
+    const res = await axiosClient.get('/company-info/');
+    const d = res.data || {};
+    companyCache = { name: d.name || 'Motion Store', logo: d.show_logo === false ? null : (d.logo_raw || null), ...d, ...buildReceiptParts(d) };
   } catch (e) {
-    companyCache = { name: 'Motion Store', logo: null };
+    try {
+      const res = await axiosClient.get('/tenants/public_info/');
+      companyCache = { name: res.data?.name || 'Motion Store', logo: res.data?.logo_base64 || null, headerHtml: '', footerHtml: '', paperMm: 80, bodyMm: 74 };
+    } catch (e2) { companyCache = { name: 'Motion Store', logo: null, headerHtml: '', footerHtml: '', paperMm: 80, bodyMm: 74 }; }
   }
   return companyCache;
 }

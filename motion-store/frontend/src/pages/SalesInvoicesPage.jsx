@@ -1,3 +1,4 @@
+// RECEIPT_PATCHED
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
@@ -79,15 +80,15 @@ export default function SalesInvoicesPage() {
     const groups = []; (r.lines || []).forEach((l) => { const g = l.bundle_label || ''; let grp = groups.find((x) => x.name === g); if (!grp) { grp = { name: g, lines: [] }; groups.push(grp); } grp.lines.push(l); });
     const lineHtml = (l, padR) => `<tr><td style="${padR ? 'padding-right:8px' : ''}">${esc(l.display_name || l.product_name)}${l.offer_label ? ` <b>(${T.offer}: ${esc(l.offer_label)})</b>` : ''}<br><small>${lineQty(l)} × ${money(l.unit_price)}</small></td><td style="text-align:left">${money(l.total_price)}</td></tr>`;
     const body = groups.map((g) => (g.name ? `<tr><td colspan="2" style="font-weight:700">${esc(g.name)}</td></tr>` + g.lines.map((l) => lineHtml(l, true)).join('') : g.lines.map((l) => lineHtml(l, false)).join(''))).join('');
-    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(r.invoice_number)}</title><style>@page{size:80mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:74mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0;vertical-align:top} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .t td{font-weight:700}</style></head><body>
-      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>
+    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(r.invoice_number)}</title><style>@page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0;vertical-align:top} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .t td{font-weight:700}</style></head><body>
+      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}
       <div>${esc(r.terminal_name || '')}</div><div>${esc(r.invoice_number)} (${T.copy})</div><div>${dt(r.invoice_date_time)}</div>
       ${r.customer_name || r.customer_phone ? `<div>${T.customer}: ${esc([r.customer_name, r.customer_code].filter(Boolean).join(' - '))}</div><div>${esc(r.customer_phone || '')}</div>` : ''}</div><hr>
       <table>${body}</table><hr><table class="t">${row(T.subtotal, money(r.subtotal))}
       ${(r.applied_offers || []).map((o) => row(`${T.offer}: ${esc(o.name || '')}`, '-' + money(o.discount))).join('')}
       ${num(r.discount_amount) ? row(T.discount, '-' + money(r.discount_amount)) : ''}${num(r.delivery_fee) ? row(T.delivery, money(r.delivery_fee)) : ''}
       ${row(T.required, money(r.total_amount) + ' ' + T.cur)}${(r.payments_info || []).map((p) => row(esc(p.method), money(p.amount))).join('')}</table><hr>
-      <div class="c">${T.thanks}</div><script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+      <div class="c">${T.thanks}</div>${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=600'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 

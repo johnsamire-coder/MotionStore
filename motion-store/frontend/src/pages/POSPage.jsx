@@ -1,3 +1,4 @@
+// RECEIPT_PATCHED
 // POS_V2
 import React, { useState, useEffect, useRef } from 'react';
 import axiosClient from '../api/axiosClient';
@@ -147,8 +148,8 @@ export default function POSPage() {
     const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
     const rows = (ds.lines || []).map((l) => `<tr><td>${esc(l.display_name)}<br><small>${l.price_mode === 'PIECE' ? `${l.quantity_pieces} ${T.pcs}` : `${kgf(l.weight_kg)} ${isRTL ? 'كجم' : 'KG'}`} × ${money(l.unit_price)}</small></td><td style="text-align:left">${money(l.line_total)}</td></tr>`).join('');
     const rest = num(ds.total_amount) - num(ds.deposit_amount);
-    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(ds.number)}</title><style>@page{size:80mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:74mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0;vertical-align:top} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b td{font-weight:700}</style></head><body>
-      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>
+    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(ds.number)}</title><style>@page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0;vertical-align:top} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b td{font-weight:700}</style></head><body>
+      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}
       <div style="font-weight:700;font-size:14px;margin-top:4px">${isRTL ? 'إيصال أمانة (فاتورة مؤجلة)' : 'Deferred invoice (on approval)'}</div><div>${esc(ds.number)}</div><div>${new Date(ds.created_at).toLocaleString('en-GB')}</div></div><hr>
       <div>${isRTL ? 'العميل' : 'Customer'}: ${esc(ds.customer_name)} (${esc(ds.customer_code || '')})</div><div>${isRTL ? 'التليفون' : 'Phone'}: ${esc(ds.customer_phone)}</div><div>${isRTL ? 'الكاشير' : 'Cashier'}: ${esc(ds.cashier_name || '')}</div><hr>
       <table>${rows}</table><hr><table class="b">
@@ -157,7 +158,7 @@ export default function POSPage() {
       <tr><td>${isRTL ? 'الباقي عند البيع' : 'Due on sale'}</td><td style="text-align:left">${money(rest)}</td></tr>
       <tr><td>${isRTL ? 'آخر ميعاد للرجوع' : 'Return by'}</td><td style="text-align:left">${esc(ds.due_date)}</td></tr></table><hr>
       <div style="margin-top:18px">${isRTL ? 'توقيع العميل' : 'Customer signature'}: ....................</div>
-      <script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+      ${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=600'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
   const submitDef = async () => {
@@ -371,9 +372,9 @@ export default function POSPage() {
     const body = groups.map((g) => (g.name ? `<tr><td colspan="2" style="font-weight:700;padding-top:4px">${esc(g.name)} — ${money(g.lines.reduce((a, l) => a + lineTotal(l), 0))}</td></tr>` + g.lines.map((l) => lineHtml(l, true)).join('') : g.lines.map((l) => lineHtml(l, false)).join(''))).join('');
     const row = (a, b) => `<tr><td>${a}</td><td style="text-align:left">${b}</td></tr>`;
     const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(R.number)}</title><style>
-      @page{size:80mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:74mm;margin:0;font-size:12px;color:#000}
+      @page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px;color:#000}
       table{width:100%;border-collapse:collapse} td{padding:2px 0;vertical-align:top} small{color:#333} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .t td{font-weight:700}</style></head><body>
-      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>
+      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}
       <div>${esc(terminal?.name || '')}</div><div>${T.invNo}: ${esc(R.number)}</div><div>${new Date().toLocaleString('en-GB')}</div>${(R.custName || R.custPhone) ? `<div>${T.customer}: ${esc([R.custName, R.custCode].filter(Boolean).join(' - '))}</div>${R.custPhone ? `<div>${esc(R.custPhone)}</div>` : ''}` : ''}</div><hr>
       <table>${body}</table><hr><table class="t">
       ${row(T.subtotal, money(R.subtotal))}
@@ -382,7 +383,7 @@ export default function POSPage() {
       ${row(T.required, money(R.required) + ' ' + T.cur)}
       ${R.pays.map((p) => row(esc(p.name), money(p.amount))).join('')}
       ${R.cashGiven ? row(T.cashGiven, money(R.cashGiven)) : ''}${R.change > 0 ? row(T.changeDue, money(R.change)) : ''}</table><hr>
-      <div class="c">${T.thanks}</div><script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+      <div class="c">${T.thanks}</div>${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=600'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 

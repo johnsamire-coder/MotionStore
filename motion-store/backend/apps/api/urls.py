@@ -28,6 +28,7 @@ router.register(r"expense-categories", ExpenseCategoryViewSet, basename="expense
 router.register(r"expenses", ExpenseViewSet, basename="expenses")
 router.register(r"reports-v2", ReportsV2ViewSet, basename="reports-v2")
 router.register(r"home", HomeViewSet, basename="home")
+router.register(r"company-info", CompanyInfoViewSet, basename="company-info")
 router.register(r"price-lists", PriceListViewSet, basename="price-lists")
 router.register(r"price-list-items", PriceListItemViewSet, basename="price-list-items")
 router.register(r"price-history", PriceHistoryViewSet, basename="price-history")

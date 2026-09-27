@@ -1,3 +1,4 @@
+// RECEIPT_PATCHED
 // SHIFTS_V2
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
@@ -73,14 +74,14 @@ export default function ShiftsPage() {
     const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
     const row = (a, b) => `<tr><td>${a}</td><td style="text-align:left">${b}</td></tr>`;
     const sh = s.shift;
-    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(sh.shift_code)}</title><style>@page{size:80mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:74mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b{font-weight:700}</style></head><body>
-      <div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div><div class="b">${T.report}</div><div>${esc(sh.shift_code)}</div><div>${esc(s.drawer)}</div></div><hr>
+    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(sh.shift_code)}</title><style>@page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b{font-weight:700}</style></head><body>
+      <div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}<div class="b">${T.report}</div><div>${esc(sh.shift_code)}</div><div>${esc(s.drawer)}</div></div><hr>
       <table>${row(T.openedAt, dt(sh.opened_at))}${row(T.closedAt, dt(sh.closed_at))}${row(T.opening, money(s.opening))}${row(T.sales, `${money(s.sales_total)} (${s.invoices})`)}</table><hr>
       <div class="b">${T.byMethod}</div><table>${(s.by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table><hr>
       <div class="b">${T.moves}</div><table>${(s.moves || []).map((m) => row(esc(m.label), money(m.amount))).join('')}</table><hr>
       <table class="b">${row(T.expected, money(sh.expected_cash ?? s.expected))}${sh.actual_cash != null ? row(T.actual, money(sh.actual_cash)) + row(T.diff, money(sh.difference)) : ''}${num(sh.handover_total) ? row(T.handed, money(sh.handover_total)) : ''}${s.remaining_in_drawer != null ? row(T.remain, money(s.remaining_in_drawer)) : ''}</table><hr>
       <div style="margin-top:14px">${T.cashier}: ${esc(sh.cashier_username || sh.cashier || '')} ..............</div>
-      <script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+      ${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=640'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 

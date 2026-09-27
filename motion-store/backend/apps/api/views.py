@@ -2427,3 +2427,52 @@ class HomeViewSet(_rvs.ViewSet):
         hs.updated_by = u
         hs.save()
         return Response({'ok': True})
+
+def _company_info(t):
+    from apps.companies.models import Company
+    from apps.printing.models import PrintTemplate
+    co = Company.objects.filter(tenant=t).first()
+    pt = PrintTemplate.objects.filter(tenant=t, template_type='RECEIPT').first()
+    w = str(getattr(pt, 'width', '') or '80')
+    return {'name': t.name if t else '', 'logo_raw': t.logo_base64 if t else None,
+            'phone': getattr(co, 'phone', '') or '', 'address': getattr(co, 'address', '') or '', 'tax_number': getattr(co, 'tax_number', '') or '',
+            'registration_number': getattr(co, 'registration_number', '') or '',
+            'header_text': getattr(pt, 'header_text', '') or '', 'footer_text': getattr(pt, 'footer_text', '') or '',
+            'show_logo': pt.show_logo if pt else True, 'show_address': pt.show_address if pt else True, 'show_phone': pt.show_phone if pt else True,
+            'show_tax': pt.show_tax if pt else False, 'width': '58' if w.startswith('58') else '80'}
+
+
+class CompanyInfoViewSet(_rvs.ViewSet):
+    permission_classes = [_RIsAuth]
+
+    def list(self, request):
+        return Response(_company_info(request.user.tenant))
+
+    @action(detail=False, methods=['post'], url_path='save')
+    def save_info(self, request):
+        from apps.companies.models import Company
+        from apps.printing.models import PrintTemplate
+        u = request.user
+        if not (u.is_superuser or getattr(u, 'role', None) == 'ADMIN'):
+            return Response({'detail': 'مدير النظام بس يقدر يعدّل بيانات الشركة والإيصال'}, status=403)
+        t = u.tenant; d = request.data
+        co = Company.objects.filter(tenant=t).first() or Company.objects.create(tenant=t, name=t.name)
+        for f in ('phone', 'address', 'tax_number', 'registration_number'):
+            if f in d:
+                setattr(co, f, (d.get(f) or '').strip())
+        co.save()
+        pt = PrintTemplate.objects.filter(tenant=t, template_type='RECEIPT').first()
+        if not pt:
+            pt = PrintTemplate(tenant=t, name='إيصال الكاشير', template_type='RECEIPT', is_default=True)
+        for f in ('header_text', 'footer_text'):
+            if f in d:
+                setattr(pt, f, (d.get(f) or '').strip())
+        for f in ('show_logo', 'show_address', 'show_phone', 'show_tax'):
+            if f in d:
+                setattr(pt, f, bool(d.get(f)))
+        if 'width' in d:
+            wf = PrintTemplate._meta.get_field('width')
+            wv = '58' if str(d.get('width')).startswith('58') else '80'
+            pt.width = int(wv) if wf.get_internal_type() in ('IntegerField', 'PositiveIntegerField', 'SmallIntegerField', 'PositiveSmallIntegerField', 'DecimalField') else wv
+        pt.save()
+        return Response(_company_info(t))
