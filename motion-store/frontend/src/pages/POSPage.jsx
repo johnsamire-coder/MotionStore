@@ -331,6 +331,13 @@ export default function POSPage() {
 
   useEffect(() => {
     const h = (e) => {
+      if (e.repeat || e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (receipt) printReceipt();
+        else if (showPay) submitSale(true);
+        else openPay();
+      }
       if (e.key === 'F1') { e.preventDefault(); if (!showPay && !receipt) openPay(); }
       if (e.key === 'F3') { e.preventDefault(); if (!showPay) { resetSale(); setReceipt(null); } }
     };
@@ -338,7 +345,9 @@ export default function POSPage() {
     return () => window.removeEventListener('keydown', h);
   });
 
-  const submitSale = async () => {
+  const submitSale = async (printAfterSave = false) => {
+    if (busy) return;
+    if (Math.abs(remaining) >= 0.01 || (cashRow && changeDue < 0)) { showErr(isRTL ? 'راجع قيمة الدفع قبل التأكيد' : 'Check the payment amount before confirming'); return; }
     if (hasCredit && !cust && phoneDigits.length < 6) { showErr(T.needPhone); return; }
     setBusy(true);
     const items = cart.map((l) => (l.type === 'PIECE'
@@ -352,10 +361,12 @@ export default function POSPage() {
     if (cust) body.customer_id = cust.id; else if (phoneDigits) { body.customer_phone = phoneDigits; body.customer_name = custNameIn; }
     try {
       const r = await axiosClient.post('/sales/checkout/', body); let rc = cust; if (!rc && phoneDigits) { try { const lr = await axiosClient.get(`/customers/lookup/?q=${phoneDigits}`); rc = lr.data; } catch (e2) { rc = null; } }
-      setReceipt({ number: r.data.invoice_number, lines: cart, subtotal, offers: applied.map((x) => ({ name: x.o.name, d: x.d })), discount: num(discount), delivery: num(delivery), prev: num(prevBal), required,
+      const nextReceipt = { number: r.data.invoice_number, lines: cart, subtotal, offers: applied.map((x) => ({ name: x.o.name, d: x.d })), discount: num(discount), delivery: num(delivery), prev: num(prevBal), required,
         pays: payRows.filter((x) => num(x.amount) > 0).map((x) => ({ name: payMethods.find((m) => m.id === x.id)?.name || '', amount: num(x.amount) })), cashGiven: num(cashGiven), change: changeDue,
-        customer: cust ? `${cust.code || ''} ${cust.name}` : '', custName: rc ? rc.name : custNameIn, custPhone: rc ? rc.phone : phoneDigits, custCode: rc ? (rc.code || '') : '', at: new Date().toLocaleString('en-GB') });
+        customer: cust ? `${cust.code || ''} ${cust.name}` : '', custName: rc ? rc.name : custNameIn, custPhone: rc ? rc.phone : phoneDigits, custCode: rc ? (rc.code || '') : '', at: new Date().toLocaleString('en-GB') };
+      setReceipt(nextReceipt);
       setShowPay(false); resetSale(); loadShop(terminal);
+      if (printAfterSave) setTimeout(() => printReceipt(nextReceipt), 0);
     } catch (e) { apiErr(e); } finally { setBusy(false); }
   };
 
@@ -364,9 +375,10 @@ export default function POSPage() {
     catch (e) { apiErr(e); }
   };
 
-  const printReceipt = async () => {
+  const printReceipt = async (receiptToPrint = receipt) => {
+    if (!receiptToPrint) return;
     const co = await getCompanyInfo();
-    const R = receipt; const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+    const R = receiptToPrint; const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
     const groups = []; R.lines.forEach((l) => { const g = l.bundle || ''; let grp = groups.find((x) => x.name === g); if (!grp) { grp = { name: g, lines: [] }; groups.push(grp); } grp.lines.push(l); });
     const lineHtml = (l, pad) => `<tr><td style="${pad ? 'padding-right:8px' : ''}">${esc(l.name)}${l.offer ? ` <b>(${esc(T.offerLine)}: ${esc(l.offer)})</b>` : ''}<br><small>${l.mode === 'PIECE' ? `${esc(l.qty)} ${T.pcs}` : `${kgf(l.kg)} ${T.kg}`} × ${money(l.price)}</small></td><td style="text-align:left">${money(lineTotal(l))}</td></tr>`;
     const body = groups.map((g) => (g.name ? `<tr><td colspan="2" style="font-weight:700;padding-top:4px">${esc(g.name)} — ${money(g.lines.reduce((a, l) => a + lineTotal(l), 0))}</td></tr>` + g.lines.map((l) => lineHtml(l, true)).join('') : g.lines.map((l) => lineHtml(l, false)).join(''))).join('');
