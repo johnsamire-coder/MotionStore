@@ -178,3 +178,12 @@ class NumberSequence(_NSTAM):
     class Meta:
         db_table = "number_sequences"
         constraints = [models.UniqueConstraint(fields=["tenant", "key"], name="unique_number_sequence")]
+
+class HomeSetting(_NSTAM):
+    """ Home screen: daily sales target + message from management """
+    daily_target = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    announcement = models.TextField(blank=True, default='')
+    updated_by = models.ForeignKey('users.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+
+    class Meta:
+        db_table = "home_settings"

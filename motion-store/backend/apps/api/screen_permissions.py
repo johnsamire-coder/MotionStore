@@ -17,7 +17,7 @@ RULES = [
     (r'^/api/v1/expense', A, ['/expenses']),
     (r'^/api/v1/treasuries/(transfer|adjust|settle_custody|custodies|[^/]+/statement)', A, ['/treasury']),
     (r'^/api/v1/treasuries/', W, ['/treasury', '/settings']),
-    (r'^/api/v1/reports-v2/', A, ['/reports', '/']),
+    (r'^/api/v1/reports-v2/', A, ['/reports']),
     (r'^/api/v1/suppliers/', A, ['/suppliers', '/purchasing']),
     (r'^/api/v1/purchases/', W, ['/purchasing']),
     (r'^/api/v1/(weight-prices|price-change-log)/', A, ['/coding']),
@@ -28,12 +28,12 @@ RULES = [
     (r'^/api/v1/customers/[^/]+/collect', A, ['/customers']),
     (r'^/api/v1/customers/(summary|[^/]+/history)', A, ['/customers', '/pos']),
     (r'^/api/v1/sales/numbering', W, ['/invoices']),
-    (r'^/api/v1/sales/?$', {'GET'}, ['/invoices', '/reports', '/']),
+    (r'^/api/v1/sales/?$', {'GET'}, ['/invoices', '/reports']),
     (r'^/api/v1/returns/', A, ['/returns']),
-    (r'^/api/v1/(treasury-transactions|journal-entries)/', A, ['/treasury', '/expenses', '/reports', '/']),
-    (r'^/api/v1/(raw-lots|purchase-line-items)/', A, ['/sorting', '/purchasing', '/inventory', '/']),
-    (r'^/api/v1/inventory-ledger/', A, ['/inventory', '/reports', '/']),
-    (r'^/api/v1/customers/?$', {'GET'}, ['/customers', '/reports', '/']),
+    (r'^/api/v1/(treasury-transactions|journal-entries)/', A, ['/treasury', '/expenses', '/reports']),
+    (r'^/api/v1/(raw-lots|purchase-line-items)/', A, ['/sorting', '/purchasing', '/inventory']),
+    (r'^/api/v1/inventory-ledger/', A, ['/inventory', '/reports']),
+    (r'^/api/v1/customers/?$', {'GET'}, ['/customers', '/reports']),
 ]
 
 

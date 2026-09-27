@@ -56,6 +56,7 @@ export default function AppLayout() {
   };
 
   const isAllowed = (path) => {
+    if (path === '/') return true; // HOME_FOR_ALL
     if (user?.role === 'ADMIN' || allowedScreens.includes('*')) return true;
     return allowedScreens.includes(path);
   };

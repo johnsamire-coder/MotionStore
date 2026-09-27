@@ -1,491 +1,132 @@
+// HOME_V2
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
-import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import {
-  DollarSign,
-  TrendingUp,
-  Package,
-  Clock,
-  Vault,
-  AlertTriangle,
-  RefreshCw,
-  ShoppingBag,
-  ArrowUpRight,
-  ArrowDownRight,
-  CheckCircle2,
-  AlertCircle,
-  Layers,
-  Receipt,
-  Tag
-} from 'lucide-react';
+import { ShoppingCart, Clock, RotateCcw, PauseCircle, Package, Layers, Truck, Wallet, AlertTriangle, Megaphone, Target, Tag, TrendingUp, Pencil, X } from 'lucide-react';
+
+const num = (v) => parseFloat(v || 0) || 0;
+const money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+const pad = (n) => String(n).padStart(2, '0');
+const hm = (iso) => { if (!iso) return ''; const d = new Date(iso); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const ROLE = { ADMIN: 'مدير النظام', MANAGER: 'مدير', CASHIER: 'كاشير', WAREHOUSE_KEEPER: 'أمين مخزن', ACCOUNTANT: 'محاسب', SORTER: 'فرّاز' };
+const Card = ({ icon: I, color, label, value, sub, onClick }) => (
+  <button type="button" onClick={onClick} className={`text-start bg-white rounded-2xl border border-slate-200 p-4 shadow-sm ${onClick ? 'hover:border-emerald-400 hover:shadow-md cursor-pointer' : 'cursor-default'} transition`}>
+    <div className="flex items-center justify-between"><span className="text-xs font-bold text-slate-500">{label}</span><span className={`h-9 w-9 rounded-xl flex items-center justify-center ${color}`}><I size={18} /></span></div>
+    <div className="text-2xl font-black text-slate-900 mt-2">{value}</div>{sub ? <div className="text-[11px] text-slate-500 mt-1">{sub}</div> : null}
+  </button>
+);
+const Box = ({ title, icon: I, children }) => (
+  <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+    <div className="text-sm font-black text-slate-800 flex items-center gap-2">{I ? <I size={16} className="text-emerald-600" /> : null}{title}</div>
+    {children}
+  </div>
+);
+const Bars = ({ rows, k = 'k', v = 'v' }) => {
+  const m = Math.max(1, ...rows.map((r) => num(r[v])));
+  return <div className="space-y-1.5">{rows.map((r) => <div key={r[k]} className="text-xs"><div className="flex justify-between"><span>{r[k]}</span><b>{money(r[v])}</b></div><div className="h-2 bg-slate-100 rounded-full"><div className="h-2 bg-emerald-500 rounded-full" style={{ width: `${Math.max(2, num(r[v]) / m * 100)}%` }} /></div></div>)}</div>;
+};
 
 export default function DashboardPage() {
-  const { user, tenant } = useAuth();
-  const { t } = useLanguage();
-
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState('');
-
-  // Live Metrics
-  const [todaySales, setTodaySales] = useState(0);
-  const [todayInvoicesCount, setTodayInvoicesCount] = useState(0);
-  const [todayGrossProfit, setTodayGrossProfit] = useState(0);
-  const [todayExpenses, setTodayExpenses] = useState(0);
-  const [todayNetProfit, setTodayNetProfit] = useState(0);
-
-  // Health Bar & Vaults
-  const [activeShift, setActiveShift] = useState(null);
-  const [treasuryTotal, setTreasuryTotal] = useState(0);
-  const [posDrawerBalance, setPosDrawerBalance] = useState(0);
-  const [totalSellableStockKg, setTotalSellableStockKg] = useState(0);
-  const [pendingBalesCount, setPendingBalesCount] = useState(0);
-
-  // Alerts & Tables
-  const [lowStockAlerts, setLowStockAlerts] = useState([]);
-  const [shiftDiscrepancies, setShiftDiscrepancies] = useState([]);
-  const [recentInvoices, setRecentInvoices] = useState([]);
-  const [topSellers, setTopSellers] = useState([]);
-
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
-    if (loading) setLoading(true);
-    else setRefreshing(true);
-
-    try {
-      const todayStr = new Date().toISOString().split('T')[0];
-
-      const [sRes, stockRes, tRes, txRes, shiftRes, lotRes] = await Promise.all([
-        axiosClient.get('/sales/'),
-        axiosClient.get('/stock-items/'),
-        axiosClient.get('/treasuries/'),
-        axiosClient.get('/treasury-transactions/'),
-        axiosClient.get('/shifts/'),
-        axiosClient.get('/raw-lots/')
-      ]);
-
-      const salesList = sRes.data.results || sRes.data || [];
-      const stockList = stockRes.data.results || stockRes.data || [];
-      const treasuriesList = tRes.data.results || tRes.data || [];
-      const txList = txRes.data.results || txRes.data || [];
-      const shiftList = shiftRes.data.results || shiftRes.data || [];
-      const lotsList = lotRes.data.results || lotRes.data || [];
-
-      // 1. Today's Sales Metrics
-      const todayInvoices = salesList.filter(s => {
-        const d = s.invoice_date_time ? s.invoice_date_time.split('T')[0] : '';
-        return d === todayStr;
-      });
-
-      const salesSum = todayInvoices.reduce((acc, s) => acc + parseFloat(s.total_amount || 0), 0);
-      const cogsSum = todayInvoices.reduce((acc, s) => acc + parseFloat(s.total_cogs || 0), 0);
-      const grossProfitSum = salesSum - cogsSum;
-
-      setTodaySales(salesSum);
-      setTodayInvoicesCount(todayInvoices.length);
-      setTodayGrossProfit(grossProfitSum);
-
-      // 2. Today's Expenses Metrics
-      const todayExpList = txList.filter(tx => {
-        const d = tx.created_at ? tx.created_at.split('T')[0] : '';
-        return tx.transaction_type === 'WITHDRAWAL' && d === todayStr;
-      });
-      const expSum = todayExpList.reduce((acc, tx) => acc + Math.abs(parseFloat(tx.amount || 0)), 0);
-      setTodayExpenses(expSum);
-
-      // 3. Net Profit Today
-      setTodayNetProfit(grossProfitSum - expSum);
-
-      // 4. Shift & Vault Status
-      const currentOpenShift = shiftList.find(sh => sh.status === 'OPEN');
-      setActiveShift(currentOpenShift || null);
-
-      const discrepancies = shiftList.filter(sh => sh.status === 'REVIEW' || parseFloat(sh.difference || 0) !== 0);
-      setShiftDiscrepancies(discrepancies.slice(0, 5));
-
-      const totalVaults = treasuriesList.reduce((acc, tr) => acc + parseFloat(tr.current_balance || 0), 0);
-      setTreasuryTotal(totalVaults);
-
-      const posDrawer = treasuriesList.find(tr => tr.treasury_type === 'POS_DRAWER');
-      setPosDrawerBalance(posDrawer ? parseFloat(posDrawer.current_balance || 0) : 0);
-
-      // 5. Stock Metrics & Low Stock Alerts
-      const totalKg = stockList.reduce((acc, st) => acc + parseFloat(st.total_weight_kg || 0), 0);
-      setTotalSellableStockKg(totalKg);
-
-      const lowItems = stockList.filter(st => {
-        const available = parseFloat(st.total_weight_kg || 0);
-        const minLimit = parseFloat(st.product?.min_stock_level || 5.0);
-        return available <= minLimit;
-      });
-      setLowStockAlerts(lowItems.slice(0, 5));
-
-      // 6. Raw Lots Awaiting Sorting
-      const pendingLots = lotsList.filter(l => l.status === 'RECEIVED' || l.status === 'UNSORTED');
-      setPendingBalesCount(pendingLots.length);
-
-      // 7. Recent Invoices
-      setRecentInvoices(salesList.slice(0, 5));
-
-      // 8. Top Sellers Today
-      const productSalesMap = {};
-      todayInvoices.forEach(inv => {
-        (inv.lines || []).forEach(line => {
-          const pName = line.product_name || 'صنف';
-          if (!productSalesMap[pName]) {
-            productSalesMap[pName] = { name: pName, weight: 0, amount: 0 };
-          }
-          productSalesMap[pName].weight += parseFloat(line.weight_kg || 0);
-          productSalesMap[pName].amount += parseFloat(line.total_price || 0);
-        });
-      });
-
-      const topList = Object.values(productSalesMap).sort((a, b) => b.amount - a.amount).slice(0, 5);
-      setTopSellers(topList);
-
-      setLastUpdated(new Date().toLocaleTimeString('ar-EG'));
-
-    } catch (err) {
-      console.error('Dashboard data load error:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
+  const { isRTL } = useLanguage();
+  const nav = useNavigate();
+  const [d, setD] = useState(null);
+  const [edit, setEdit] = useState(false);
+  const [form, setForm] = useState({ daily_target: '', announcement: '' });
+  const [err, setErr] = useState('');
+  const load = async () => { try { const r = await axiosClient.get('/home/'); setD(r.data); } catch (e) { setErr(e.response?.data?.detail || e.message); } };
+  useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, []);
+  const save = async () => { try { await axiosClient.post('/home/settings/', form); setEdit(false); load(); } catch (e) { setErr(e.response?.data?.detail || e.message); } };
+  if (!d) return <div className="p-10 text-center text-slate-500">{err || '...'}</div>;
+  const greet = new Date().getHours() < 12 ? 'صباح الخير' : 'مساء الخير';
+  const c = d.cashier; const mg = d.manager;
+  const tSales = c ? c.shop_sales : d.today_sales;
+  const pct = d.daily_target > 0 ? Math.min(100, Math.round(tSales / d.daily_target * 100)) : 0;
+  const maxS = mg ? Math.max(1, ...mg.series.map((x) => x.v)) : 1;
   return (
-    <div className="space-y-6 font-sans">
-      
-      {/* Header & Quick Refresh */}
-      <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-black tracking-wide">لوحة التحكم القيادية للمدير</h1>
-            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-3 py-0.5 rounded-full text-xs font-bold">
-              ● بيانات حية مباشرة
-            </span>
+    <div className="space-y-4" dir={isRTL ? 'rtl' : 'ltr'}>
+      <div className="rounded-3xl p-6 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #064e3b 0%, #047857 55%, #0f766e 100%)' }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-2xl md:text-3xl font-black">{greet} يا {d.user.name} 👋</div>
+            <div className="text-emerald-100 text-sm mt-1">{d.company} · {ROLE[d.user.role] || d.user.role} · {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
           </div>
-          <p className="text-xs text-slate-400 mt-1">نبض المنشأة ومؤشرات الأداء المالي والمخزني اليومية</p>
+          {d.can_edit && <button type="button" onClick={() => { setForm({ daily_target: d.daily_target || '', announcement: d.announcement || '' }); setEdit(true); }} className="h-10 px-4 rounded-xl bg-white/15 hover:bg-white/25 text-sm font-bold flex items-center gap-2 cursor-pointer"><Pencil size={15} /> التارجت والرسالة</button>}
         </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400 font-mono">آخر تحديث: {lastUpdated || 'الآن'}</span>
-          <button
-            onClick={fetchDashboardData}
-            disabled={refreshing}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer shadow-md disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-            <span>{refreshing ? 'جاري التحديث...' : 'تحديث البيانات الحية'}</span>
-          </button>
-        </div>
+        {d.daily_target > 0 && (
+          <div className="mt-5">
+            <div className="flex justify-between text-sm font-bold"><span className="flex items-center gap-2"><Target size={16} /> تارجت النهاردة {c ? '(المحل)' : ''}</span><span>{money(tSales)} / {money(d.daily_target)} ج.م</span></div>
+            <div className="h-3 bg-white/20 rounded-full mt-2"><div className="h-3 rounded-full bg-amber-300" style={{ width: `${Math.max(3, pct)}%` }} /></div>
+            <div className="text-xs mt-1 text-emerald-100">{pct >= 100 ? 'عدّينا التارجت 🎉🔥' : `وصلنا ${pct}% من التارجت ${pct >= 70 ? '🔥' : '💪'}`}</div>
+          </div>
+        )}
       </div>
-
-      {/* 1. HEALTH STATUS BAR */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        
-        {/* SHIFT STATUS */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${activeShift ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-              <Clock size={20} />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-slate-500 block">الوردية النقدية الحالية</span>
-              <span className="text-xs font-black text-slate-900">
-                {activeShift ? `وردية #${activeShift.shift_code} (${activeShift.cashier_username || 'كاشير'})` : 'مغلقة — لا يوجد بيع نشط'}
-              </span>
-            </div>
+      {d.announcement && <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex gap-3 items-start"><Megaphone className="text-amber-600 shrink-0" size={22} /><div><div className="text-xs font-black text-amber-800">رسالة من الإدارة</div><div className="text-sm font-bold text-amber-900 mt-1 whitespace-pre-wrap">{d.announcement}</div></div></div>}
+      {c && (
+        <>
+          {num(c.custody) > 0 && <div className="bg-rose-50 border border-rose-300 rounded-2xl p-3 text-sm font-bold text-rose-800 flex items-center gap-2"><AlertTriangle size={18} /> عليك عهدة (عجز) لسه ماتسددتش: {money(c.custody)} ج.م</div>}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Card icon={Clock} color={c.shift ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'} label="ورديتي" value={c.shift ? 'مفتوحة' : 'مقفولة'} sub={c.shift ? `${c.shift.terminal} · من ${hm(c.shift.since)}` : 'دوس هنا تفتح وردية'} onClick={() => nav(c.shift ? '/pos' : '/shifts')} />
+            <Card icon={ShoppingCart} color="bg-blue-100 text-blue-700" label="فواتيري النهاردة" value={c.my_count} sub={`${money(c.my_total)} ج.م`} />
+            <Card icon={TrendingUp} color="bg-violet-100 text-violet-700" label="متوسط فاتورتي" value={money(c.my_count ? c.my_total / c.my_count : 0)} sub="ج.م" />
+            <Card icon={RotateCcw} color="bg-amber-100 text-amber-700" label="مرتجعاتي النهاردة" value={money(c.my_returns)} sub="ج.م" />
           </div>
-          <span className={`w-3 h-3 rounded-full ${activeShift ? 'bg-emerald-500 animate-ping' : 'bg-rose-500'}`}></span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[{ l: 'بيع جديد', i: ShoppingCart, to: '/pos', cl: 'bg-emerald-600' }, { l: 'مرتجع', i: RotateCcw, to: '/returns', cl: 'bg-rose-600' }, { l: 'المعلقة والمؤجلة', i: PauseCircle, to: '/pos', cl: 'bg-amber-600' }, { l: 'الوردية', i: Clock, to: '/shifts', cl: 'bg-slate-800' }].map((b) => (
+              <button key={b.l} type="button" onClick={() => nav(b.to)} className={`${b.cl} text-white rounded-2xl h-20 flex flex-col items-center justify-center gap-1 font-black text-sm shadow-sm hover:opacity-90 cursor-pointer`}><b.i size={22} />{b.l}</button>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <Box title="طرق الدفع النهاردة" icon={Wallet}>{c.by_method.length ? <Bars rows={c.by_method} /> : <div className="text-xs text-slate-400">لسه مفيش بيع</div>}</Box>
+            <Box title="أمانات ميعادها جه" icon={AlertTriangle}>{c.deferred.length === 0 ? <div className="text-xs text-slate-400">مفيش ✅</div> : c.deferred.map((x) => <div key={x.no} className={`text-xs rounded-lg p-2 ${x.late ? 'bg-rose-50 text-rose-800' : 'bg-slate-50'}`}><b>{x.cust}</b> · <span className="font-mono">{x.phone}</span><div>{x.no} · {money(x.total)} ج.م {x.late ? '· متأخرة ⚠️' : '· النهاردة'}</div></div>)}</Box>
+            <Box title="عروض النهاردة" icon={Tag}>{c.offers.length === 0 ? <div className="text-xs text-slate-400">مفيش عروض شغالة</div> : <div className="flex flex-wrap gap-2">{c.offers.map((o) => <span key={o.name} className="px-3 py-1.5 rounded-full bg-violet-100 text-violet-800 text-xs font-bold">{o.name}{o.auto ? ' (تلقائي)' : ''}</span>)}</div>}</Box>
+          </div>
+          <Box title="آخر فواتيري" icon={ShoppingCart}>{c.last.length === 0 ? <div className="text-xs text-slate-400">لسه مفيش</div> : c.last.map((x) => <div key={x.no} className="flex justify-between text-xs border-b border-slate-100 py-1"><span className="font-mono">{x.no}</span><span>{hm(x.at)}</span><b>{money(x.total)} ج.م</b></div>)}</Box>
+        </>
+      )}
+      {d.stock && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <Card icon={Layers} color="bg-violet-100 text-violet-700" label="بالات مستنية فرز" value={d.stock.pending_count} onClick={() => nav('/sorting')} />
+          <Card icon={Truck} color="bg-blue-100 text-blue-700" label="أذون نقل النهاردة" value={d.stock.transfers_today} onClick={() => nav('/inventory')} />
+          <Card icon={Package} color="bg-amber-100 text-amber-700" label="أصناف قربت تخلص" value={d.stock.low.length} onClick={() => nav('/inventory')} />
+          <Box title="بالات مستنية فرز" icon={Layers}>{d.stock.pending.length ? d.stock.pending.map((x, i) => <div key={i} className="text-xs flex justify-between border-b border-slate-100 py-1"><span>{x.lot}</span><b>{x.kg} كجم</b></div>) : <div className="text-xs text-slate-400">مفيش ✅</div>}</Box>
+          <Box title="قربت تخلص" icon={Package}>{d.stock.low.length ? d.stock.low.map((x, i) => <div key={i} className="text-xs flex justify-between border-b border-slate-100 py-1"><span>{x.item} · {x.loc}</span><b className="text-rose-700">{x.kg} كجم</b></div>) : <div className="text-xs text-slate-400">كله تمام ✅</div>}</Box>
+          {d.sorting && <Box title="آخر نتايج فرز" icon={Layers}>{d.sorting.recent.length ? d.sorting.recent.map((x, i) => <div key={i} className="text-xs border-b border-slate-100 py-1"><div className="font-bold">{x.lot}</div><div>عالي {x.h}% · وسط {x.m}% · تصفيات {x.l}% · هالك {x.w}%</div></div>) : <div className="text-xs text-slate-400">لسه مفيش</div>}</Box>}
         </div>
-
-        {/* VAULTS & CASH */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
-              <Vault size={20} />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-slate-500 block">إجمالي الخزائن والسيولة</span>
-              <span className="text-sm font-black text-slate-900">{treasuryTotal.toLocaleString()} ج.م</span>
-            </div>
-          </div>
-          <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
-            درج الكاشير: {posDrawerBalance.toLocaleString()} ج.م
-          </span>
+      )}
+      {d.finance && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Card icon={Wallet} color="bg-rose-100 text-rose-700" label="مصروفات النهاردة" value={money(d.finance.expenses_today)} sub="ج.م" onClick={() => nav('/expenses')} />
+          <Card icon={Truck} color="bg-amber-100 text-amber-700" label="علينا للموردين" value={money(d.finance.supplier_dues)} sub="ج.م" onClick={() => nav('/suppliers')} />
+          <Card icon={ShoppingCart} color="bg-blue-100 text-blue-700" label="ديون العملاء" value={money(d.finance.customer_debts)} sub="ج.م" onClick={() => nav('/customers')} />
+          <Card icon={AlertTriangle} color="bg-violet-100 text-violet-700" label="ورديات فيها عجز (7 أيام)" value={d.finance.short_shifts} onClick={() => nav('/shifts')} />
         </div>
-
-        {/* SELLABLE STOCK */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center">
-              <Package size={20} />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-slate-500 block">المخزون الجاهز للبيع</span>
-              <span className="text-sm font-black text-slate-900">{totalSellableStockKg.toFixed(2)} كجم</span>
-            </div>
+      )}
+      {mg && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{mg.cards.map((x) => <Card key={x.label} icon={TrendingUp} color="bg-emerald-100 text-emerald-700" label={x.label} value={money(x.value)} sub={x.type === 'money' ? 'ج.م' : ''} />)}</div>
+          <Box title="المبيعات آخر 30 يوم" icon={TrendingUp}>
+            <div className="flex items-end gap-1 h-40" dir="ltr">{mg.series.map((x) => <div key={x.d} className="flex-1 flex flex-col justify-end h-full"><div className="w-full bg-emerald-500 rounded-t hover:bg-emerald-700" style={{ height: `${Math.max(1, x.v / maxS * 100)}%` }} title={`${x.d}: ${money(x.v)}`} /></div>)}</div>
+            <div className="flex justify-between text-[10px] text-slate-400" dir="ltr"><span>{mg.series[0].d}</span><span>{mg.series[mg.series.length - 1].d}</span></div>
+          </Box>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <Box title="طرق الدفع النهاردة" icon={Wallet}>{mg.methods.length ? <Bars rows={mg.methods} v="total" /> : <div className="text-xs text-slate-400">لسه مفيش بيع</div>}</Box>
+            <Box title="الأكثر مبيعاً النهاردة" icon={Tag}>{mg.top.length ? <Bars rows={mg.top} v="sales" /> : <div className="text-xs text-slate-400">لسه مفيش بيع</div>}</Box>
+            <Box title="محتاج انتباهك" icon={AlertTriangle}>{mg.attention.map((x) => <button key={x.k} type="button" onClick={() => nav(x.to)} className={`w-full flex justify-between text-xs rounded-lg p-2 mb-1 cursor-pointer ${x.v ? 'bg-rose-50 text-rose-800 font-bold' : 'bg-slate-50 text-slate-500'}`}><span>{x.k}</span><b>{x.v}</b></button>)}</Box>
           </div>
-          <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200">
-            مفحوص بدفتر الأستاذ
-          </span>
-        </div>
-
-        {/* PENDING BALES */}
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center">
-              <Layers size={20} />
-            </div>
-            <div>
-              <span className="text-[11px] font-bold text-slate-500 block">بالات بانتظار الفرز</span>
-              <span className="text-sm font-black text-slate-900">{pendingBalesCount} بالة خام</span>
-            </div>
-          </div>
-          <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-1 rounded-lg border border-purple-200">
-            جاهزة للتوجيه
-          </span>
-        </div>
-
-      </div>
-
-      {/* 2. REAL-TIME TODAY KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        
-        {/* TODAY SALES */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2 relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">مبيعات اليوم الصافية</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <DollarSign size={18} />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-slate-900">
-            {todaySales.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} <span className="text-xs font-bold text-slate-500">ج.م</span>
-          </div>
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-            <span className="text-emerald-700 font-bold flex items-center gap-1">
-              <ArrowUpRight size={14} /> عدد الفواتير: {todayInvoicesCount}
-            </span>
-            <span className="text-slate-400 font-mono">اليوم</span>
+        </>
+      )}
+      {edit && (
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-3">
+            <div className="flex items-center justify-between"><div className="text-base font-bold">التارجت ورسالة الإدارة</div><button type="button" onClick={() => setEdit(false)} className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><X size={16} /></button></div>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">تارجت المبيعات اليومي (ج.م) - 0 يعني مفيش تارجت<input type="number" min="0" value={form.daily_target} onChange={(e) => setForm({ ...form, daily_target: e.target.value })} className="h-10 px-3 border border-slate-300 rounded-lg w-full" /></label>
+            <label className="text-xs font-bold text-slate-600 space-y-1 block">رسالة لكل الموظفين (سيبها فاضية لو مفيش)<textarea rows={3} value={form.announcement} onChange={(e) => setForm({ ...form, announcement: e.target.value })} className="p-3 border border-slate-300 rounded-lg w-full" /></label>
+            {err && <div className="text-xs font-bold text-rose-700">{err}</div>}
+            <button type="button" onClick={save} className="w-full h-11 rounded-xl bg-emerald-600 text-white font-bold cursor-pointer">حفظ</button>
           </div>
         </div>
-
-        {/* TODAY GROSS PROFIT */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">مجمل ربح اليوم (Gross Profit)</span>
-            <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center">
-              <TrendingUp size={18} />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-blue-900">
-            {todayGrossProfit.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} <span className="text-xs font-bold text-slate-500">ج.م</span>
-          </div>
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-            <span className="text-blue-700 font-bold">
-              هامش الربح: {todaySales > 0 ? ((todayGrossProfit / todaySales) * 100).toFixed(1) : 0}%
-            </span>
-            <span className="text-slate-400 font-mono">بعد خصم COGS</span>
-          </div>
-        </div>
-
-        {/* TODAY EXPENSES */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500">مصروفات ونثريات اليوم</span>
-            <div className="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center">
-              <ArrowDownRight size={18} />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-rose-900">
-            {todayExpenses.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} <span className="text-xs font-bold text-slate-500">ج.م</span>
-          </div>
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-            <span className="text-rose-700 font-bold">خصم مباشر من الخزينة</span>
-            <span className="text-slate-400 font-mono">نثريات وسُلف</span>
-          </div>
-        </div>
-
-        {/* TODAY NET PROFIT */}
-        <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-md space-y-2 border border-slate-800">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400">صافي ربح اليوم الفعلي (Net)</span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-              <CheckCircle2 size={18} />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-emerald-400">
-            {todayNetProfit.toLocaleString('ar-EG', { minimumFractionDigits: 2 })} <span className="text-xs font-bold text-slate-400">ج.م</span>
-          </div>
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800">
-            <span className="text-emerald-400 font-bold">الربح الصافي النهائي</span>
-            <span className="text-slate-400 font-mono">اليوم</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 3. SMART MANAGER ALERTS SECTION */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* LOW STOCK ALERTS */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-          <div className="flex items-center justify-between border-b pb-2">
-            <h3 className="text-xs font-black text-slate-800 flex items-center gap-2">
-              <AlertTriangle className="text-amber-500" size={16} />
-              تنبيهات الأصناف تحت حد الأمان
-            </h3>
-            <span className="text-[11px] font-bold text-slate-500">{lowStockAlerts.length} أصناف تحتاح توريد</span>
-          </div>
-
-          {lowStockAlerts.length === 0 ? (
-            <div className="p-4 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-emerald-600" />
-              جميع الأصناف متوفرة فوق الحد الأدنى للأمان — لا يوجد نقص مخزني ✅
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {lowStockAlerts.map(st => (
-                <div key={st.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-black text-slate-900 block">{st.product_name || st.product?.name}</span>
-                    <span className="text-[10px] text-slate-500">كود: {st.product?.code || '—'}</span>
-                  </div>
-                  <div className="text-left">
-                    <span className="font-black text-rose-600 block">{parseFloat(st.total_weight_kg || 0).toFixed(2)} كجم متبقي</span>
-                    <span className="text-[10px] text-slate-400">الحد الأدنى: {st.product?.min_stock_level || 5} كجم</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* SHIFT DISCREPANCIES / REVIEW */}
-        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
-          <div className="flex items-center justify-between border-b pb-2">
-            <h3 className="text-xs font-black text-slate-800 flex items-center gap-2">
-              <AlertCircle className="text-rose-500" size={16} />
-              مطابقة ومراجعة ورديات الكاشيرية
-            </h3>
-            <span className="text-[11px] font-bold text-slate-500">سجل الفرق والنقدية</span>
-          </div>
-
-          {shiftDiscrepancies.length === 0 ? (
-            <div className="p-4 bg-emerald-50 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-emerald-600" />
-              جميع الورديات المغلقة متوازنة ومطابقة 100% بدون عجز أو زيادة ✅
-            </div>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {shiftDiscrepancies.map(sh => (
-                <div key={sh.id} className="py-2.5 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-black text-slate-900 block">وردية #{sh.shift_code} ({sh.cashier_username})</span>
-                    <span className="text-[10px] text-slate-500">تاريخ: {new Date(sh.opened_at).toLocaleDateString('ar-EG')}</span>
-                  </div>
-                  <div className="text-left">
-                    <span className={`font-black text-xs block ${parseFloat(sh.difference || 0) < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                      {parseFloat(sh.difference || 0) < 0 ? `عجز: ${sh.difference} ج.م` : `زيادة: +${sh.difference} ج.م`}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </div>
-
-      {/* 4. REAL-TIME ANALYTICS & TABLES */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* TOP SELLERS TODAY */}
-        <div className="lg:col-span-5 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3">
-          <div className="border-b pb-2 flex items-center justify-between">
-            <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-              <Tag size={16} className="text-emerald-600" />
-              الأصناف الأكثر مبيعاً ورواجاً اليوم
-            </h3>
-            <span className="text-[10px] font-bold text-slate-400">حسب الإيراد</span>
-          </div>
-
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 text-slate-700 font-bold border-y">
-                <tr>
-                  <th className="p-2">الصنف</th>
-                  <th className="p-2">الوزن المباع</th>
-                  <th className="p-2 text-left">إجمالي الإيراد</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {topSellers.length === 0 ? (
-                  <tr>
-                    <td colSpan="3" className="text-center py-8 text-slate-400">لا توجد مبيعات مسجلة اليوم بعد</td>
-                  </tr>
-                ) : (
-                  topSellers.map((item, i) => (
-                    <tr key={i} className="hover:bg-slate-50">
-                      <td className="p-2 font-black text-slate-900">{item.name}</td>
-                      <td className="p-2 font-mono font-bold text-slate-700">{item.weight.toFixed(3)} كجم</td>
-                      <td className="p-2 text-left font-black text-emerald-700">{item.amount.toFixed(2)} ج.م</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* RECENT POS INVOICES */}
-        <div className="lg:col-span-7 bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-3">
-          <div className="border-b pb-2 flex items-center justify-between">
-            <h3 className="text-xs font-black text-slate-800 flex items-center gap-1.5">
-              <Receipt size={16} className="text-blue-600" />
-              أحدث الفواتير الصادرة من نقاط البيع
-            </h3>
-            <span className="text-[10px] font-bold text-slate-400">آخر 5 فواتير</span>
-          </div>
-
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full text-right text-xs">
-              <thead className="bg-slate-50 text-slate-700 font-bold border-y">
-                <tr>
-                  <th className="p-2">رقم الفاتورة</th>
-                  <th className="p-2">التاريخ والوقت</th>
-                  <th className="p-2">الكاشير</th>
-                  <th className="p-2 text-left">المبلغ المطلوب</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 font-medium">
-                {recentInvoices.length === 0 ? (
-                  <tr>
-                    <td colSpan="4" className="text-center py-8 text-slate-400">لا توجد فواتير صادر حتى الآن</td>
-                  </tr>
-                ) : (
-                  recentInvoices.map(inv => (
-                    <tr key={inv.id} className="hover:bg-slate-50">
-                      <td className="p-2 font-mono font-bold text-slate-800">{inv.invoice_number}</td>
-                      <td className="p-2 font-mono text-slate-500">{new Date(inv.invoice_date_time).toLocaleTimeString('ar-EG')}</td>
-                      <td className="p-2 font-bold text-slate-700">{inv.cashier_username || 'كاشير'}</td>
-                      <td className="p-2 text-left font-black text-slate-900">{parseFloat(inv.total_amount).toFixed(2)} ج.م</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-      </div>
-
+      )}
     </div>
   );
 }

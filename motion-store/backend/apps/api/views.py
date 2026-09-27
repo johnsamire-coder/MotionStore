@@ -2289,3 +2289,96 @@ def _verify_checkout(tenant, data, terminal):
     if manual > 0.05 and not mgr:
         return 'الخصم اليدوي محتاج باسورد مدير صح'
     return None
+
+class HomeViewSet(_rvs.ViewSet):
+    permission_classes = [_RIsAuth]
+
+    def _ctx(self, request):
+        from apps.api.screen_permissions import allowed_screens
+        u = request.user
+        admin = u.is_superuser or getattr(u, 'role', None) == 'ADMIN'
+        mine = ['*'] if admin else allowed_screens(u)
+        return u, admin, (lambda *s: admin or '*' in mine or any(x in mine for x in s))
+
+    def list(self, request):
+        from datetime import timedelta
+        from django.utils import timezone
+        from django.db.models import Sum
+        from apps.api import reports_v2 as R
+        from apps.sales.models import SaleInvoice, SalePayment, DeferredSale, HomeSetting
+        from apps.shifts.models import Shift, CashierCustody
+        from apps.returns.models import SalesReturn
+        from apps.discounts.models import Offer
+        from apps.treasury.models import Expense
+        u, admin, has = self._ctx(request)
+        t = u.tenant; today = timezone.localdate(); f = lambda x: float(x or 0)
+        hs = HomeSetting.objects.filter(tenant=t).first()
+        out = {'user': {'name': u.get_full_name() or u.username, 'role': u.role}, 'company': t.name if t else '', 'date': str(today),
+               'announcement': hs.announcement if hs else '', 'daily_target': f(hs.daily_target) if hs else 0, 'can_edit': admin or u.role == 'MANAGER'}
+        out['today_sales'] = f(SaleInvoice.objects.filter(tenant=t, invoice_date_time__date=today).aggregate(s=Sum('total_amount'))['s'])
+        if has('/pos'):
+            sh = Shift.objects.filter(tenant=t, cashier=u, status='OPEN').select_related('terminal').first()
+            my = SaleInvoice.objects.filter(tenant=t, cashier=u, invoice_date_time__date=today)
+            bym = {}
+            for pay in SalePayment.objects.filter(sale_invoice__in=my).select_related('payment_method'):
+                bym[pay.payment_method.name] = bym.get(pay.payment_method.name, 0) + f(pay.amount)
+            shop_q = SaleInvoice.objects.filter(tenant=t, invoice_date_time__date=today)
+            if sh:
+                shop_q = shop_q.filter(pos_terminal=sh.terminal)
+            dq = DeferredSale.objects.filter(tenant=t, status='OPEN', due_date__lte=today).select_related('customer')
+            if sh:
+                dq = dq.filter(terminal=sh.terminal)
+            offers = []
+            for o in Offer.objects.filter(tenant=t, is_active=True):
+                ok, _ = _offer_is_live(o, str(sh.terminal.default_warehouse_id) if sh and sh.terminal.default_warehouse_id else None)
+                if ok and o.apply_mode != 'COUPON':
+                    offers.append({'name': o.name, 'auto': o.apply_mode == 'AUTO'})
+            out['cashier'] = {
+                'shift': {'code': sh.shift_code, 'since': sh.opened_at, 'terminal': sh.terminal.name} if sh else None,
+                'my_count': my.count(), 'my_total': f(my.aggregate(s=Sum('total_amount'))['s']),
+                'by_method': [{'k': k, 'v': round(val, 2)} for k, val in bym.items()],
+                'my_returns': f(SalesReturn.objects.filter(tenant=t, cashier=u, return_date_time__date=today).aggregate(s=Sum('total_refund_amount'))['s']),
+                'shop_sales': f(shop_q.aggregate(s=Sum('total_amount'))['s']),
+                'deferred': [{'no': d.number, 'cust': d.customer.name, 'phone': d.customer.phone, 'due': str(d.due_date), 'late': d.due_date < today, 'total': f(d.total_amount)} for d in dq[:8]],
+                'offers': offers,
+                'custody': f(CashierCustody.objects.filter(tenant=t, cashier=u, status='OPEN').aggregate(s=Sum('amount'))['s']),
+                'last': [{'no': i.invoice_number, 'at': i.invoice_date_time, 'total': f(i.total_amount)} for i in my.order_by('-invoice_date_time')[:5]],
+            }
+        if has('/inventory', '/sorting', '/purchasing'):
+            pend = R.pending_lots(t, {})['rows']
+            out['stock'] = {'pending_count': len(pend), 'pending': pend[:6], 'low': R.low_stock(t, {})['rows'][:8],
+                            'transfers_today': R.M('transfers', 'TransferOrder').objects.filter(tenant=t, transfer_date=today).count()}
+        if has('/sorting'):
+            out['sorting'] = {'recent': R.sorting_results(t, {})['rows'][-5:][::-1]}
+        if has('/treasury', '/expenses', '/reports'):
+            out['finance'] = {'expenses_today': f(Expense.objects.filter(tenant=t, status='ACTIVE', expense_date=today).aggregate(s=Sum('amount'))['s']),
+                              'supplier_dues': round(sum(r['bal'] for r in R.supplier_balances(t, {})['rows'] if r['bal'] > 0), 2),
+                              'customer_debts': round(sum(r['bal'] for r in R.customer_debts(t, {})['rows']), 2),
+                              'short_shifts': Shift.objects.filter(tenant=t, status='CLOSED', difference__lt=0, closed_at__date__gte=today - timedelta(days=7)).count()}
+        if admin or u.role == 'MANAGER':
+            series = []
+            for i in range(29, -1, -1):
+                d = today - timedelta(days=i)
+                series.append({'d': str(d)[5:], 'v': f(SaleInvoice.objects.filter(tenant=t, invoice_date_time__date=d).aggregate(s=Sum('total_amount'))['s'])})
+            tp = {'date_from': str(today), 'date_to': str(today)}
+            out['manager'] = {'cards': R.dashboard(t, {})['cards'], 'series': series, 'methods': R.sales_by_method(t, tp)['rows'], 'top': R.top_items(t, tp)['rows'][:5],
+                              'attention': [{'k': 'عهد كاشيرية مفتوحة', 'v': CashierCustody.objects.filter(tenant=t, status='OPEN').count(), 'to': '/treasury'},
+                                            {'k': 'أمانات متأخرة', 'v': DeferredSale.objects.filter(tenant=t, status='OPEN', due_date__lt=today).count(), 'to': '/pos'},
+                                            {'k': 'ورديات فيها عجز (7 أيام)', 'v': Shift.objects.filter(tenant=t, status='CLOSED', difference__lt=0, closed_at__date__gte=today - timedelta(days=7)).count(), 'to': '/shifts'},
+                                            {'k': 'أصناف قربت تخلص', 'v': len(R.low_stock(t, {})['rows']), 'to': '/inventory'}]}
+        return Response(out)
+
+    @action(detail=False, methods=['post'], url_path='settings')
+    def save_home_settings(self, request):
+        from apps.sales.models import HomeSetting
+        u, admin, has = self._ctx(request)
+        if not (admin or u.role == 'MANAGER'):
+            return Response({'detail': 'المدير بس يقدر يغيّر التارجت والرسالة'}, status=403)
+        hs, _ = HomeSetting.objects.get_or_create(tenant=u.tenant)
+        if 'daily_target' in request.data:
+            hs.daily_target = Decimal(str(request.data.get('daily_target') or '0'))
+        if 'announcement' in request.data:
+            hs.announcement = (request.data.get('announcement') or '').strip()
+        hs.updated_by = u
+        hs.save()
+        return Response({'ok': True})
