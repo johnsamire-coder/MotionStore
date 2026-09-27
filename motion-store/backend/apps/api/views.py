@@ -1221,6 +1221,16 @@ class TreasuryViewSet(BaseTenantViewSet):
     model = Treasury
     serializer_class = TreasurySerializer
 
+    def get_queryset(self):  # drawers-only for roles without treasury screen
+        qs = super().get_queryset()
+        u = self.request.user
+        if u.is_authenticated and not (u.is_superuser or getattr(u, 'role', None) == 'ADMIN'):
+            from apps.api.screen_permissions import allowed_screens
+            mine = allowed_screens(u)
+            if not ('*' in mine or any(sc in mine for sc in ('/treasury', '/expenses', '/settings', '/'))):
+                qs = qs.filter(treasury_type='POS_DRAWER')
+        return qs
+
     def _money_err(self, ex):
         msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
         return Response({'detail': 'الخزنة مفيهاش فلوس كفاية للمبلغ ده' if 'Insufficient' in msg else msg}, status=400)

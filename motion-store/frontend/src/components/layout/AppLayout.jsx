@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import axiosClient from '../../api/axiosClient';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -112,6 +112,13 @@ export default function AppLayout() {
 
   const ribbonItems = allRibbonItems.filter(item => isAllowed(item.to));
   const navigation = allNavigation.filter(item => isAllowed(item.to));
+  // ROUTE_GUARD
+  const _guardLoc = useLocation();
+  useEffect(() => {
+    if (!user || !navigation.length) return;
+    const p = _guardLoc.pathname || '/';
+    if (p !== '/login' && !isAllowed(p)) navigate(navigation[0].to, { replace: true });
+  }, [_guardLoc.pathname, navigation.length]);
 
   return (
     <div className="flex h-screen bg-slate-100 font-sans" dir={isRTL ? 'rtl' : 'ltr'}>

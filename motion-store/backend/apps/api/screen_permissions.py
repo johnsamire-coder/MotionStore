@@ -30,6 +30,10 @@ RULES = [
     (r'^/api/v1/sales/numbering', W, ['/invoices']),
     (r'^/api/v1/sales/?$', {'GET'}, ['/invoices', '/reports', '/']),
     (r'^/api/v1/returns/', A, ['/returns']),
+    (r'^/api/v1/(treasury-transactions|journal-entries)/', A, ['/treasury', '/expenses', '/reports', '/']),
+    (r'^/api/v1/(raw-lots|purchase-line-items)/', A, ['/sorting', '/purchasing', '/inventory', '/']),
+    (r'^/api/v1/inventory-ledger/', A, ['/inventory', '/reports', '/']),
+    (r'^/api/v1/customers/?$', {'GET'}, ['/customers', '/reports', '/']),
 ]
 
 
