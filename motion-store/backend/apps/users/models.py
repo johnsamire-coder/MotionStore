@@ -36,7 +36,8 @@ class User(AbstractUser):
 
 
 class RolePermission(models.Model):
-    role = models.CharField(max_length=50, choices=User.ROLE_CHOICES, db_index=True, unique=True)
+    tenant = models.ForeignKey('tenants.Tenant', on_delete=models.CASCADE, null=True, blank=True, related_name='role_permissions')
+    role = models.CharField(max_length=50, choices=User.ROLE_CHOICES, db_index=True)
     allowed_screens = models.JSONField(
         default=list, 
         help_text="List of frontend route paths allowed for this role. Example: ['/pos', '/reports']"

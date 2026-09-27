@@ -1150,6 +1150,17 @@ class RolePermissionViewSet(viewsets.ModelViewSet):
     # This is a system-wide configuration, not tenant-isolated (or can be tenant-isolated if you prefer, but usually global for the app)
     queryset = RolePermission.objects.all()
     serializer_class = RolePermissionSerializer
+
+    def get_queryset(self):
+        u = self.request.user
+        qs = RolePermission.objects.filter(tenant_id=getattr(u, 'tenant_id', None))
+        if not (u.is_superuser or getattr(u, 'role', None) == 'ADMIN'):
+            qs = qs.filter(role=getattr(u, 'role', None))
+        r = self.request.query_params.get('role')
+        return qs.filter(role=r) if r else qs
+
+    def perform_create(self, serializer):
+        serializer.save(tenant_id=getattr(self.request.user, 'tenant_id', None))
     
     def get_permissions(self):
         # Only ADMIN should edit permissions, but anyone can read to know their own limits
@@ -1171,7 +1182,7 @@ class UserViewSet(BaseTenantViewSet):
     def perform_update(self, serializer):
         user_inst = serializer.save()
         password = self.request.data.get('password')
-        if password and password.trim():
+        if password and str(password).strip():
             user_inst.set_password(password)
             user_inst.save()
 
@@ -1188,6 +1199,10 @@ class UserViewSet(BaseTenantViewSet):
 
 class TenantViewSet(viewsets.ModelViewSet):
     queryset = Tenant.objects.all()
+
+    def get_queryset(self):
+        u = self.request.user
+        return Tenant.objects.filter(pk=getattr(u, 'tenant_id', None)) if u.is_authenticated else Tenant.objects.none()
     serializer_class = TenantSerializer
 
     @action(detail=False, methods=['get'], permission_classes=[AllowAny])
@@ -2158,7 +2173,7 @@ from rest_framework.permissions import IsAuthenticated as _RIsAuth
 
 
 class ReportsV2ViewSet(_rvs.ViewSet):
-    permission_classes = [_RIsAuth]
+    permission_classes = [_RIsAuth, __import__('apps.api.screen_permissions', fromlist=['ScreenPermission']).ScreenPermission]
 
     def list(self, request):
         from apps.api import reports_v2 as R
