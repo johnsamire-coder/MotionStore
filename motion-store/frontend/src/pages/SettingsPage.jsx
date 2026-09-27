@@ -1,4 +1,5 @@
 import ReceiptSettings from '../components/ReceiptSettings';
+import OperationsSettings from '../components/OperationsSettings';
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
@@ -620,6 +621,8 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {activeTab === 'COMPANY' && <OperationsSettings />}
 
       {/* SECURITY PASSWORD CONFIRMATION MODAL - High Z-Index z-[70] */}
       {showSecurityModal && (
