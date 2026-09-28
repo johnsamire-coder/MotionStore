@@ -1,175 +1,151 @@
-from decimal import Decimal, ROUND_HALF_UP
+﻿from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
-from apps.sorting.models import SortingOrder, SortingStatus, ReconciliationStatus
-from .models import CostingConfiguration, CostingParameter, CostingCalculationRecord, CostingMethod, WasteTreatment
+from apps.sorting.models import SortingOrder, SortingStatus
+from .models import CostingConfiguration, CostingCalculationRecord, CostingMethod, WasteTreatment
 
 def quantize_amount(amount: Decimal) -> Decimal:
-    """ Helper to precisely round to 2 decimal places for financial calculations """
-    return amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    """ تقريب دقيق لأقرب قرشين (0.01) للحسابات المالية """
+    if amount is None:
+        return Decimal('0.00')
+    return Decimal(str(amount)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 @transaction.atomic
 def calculate_sorting_costs(sorting_order_id) -> CostingCalculationRecord:
     """
-    Core Configurable Costing Engine.
-    Executes financial cost allocation matrices over sorting outputs and waste.
+    محرك حساب التكلفة الذكي وفق ملف التصميم:
+    1. بالقطعة (PIECE)
+    2. بالوزن (WEIGHT)
+    3. بنسب ثابتة لكل درجة (PERCENTAGE)
+    مع حساب وتوزيع نصيب الهالك كخسارة منفصلة (خسارة هالك الفرز).
     """
-    # 1. Fetch Order and confirm state
     order = SortingOrder.objects.select_related('raw_lot').get(pk=sorting_order_id)
-    if order.reconciliation_status != ReconciliationStatus.BALANCED:
-        order.reconcile()
-        if order.reconciliation_status != ReconciliationStatus.BALANCED:
-            raise ValueError("Cannot calculate costs on unbalanced sorting weights.")
+    tenant = order.tenant
 
-    # 2. Retrieve Active Costing Policy
-    config = CostingConfiguration.objects.get(tenant=order.tenant, is_active=True)
-    params = {p.grade: p for p in config.parameters.all()}
+    # جلب سياسة التكلفة الفعالة للشركة
+    config = CostingConfiguration.objects.filter(tenant=tenant, is_active=True).first()
+    if not config:
+        config = CostingConfiguration.objects.create(
+            tenant=tenant,
+            name="سياسة التكلفة الافتراضية",
+            method=CostingMethod.WEIGHT,
+            is_active=True
+        )
 
-    # Raw values
-    total_raw_cost = order.raw_lot.purchase_cost
-    total_raw_weight = order.raw_lot.original_weight_kg
-    
-    # Outputs and Wastes
+    total_purchase_cost = quantize_amount(order.raw_lot.purchase_cost)
     output_lines = list(order.output_lines.all())
     waste_lines = list(order.waste_lines.all())
 
-    total_good_weight = order.total_good_weight_kg
-    total_waste_weight = order.total_waste_weight_kg
+    # حساب إجمالي الأوزان والقطع للمخرجات الصالحة والهالك
+    good_weight = sum((line.weight_kg or Decimal('0.000')) for line in output_lines)
+    waste_weight = sum((line.weight_kg or Decimal('0.000')) for line in waste_lines)
+    total_weight = good_weight + waste_weight
 
-    # === STEP A: Waste Cost Treatment ===
-    allocated_waste_cost = Decimal('0.00')
-    cost_to_allocate_to_good_goods = total_raw_cost
+    good_pieces = sum((line.quantity_pieces or 0) for line in output_lines)
+    waste_pieces = sum((line.quantity_pieces or 0) for line in waste_lines)
+    total_pieces = good_pieces + waste_pieces
 
-    if config.waste_treatment == WasteTreatment.ABSORBED:
-        # Good output absorbs all cost, waste receives 0 EGP cost
-        allocated_waste_cost = Decimal('0.00')
-        cost_to_allocate_to_good_goods = total_raw_cost
+    waste_loss_amount = Decimal('0.00')
+    method_used = config.method
 
-    elif config.waste_treatment == WasteTreatment.SEPARATE:
-        # Waste recognized as separate proportional loss
-        if total_raw_weight > 0:
-            allocated_waste_cost = (total_waste_weight / total_raw_weight) * total_raw_cost
-        cost_to_allocate_to_good_goods = total_raw_cost - allocated_waste_cost
-
-    elif config.waste_treatment == WasteTreatment.SPLIT:
-        # Split normal/abnormal waste
-        normal_limit_pct = config.normal_waste_percentage / Decimal('100.00')
-        normal_limit_weight = total_raw_weight * normal_limit_pct
+    # ==========================================
+    # 1. طريقة التوزيع بالوزن (WEIGHT)
+    # ==========================================
+    if method_used in [CostingMethod.WEIGHT, CostingMethod.EQUAL_WEIGHT]:
+        cost_per_kg = (total_purchase_cost / total_weight) if total_weight > 0 else Decimal('0.00')
         
-        if total_waste_weight > normal_limit_weight:
-            abnormal_weight = total_waste_weight - normal_limit_weight
-            # Abnormal is separate loss, normal is absorbed
-            abnormal_waste_cost = (abnormal_weight / total_raw_weight) * total_raw_cost
-            allocated_waste_cost = abnormal_waste_cost
-        else:
-            allocated_waste_cost = Decimal('0.00')
-            
-        cost_to_allocate_to_good_goods = total_raw_cost - allocated_waste_cost
+        # توزيع التكلفة على سطور المخرجات الصالحة
+        for line in output_lines:
+            line_wt = line.weight_kg or Decimal('0.000')
+            line.allocated_cost = quantize_amount(line_wt * cost_per_kg)
+            line.cost_per_kg = quantize_amount(cost_per_kg)
+            line.save(update_fields=['allocated_cost', 'cost_per_kg'])
 
-    # Distribute computed waste cost to waste lines
-    if waste_lines and total_waste_weight > 0:
+        # توزيع التكلفة على سطور الهالك
         for w_line in waste_lines:
-            share = w_line.weight_kg / total_waste_weight
-            w_line.allocated_cost = quantize_amount(allocated_waste_cost * share)
-            w_line.save()
+            w_wt = w_line.weight_kg or Decimal('0.000')
+            w_cost = quantize_amount(w_wt * cost_per_kg)
+            w_line.allocated_cost = w_cost
+            w_line.save(update_fields=['allocated_cost'])
+            waste_loss_amount += w_cost
 
-    # === STEP B: Good Output Cost Allocation ===
-    total_allocated_good_cost = Decimal('0.00')
-    variance_amount = Decimal('0.00')
-
-    # Method A: EQUAL WEIGHT
-    if config.method == CostingMethod.EQUAL_WEIGHT:
-        if total_good_weight > 0:
-            cost_per_kg = cost_to_allocate_to_good_goods / total_good_weight
-            for line in output_lines:
-                line.cost_per_kg = quantize_amount(cost_per_kg)
-                line.allocated_cost = quantize_amount(line.weight_kg * cost_per_kg)
-                line.save()
-                total_allocated_good_cost += line.allocated_cost
-
-    # Method B: WEIGHTED COEFFICIENTS
-    elif config.method == CostingMethod.COEFFICIENTS:
-        weighted_weight_sum = Decimal('0.00')
-        line_weighted_weights = {}
-
-        for line in output_lines:
-            coef_val = Decimal('1.00')
-            if line.grade in params:
-                coef_val = params[line.grade].coefficient
-            
-            weighted_wt = line.weight_kg * coef_val
-            line_weighted_weights[line.id] = weighted_wt
-            weighted_weight_sum += weighted_wt
-
-        if weighted_weight_sum > 0:
-            cost_per_weighted_unit = cost_to_allocate_to_good_goods / weighted_weight_sum
-            for line in output_lines:
-                weighted_wt = line_weighted_weights[line.id]
-                line.allocated_cost = quantize_amount(weighted_wt * cost_per_weighted_unit)
-                if line.weight_kg > 0:
-                    line.cost_per_kg = quantize_amount(line.allocated_cost / line.weight_kg)
-                line.save()
-                total_allocated_good_cost += line.allocated_cost
-
-    # Method C: RELATIVE SALES VALUE
-    elif config.method == CostingMethod.SALES_VALUE:
-        total_expected_sales_value = Decimal('0.00')
-        line_expected_sales = {}
-
-        for line in output_lines:
-            expected_price = Decimal('0.00')
-            if line.grade in params:
-                expected_price = params[line.grade].expected_selling_price
-            
-            sales_val = line.weight_kg * expected_price
-            line_expected_sales[line.id] = sales_val
-            total_expected_sales_value += sales_val
-
-        if total_expected_sales_value > 0:
-            for line in output_lines:
-                sales_val = line_expected_sales[line.id]
-                ratio = sales_val / total_expected_sales_value
-                line.allocated_cost = quantize_amount(cost_to_allocate_to_good_goods * ratio)
-                if line.weight_kg > 0:
-                    line.cost_per_kg = quantize_amount(line.allocated_cost / line.weight_kg)
-                line.save()
-                total_allocated_good_cost += line.allocated_cost
-
-    # Method D: STANDARD COSTING
-    elif config.method == CostingMethod.STANDARD:
-        for line in output_lines:
-            std_cost = Decimal('0.00')
-            if line.grade in params:
-                std_cost = params[line.grade].standard_cost_per_kg
-            
-            line.cost_per_kg = std_cost
-            line.allocated_cost = quantize_amount(line.weight_kg * std_cost)
-            line.save()
-            total_allocated_good_cost += line.allocated_cost
+    # ==========================================
+    # 2. طريقة التوزيع بالقطعة (PIECE)
+    # ==========================================
+    elif method_used == CostingMethod.PIECE:
+        cost_per_piece = (total_purchase_cost / Decimal(str(total_pieces))) if total_pieces > 0 else Decimal('0.00')
         
-        # Variance = Actual cost to allocate - total standard cost allocated
-        variance_amount = cost_to_allocate_to_good_goods - total_allocated_good_cost
+        for line in output_lines:
+            line_pcs = Decimal(str(line.quantity_pieces or 0))
+            line.allocated_cost = quantize_amount(line_pcs * cost_per_piece)
+            line.cost_per_kg = quantize_amount(line.allocated_cost / line.weight_kg) if (line.weight_kg and line.weight_kg > 0) else Decimal('0.00')
+            line.save(update_fields=['allocated_cost', 'cost_per_kg'])
 
-    # 3. Create auditing Calculation Record
-    param_audit = {}
-    for g, p in params.items():
-        param_audit[g] = {
-            'coefficient': str(p.coefficient),
-            'expected_selling_price': str(p.expected_selling_price),
-            'standard_cost_per_kg': str(p.standard_cost_per_kg)
-        }
+        for w_line in waste_lines:
+            w_pcs = Decimal(str(w_line.quantity_pieces or 0))
+            w_cost = quantize_amount(w_pcs * cost_per_piece) if total_pieces > 0 else quantize_amount((w_line.weight_kg / total_weight) * total_purchase_cost) if total_weight > 0 else Decimal('0.00')
+            w_line.allocated_cost = w_cost
+            w_line.save(update_fields=['allocated_cost'])
+            waste_loss_amount += w_cost
 
-    record = CostingCalculationRecord.objects.create(
+    # ==========================================
+    # 3. طريقة التوزيع بنسب الدرجات (PERCENTAGE)
+    # ==========================================
+    elif method_used == CostingMethod.PERCENTAGE:
+        # النسب المحددة في الإعدادات
+        pct_high = (config.high_grade_pct or Decimal('55.00')) / Decimal('100.00')
+        pct_mid = (config.mid_grade_pct or Decimal('30.00')) / Decimal('100.00')
+        pct_liq = (config.liquidation_grade_pct or Decimal('10.00')) / Decimal('100.00')
+        pct_waste = (config.waste_grade_pct or Decimal('5.00')) / Decimal('100.00')
+
+        high_cost_pool = total_purchase_cost * pct_high
+        mid_cost_pool = total_purchase_cost * pct_mid
+        liq_cost_pool = total_purchase_cost * pct_liq
+        waste_loss_amount = quantize_amount(total_purchase_cost * pct_waste)
+
+        # تجميع أوزان كل درجة لتوزيع حوض التكلفة الخاص بها
+        high_lines = [l for l in output_lines if str(l.grade).upper() in ['HIGH', 'GRADE_A', 'عالي', 'سوبر كريم', 'كريم']]
+        mid_lines = [l for l in output_lines if str(l.grade).upper() in ['MID', 'GRADE_B', 'وسط', 'درجة أولى']]
+        liq_lines = [l for l in output_lines if str(l.grade).upper() in ['LIQUIDATION', 'CLEARANCE', 'GRADE_C', 'تصفيات', 'درجة ثانية']]
+
+        def allocate_pool(lines, pool_amount):
+            pool_wt = sum((l.weight_kg or Decimal('0.000')) for l in lines)
+            for l in lines:
+                l_wt = l.weight_kg or Decimal('0.000')
+                l.allocated_cost = quantize_amount((l_wt / pool_wt) * pool_amount) if pool_wt > 0 else quantize_amount(pool_amount / len(lines)) if lines else Decimal('0.00')
+                l.cost_per_kg = quantize_amount(l.allocated_cost / l_wt) if l_wt > 0 else Decimal('0.00')
+                l.save(update_fields=['allocated_cost', 'cost_per_kg'])
+
+        allocate_pool(high_lines, high_cost_pool)
+        allocate_pool(mid_lines, mid_cost_pool)
+        allocate_pool(liq_lines, liq_cost_pool)
+
+        # توزيع تكلفة الهالك
+        if waste_lines:
+            for w_line in waste_lines:
+                w_wt = w_line.weight_kg or Decimal('0.000')
+                w_line.allocated_cost = quantize_amount((w_wt / waste_weight) * waste_loss_amount) if waste_weight > 0 else quantize_amount(waste_loss_amount / len(waste_lines))
+                w_line.save(update_fields=['allocated_cost'])
+
+    # تسجيل سجل التكلفة المعتمد
+    costing_record, _ = CostingCalculationRecord.objects.update_or_create(
         sorting_order=order,
-        method_used=config.method,
-        waste_treatment_used=config.waste_treatment,
-        parameters_used=param_audit,
-        variance_amount=quantize_amount(variance_amount),
-        waste_loss_amount=quantize_amount(allocated_waste_cost),
-        total_allocated_cost=quantize_amount(total_allocated_good_cost)
+        defaults={
+            'tenant': tenant,
+            'method_used': str(method_used),
+            'waste_treatment_used': WasteTreatment.SEPARATE,
+            'waste_loss_amount': quantize_amount(waste_loss_amount),
+            'total_allocated_cost': total_purchase_cost,
+            'parameters_used': {
+                'total_purchase_cost': float(total_purchase_cost),
+                'total_weight_kg': float(total_weight),
+                'total_pieces': total_pieces,
+                'method': str(method_used),
+                'high_pct': float(config.high_grade_pct),
+                'mid_pct': float(config.mid_grade_pct),
+                'liq_pct': float(config.liquidation_grade_pct),
+                'waste_pct': float(config.waste_grade_pct)
+            }
+        }
     )
 
-    # 4. Turn Raw Lot status to sorted
-    order.raw_lot.status = 'SORTED'
-    order.raw_lot.save()
-
-    return record
+    return costing_record

@@ -1,29 +1,52 @@
-﻿from django.urls import path, include
+from . import views
+from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import (
-    CategoryViewSet, ProductViewSet, SupplierViewSet, PurchaseInvoiceViewSet,
-    RawLotViewSet, SortingOrderViewSet, StockItemViewSet,
-    SaleInvoiceViewSet, ShiftViewSet, TreasuryViewSet,
-    JournalEntryViewSet, PriceListItemViewSet
-)
+from apps.api.views import *
 
 router = DefaultRouter()
-router.register(r'products/items', ProductViewSet, basename='product-item')
-router.register(r'products', ProductViewSet, basename='product-main')
-router.register(r'suppliers', SupplierViewSet, basename='supplier')
-router.register(r'purchases', PurchaseInvoiceViewSet, basename='purchase')
-router.register(r'raw-lots', RawLotViewSet, basename='raw-lot')
-router.register(r'sorting-orders', SortingOrderViewSet, basename='sorting-order')
-router.register(r'inventory/stock', StockItemViewSet, basename='stock-item')
-router.register(r'sales', SaleInvoiceViewSet, basename='sale')
-router.register(r'shifts', ShiftViewSet, basename='shift')
-router.register(r'treasuries', TreasuryViewSet, basename='treasury')
-router.register(r'accounting/entries', JournalEntryViewSet, basename='journal-entry')
-router.register(r'pricing/price-list-items', PriceListItemViewSet, basename='pricelist-item')
+router.register('store-items', views.StoreItemViewSet, basename='store-item')
+router.register('costing-config', views.CostingConfigurationViewSet, basename='costing-config')
+router.register(r"companies", CompanyViewSet, basename="companies")
+router.register(r"branches", BranchViewSet, basename="branches")
+router.register(r"warehouses", WarehouseViewSet, basename="warehouses")
+router.register(r"categories", CategoryViewSet, basename="categories")
+router.register(r"products", ProductViewSet, basename="products")
+router.register(r"suppliers", SupplierViewSet, basename="suppliers")
+router.register(r"purchases", PurchaseInvoiceViewSet, basename="purchases")
+router.register(r"purchase-options", PurchaseOptionViewSet, basename="purchase-options")
+router.register(r"customers", CustomerViewSet, basename="customers")
+router.register(r"payments", PaymentMethodViewSet, basename="payments")
+router.register(r"purchase-line-items", PurchaseLineItemViewSet, basename="purchase-line-items")
+router.register(r"raw-lots", RawLotViewSet, basename="raw-lots")
+router.register(r"sorting-orders", SortingOrderViewSet, basename="sorting-orders")
+router.register(r"stock-items", StockItemViewSet, basename="stock-items")
+router.register(r"inventory-ledger", InventoryTransactionViewSet, basename="inventory-ledger")
+router.register(r"transfers", TransferOrderViewSet, basename="transfers")
+router.register(r"weight-prices", WeightPriceViewSet, basename="weight-prices")
+router.register(r"piece-items", PieceItemViewSet, basename="piece-items")
+router.register(r"price-change-log", PriceChangeLogViewSet, basename="price-change-log")
+router.register(r"offers", OfferViewSet, basename="offers")
+router.register(r"deferred-sales", DeferredSaleViewSet, basename="deferred-sales")
+router.register(r"expense-categories", ExpenseCategoryViewSet, basename="expense-categories")
+router.register(r"expenses", ExpenseViewSet, basename="expenses")
+router.register(r"reports-v2", ReportsV2ViewSet, basename="reports-v2")
+router.register(r"home", HomeViewSet, basename="home")
+router.register(r"company-info", CompanyInfoViewSet, basename="company-info")
+router.register(r"price-lists", PriceListViewSet, basename="price-lists")
+router.register(r"price-list-items", PriceListItemViewSet, basename="price-list-items")
+router.register(r"price-history", PriceHistoryViewSet, basename="price-history")
+router.register(r"discount-rules", DiscountRuleViewSet, basename="discount-rules")
+router.register(r"role-permissions", RolePermissionViewSet, basename="role-permissions")
+router.register(r"users", UserViewSet, basename="users")
+router.register(r"tenants", TenantViewSet, basename="tenants")
+router.register(r"treasuries", TreasuryViewSet, basename="treasuries")
+router.register(r"pos-terminals", POSTerminalViewSet, basename="pos-terminals")
+router.register(r"shifts", ShiftViewSet, basename="shifts")
+router.register(r"sales", SaleInvoiceViewSet, basename="sales")
+router.register(r"journal-entries", JournalEntryViewSet, basename="journal-entries")
+router.register(r"treasury-transactions", TreasuryTransactionViewSet, basename="treasury-transactions")
+router.register(r"returns", SalesReturnViewSet, basename="returns")
 
 urlpatterns = [
-    # Explicit Category endpoints to ensure POST/GET works without collision
-    path('products/categories/', CategoryViewSet.as_view({'get': 'list', 'post': 'create'}), name='category-list-create'),
-    path('products/categories/<uuid:pk>/', CategoryViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='category-detail'),
-    path('', include(router.urls)),
+    path("", include(router.urls)),
 ]

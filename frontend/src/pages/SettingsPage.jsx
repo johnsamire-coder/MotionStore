@@ -1,3 +1,4 @@
+import CostingSettings from '../components/CostingSettings';
 ﻿import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
@@ -124,6 +125,9 @@ export default function SettingsPage() {
       {/* TAB 2: WAREHOUSES */}
       {activeTab === 'WAREHOUSES' && (
         <div className="space-y-6">
+      {/* سياسة وحساب التكلفة */}
+      <CostingSettings />
+
           <form onSubmit={handleAddWarehouse} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-xs space-y-4 text-xs">
             <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
               <Plus size={16} className="text-emerald-600" /> إضافة مخزن جديد للنظام
