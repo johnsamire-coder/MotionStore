@@ -1,3 +1,8 @@
+
+from decimal import Decimal
+from apps.costing.models import CostingConfiguration, CostingMethod
+from apps.pricing.models import StoreItem, PieceItem, PriceChangeLog
+from .serializers import CostingConfigurationSerializer, StoreItemSerializer, PieceItemSerializer
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -2804,3 +2809,157 @@ class CostingConfigurationViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
         serializer = self.get_serializer(config)
         return Response(serializer.data)
+
+
+
+class CostingConfigurationViewSet(viewsets.ModelViewSet):
+    serializer_class = CostingConfigurationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if tenant:
+            return CostingConfiguration.objects.filter(tenant=tenant)
+        return CostingConfiguration.objects.all()
+
+    @action(detail=False, methods=['get', 'patch', 'put'], url_path='current')
+    def current_config(self, request):
+        from apps.tenants.models import Tenant
+        tenant = getattr(request.user, 'tenant', None) or Tenant.objects.first()
+        config = CostingConfiguration.objects.filter(tenant=tenant, is_active=True).first()
+        if not config:
+            config = CostingConfiguration.objects.create(
+                tenant=tenant,
+                name="سياسة التكلفة الافتراضية",
+                method=CostingMethod.WEIGHT,
+                is_active=True
+            )
+        if request.method in ['PATCH', 'PUT']:
+            serializer = self.get_serializer(config, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        serializer = self.get_serializer(config)
+        return Response(serializer.data)
+
+
+class StoreItemViewSet(viewsets.ModelViewSet):
+    serializer_class = StoreItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        qs = StoreItem.objects.filter(tenant=tenant) if tenant else StoreItem.objects.all()
+
+        # مزامنة نتايج الفرز أوتوماتيك
+        try:
+            from apps.sorting.models import SortingOutputLine
+            from apps.warehouses.models import Warehouse
+            wh = Warehouse.objects.filter(tenant=tenant).first() if tenant else Warehouse.objects.first()
+            outputs = SortingOutputLine.objects.filter(tenant=tenant) if tenant else SortingOutputLine.objects.all()
+            for out in outputs:
+                cat_str = str(out.product.name) if out.product else "صنف فرز"
+                grd_str = str(out.get_grade_display()) if hasattr(out, 'get_grade_display') else str(out.grade)
+                StoreItem.objects.get_or_create(
+                    tenant=out.tenant,
+                    category_name=cat_str,
+                    sort_grade=grd_str,
+                    defaults={
+                        'warehouse': out.warehouse or wh,
+                        'source_kind': 'بالة',
+                        'segment': 'حريمي',
+                        'season': 'صيفي',
+                        'purchase_grade': 'سوبر كريم',
+                        'quantity_pieces': out.quantity_pieces or 0,
+                        'weight_kg': out.weight_kg or 0,
+                        'total_allocated_cost': out.allocated_cost or 0
+                    }
+                )
+            qs = StoreItem.objects.filter(tenant=tenant) if tenant else StoreItem.objects.all()
+        except Exception:
+            pass
+
+        branch_id = self.request.query_params.get('branch')
+        if branch_id and branch_id != 'ALL':
+            qs = qs.filter(
+                models.Q(branch_id=branch_id) |
+                models.Q(warehouse_id=branch_id) |
+                models.Q(warehouse__branch_id=branch_id)
+            )
+
+        search = self.request.query_params.get('search')
+        if search:
+            qs = qs.filter(
+                models.Q(category_name__icontains=search) |
+                models.Q(brand__icontains=search) |
+                models.Q(source_kind__icontains=search) |
+                models.Q(segment__icontains=search) |
+                models.Q(season__icontains=search) |
+                models.Q(purchase_grade__icontains=search) |
+                models.Q(sort_grade__icontains=search)
+            )
+        return qs.order_by('-sorted_at')
+
+
+class PieceItemViewSet(viewsets.ModelViewSet):
+    serializer_class = PieceItemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        return PieceItem.objects.filter(tenant=tenant) if tenant else PieceItem.objects.all()
+
+    def perform_create(self, serializer):
+        from apps.tenants.models import Tenant
+        tenant = getattr(self.request.user, 'tenant', None) or Tenant.objects.first()
+        serializer.save(tenant=tenant)
+
+    def perform_update(self, serializer):
+        old_instance = self.get_object()
+        old_piece_price = old_instance.price_per_piece
+        old_kg_price = old_instance.price_per_kg
+        updated_instance = serializer.save()
+
+        user = self.request.user
+        if old_piece_price != updated_instance.price_per_piece:
+            PriceChangeLog.objects.create(
+                tenant=updated_instance.tenant,
+                target='PIECE',
+                code=updated_instance.code,
+                name=updated_instance.name,
+                field='price_per_piece',
+                old_price=old_piece_price or Decimal('0.00'),
+                new_price=updated_instance.price_per_piece or Decimal('0.00'),
+                changed_by=user
+            )
+        if old_kg_price != updated_instance.price_per_kg:
+            PriceChangeLog.objects.create(
+                tenant=updated_instance.tenant,
+                target='WEIGHT',
+                code=updated_instance.code,
+                name=updated_instance.name,
+                field='price_per_kg',
+                old_price=old_kg_price or Decimal('0.00'),
+                new_price=updated_instance.price_per_kg or Decimal('0.00'),
+                changed_by=user
+            )
+
+    @action(detail=False, methods=['post'], url_path='bind-items')
+    def bind_items(self, request):
+        code_id = request.data.get('code_id')
+        item_ids = request.data.get('item_ids', [])
+        force_transfer = request.data.get('force_transfer', False)
+
+        piece_item = PieceItem.objects.get(pk=code_id, tenant=request.user.tenant)
+        items = StoreItem.objects.filter(id__in=item_ids, tenant=request.user.tenant)
+
+        conflicts = []
+        for item in items:
+            if item.coding_item and item.coding_item.id != piece_item.id and not force_transfer:
+                conflicts.append({'item_id': str(item.id), 'item_name': item.full_name, 'current_code': item.coding_item.code})
+
+        if conflicts and not force_transfer:
+            return Response({'status': 'conflict', 'conflicts': conflicts, 'message': 'بعض البنود مربوطة بأكواد أخرى حالياً. هل تريد نقلها؟'}, status=status.HTTP_409_CONFLICT)
+
+        items.update(coding_item=piece_item)
+        return Response({'status': 'success', 'message': f'تم ربط {items.count()} بند بالكود [{piece_item.code}] بنجاح!'})

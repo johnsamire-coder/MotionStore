@@ -183,3 +183,54 @@ class PriceChangeLog(TenantAwareModel):
     class Meta:
         db_table = "pricing_change_log"
         ordering = ["-created_at"]
+
+
+class StoreItem(TenantAwareModel):
+    """
+    بند المخزون في المحل / الفرع:
+    هويته: النوع + الجنس + الموسم + درجة الشراء + درجة الفرز + الصنف + البراند
+    """
+    branch = models.ForeignKey(
+        'branches.Branch',
+        on_delete=models.CASCADE,
+        related_name="store_items",
+        null=True, blank=True
+    )
+    warehouse = models.ForeignKey(
+        'warehouses.Warehouse',
+        on_delete=models.CASCADE,
+        related_name="store_items",
+        null=True, blank=True
+    )
+    source_kind = models.CharField(max_length=50, default="بالة", verbose_name="نوع الشراء")
+    segment = models.CharField(max_length=50, default="حريمي", verbose_name="القسم/الجنس")
+    season = models.CharField(max_length=50, default="صيفي", verbose_name="الموسم")
+    purchase_grade = models.CharField(max_length=50, default="سوبر كريم", verbose_name="درجة الشراء")
+    sort_grade = models.CharField(max_length=50, default="عالي", verbose_name="درجة الفرز")
+    category_name = models.CharField(max_length=100, default="بلوزة", verbose_name="الصنف")
+    brand = models.CharField(max_length=100, default="بدون براند", blank=True, verbose_name="البراند/التصنيف")
+
+    quantity_pieces = models.IntegerField(default=0, verbose_name="العدد الفعلي المتاح")
+    weight_kg = models.DecimalField(max_digits=12, decimal_places=3, default=0.0, verbose_name="الوزن الفعلي (كجم)")
+    total_allocated_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0.0, verbose_name="إجمالي التكلفة")
+    
+    coding_item = models.ForeignKey(
+        'pricing.PieceItem',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name="linked_store_items",
+        verbose_name="كود البيع المربوط"
+    )
+
+    sorted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "store_items"
+
+    @property
+    def full_name(self):
+        b_str = f" - {self.brand}" if (self.brand and self.brand != 'بدون براند') else ""
+        return f"{self.source_kind} - {self.segment} - {self.season} - {self.purchase_grade} - {self.sort_grade} - {self.category_name}{b_str}"
+
+    def __str__(self):
+        return f"{self.full_name} ({self.quantity_pieces} قطعة / {self.weight_kg} كجم)"

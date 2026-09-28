@@ -1,297 +1,642 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
-import { useLanguage } from '../context/LanguageContext';
-import ExportButtons from './ExportButtons';
-import { Search } from 'lucide-react';
-
-const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
-const money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const GRADES = ['NEW_COLLECTION', 'MIDDLE', 'CLEARANCE'];
-const BALE_GRADES = ['سوبر كريم', 'كريم', 'كريم في واحد', 'نمرة 1', 'نمرة 2', 'سحبة'];
-const BALE_GRADES_EN = { 'سوبر كريم': 'Super Cream', 'كريم': 'Cream', 'كريم في واحد': 'Cream in One', 'نمرة 1': 'No. 1', 'نمرة 2': 'No. 2', 'سحبة': 'Sahba' };
-const TX = {
-  ar: {
-    weights: 'تسعير الأوزان', pieces: 'تسعير القطع', bales: 'تسعير البالات', stock: 'تسعير الاستوك', direct: 'تسعير الأصناف الخاصة',
-    g: { NEW_COLLECTION: 'عالي', MIDDLE: 'وسط', CLEARANCE: 'تصفيات' }, perKg: 'سعر الكيلو', save: 'حفظ الأسعار', saved: 'اتحفظ',
-    brand: 'نوع البراند', mix: 'استوك ميكس', addBrand: '+ إضافة براند', item: 'النوع (من الأصناف اللي اشتريناها)', choose: 'اختار...',
-    noItems: 'مفيش أصناف خاصة متسجلة لسه (بتتضاف من فاتورة الشراء المباشر)', showCust: 'هيظهر للزبون',
-    code: 'كود القطعة', name: 'اسم القطعة', source: 'تصنيفها', kinds: { BALE: 'بالة', STOCK: 'استوك', DIRECT: 'شراء مباشر' },
-    segment: 'الصنف', addSeg: '+ إضافة صنف', grade: 'الدرجة (درجات البالة)', season: 'الموسم', addSeason: '+ إضافة موسم',
-    brandOpt: 'البراند (اختياري)', pPiece: 'سعر القطعة', pKg: 'سعر الكيلو', addPiece: 'حفظ القطعة', update: 'حفظ التعديل', cancelEdit: 'إلغاء التعديل',
-    search: 'ابحث بالكود أو الاسم أو الصنف...', edit: 'تعديل', stop: 'إيقاف', confirmStop: 'متأكد إنك عايز توقف القطعة دي؟',
-    none: 'مفيش', newName: 'اكتب الاسم الجديد:', failed: 'حصلت مشكلة: ', cur: 'ج.م', results: 'عدد النتائج',
-    rWeights: 'قايمة أسعار الأوزان', rPieces: 'قايمة أسعار القطع', kind: 'التصنيف', key: 'البراند / النوع'
-  },
-  en: {
-    weights: 'Weight Pricing', pieces: 'Piece Pricing', bales: 'Bales', stock: 'Stock', direct: 'Special Items',
-    g: { NEW_COLLECTION: 'High', MIDDLE: 'Medium', CLEARANCE: 'Low' }, perKg: 'Price / KG', save: 'Save Prices', saved: 'Saved',
-    brand: 'Brand', mix: 'Mix Stock', addBrand: '+ Add Brand', item: 'Type (from purchased items)', choose: 'Choose...',
-    noItems: 'No special items yet (they are added from direct purchase invoices)', showCust: 'Customer sees',
-    code: 'Piece Code', name: 'Piece Name', source: 'Source', kinds: { BALE: 'Bale', STOCK: 'Stock', DIRECT: 'Direct Purchase' },
-    segment: 'Category', addSeg: '+ Add Category', grade: 'Grade (bale grades)', season: 'Season', addSeason: '+ Add Season',
-    brandOpt: 'Brand (optional)', pPiece: 'Price / Piece', pKg: 'Price / KG', addPiece: 'Save Piece', update: 'Save Changes', cancelEdit: 'Cancel Edit',
-    search: 'Search by code, name or category...', edit: 'Edit', stop: 'Disable', confirmStop: 'Disable this piece?',
-    none: 'None', newName: 'Type the new name:', failed: 'Something went wrong: ', cur: 'EGP', results: 'Results',
-    rWeights: 'Weight Price List', rPieces: 'Piece Price List', kind: 'Source', key: 'Brand / Type'
-  }
-};
-const emptyPiece = { id: null, code: '', name: '', source_kind: 'BALE', segment: '', purchase_grade: 'سوبر كريم', season: '', brand: '', price_per_piece: '', price_per_kg: '' };
 
 export default function PricingV2() {
-  const { lang, isRTL } = useLanguage();
-  const T = TX[lang] || TX.ar;
-  const [tab, setTab] = useState('W');
-  const [wsub, setWsub] = useState('BALE');
-  const [opts, setOpts] = useState({ BRAND: [], SPECIAL_ITEM: [], SEGMENT: [], SEASON: [] });
-  const [wp, setWp] = useState([]);
-  const [brand, setBrand] = useState('');
-  const [item, setItem] = useState('');
-  const [form, setForm] = useState({ NEW_COLLECTION: '', MIDDLE: '', CLEARANCE: '' });
-  const [pieces, setPieces] = useState([]);
-  const [pf, setPf] = useState(emptyPiece);
-  const [q, setQ] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [activeSubTab, setActiveTab] = useState('UNCODED'); // UNCODED | CODED_LIST | PRICE_LOG
+  const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState('ALL');
 
-  const loadOpts = async () => {
-    const types = ['BRAND', 'SPECIAL_ITEM', 'SEGMENT', 'SEASON'];
-    const res = await Promise.all(types.map((t) => axiosClient.get(`/purchase-options/?option_type=${t}`)));
-    const o = {}; types.forEach((t, i) => { o[t] = listOf(res[i].data).map((x) => x.name); });
-    setOpts(o);
-  };
-  const loadWp = async () => { const r = await axiosClient.get('/weight-prices/?all=1'); setWp(listOf(r.data)); };
-  const loadPieces = async () => { const r = await axiosClient.get('/piece-items/?all=1'); setPieces(listOf(r.data)); };
-  useEffect(() => { loadOpts(); loadWp(); loadPieces(); }, []);
+  // بيانات البنود غير المكوّدة
+  const [storeItems, setStoreItems] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedItemIds, setSelectedItemIds] = useState([]);
 
-  const keyNow = wsub === 'BALE' ? '' : (wsub === 'STOCK' ? brand : item);
-  const priceOf = (kind, key, g) => { const r = wp.find((x) => x.kind === kind && x.key === key && x.grade === g); return r ? r.price_per_kg : ''; };
+  // بيانات الأكواد المكوّدة وسجل الأسعار
+  const [pieceItems, setPieceItems] = useState([]);
+  const [priceLogs, setPriceLog] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState({ type: '', text: '' });
+
+  // نموذج التكويد الجديد
+  const [codeForm, setCodeForm] = useState({
+    code: '',
+    name: '',
+    price_per_piece: '',
+    price_per_kg: '',
+  });
+
+  // نموذج التنبيه وتأكيد النقل عند التعارض (Conflict 409)
+  const [conflictData, setConflictData] = useState(null);
+
+  // نموذج تعديل السعر
+  const [editingCode, setEditingCode] = useState(null);
+  const [editPriceForm, setEditPriceForm] = useState({ price_per_piece: '', price_per_kg: '' });
+
   useEffect(() => {
-    setForm({ NEW_COLLECTION: priceOf(wsub, keyNow, 'NEW_COLLECTION'), MIDDLE: priceOf(wsub, keyNow, 'MIDDLE'), CLEARANCE: priceOf(wsub, keyNow, 'CLEARANCE') });
-  }, [wsub, brand, item, wp]);
+    fetchBranches();
+  }, []);
 
-  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 3000); };
-  const err = (e) => alert(T.failed + (e.response?.data?.detail || e.message));
+  useEffect(() => {
+    fetchStoreItems();
+    fetchPieceItems();
+    fetchPriceLogs();
+  }, [selectedBranch, searchQuery]);
 
-  const saveWeights = async () => {
-    if (wsub !== 'BALE' && !keyNow) { alert(T.choose); return; }
-    setBusy(true);
+  const fetchBranches = async () => {
     try {
-      await axiosClient.post('/weight-prices/set_prices/', { kind: wsub, key: keyNow, prices: form });
-      await loadWp(); flash(T.saved + ' ✅');
-    } catch (e) { err(e); } finally { setBusy(false); }
+      const res = await axiosClient.get('/warehouses/');
+      const list = res.data.results || res.data || [];
+      setBranches(list);
+      if (list.length > 0 && !selectedBranch) {
+        setSelectedBranch(list[0].id);
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
-  const addOption = async (type, after) => {
-    const name = (prompt(T.newName) || '').trim();
-    if (!name) return;
-    try { await axiosClient.post('/purchase-options/', { option_type: type, name }); await loadOpts(); after && after(name); } catch (e) { err(e); }
-  };
-  const savePiece = async () => {
-    setBusy(true);
-    const body = { ...pf, purchase_grade: pf.source_kind === 'BALE' ? pf.purchase_grade : null, brand: pf.source_kind === 'STOCK' ? pf.brand : null, price_per_piece: pf.price_per_piece || '0', price_per_kg: pf.price_per_kg || '0' };
+
+  const fetchStoreItems = async () => {
     try {
-      if (pf.id) await axiosClient.patch(`/piece-items/${pf.id}/`, body);
-      else await axiosClient.post('/piece-items/', body);
-      setPf(emptyPiece); await loadPieces(); flash(T.saved + ' ✅');
-    } catch (e) { err(e); } finally { setBusy(false); }
+      setLoading(true);
+      let url = `/store-items/?search=${encodeURIComponent(searchQuery)}`;
+      if (selectedBranch) url += `&branch=${selectedBranch}`;
+      const res = await axiosClient.get(url);
+      setStoreItems(res.data.results || res.data || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
   };
-  const stopPiece = async (p) => {
-    if (!window.confirm(T.confirmStop)) return;
-    try { await axiosClient.delete(`/piece-items/${p.id}/`); await loadPieces(); } catch (e) { err(e); }
+
+  const fetchPieceItems = async () => {
+    try {
+      const res = await axiosClient.get('/piece-items/');
+      setPieceItems(res.data.results || res.data || []);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const gradeName = (g) => (lang === 'ar' ? g : (BALE_GRADES_EN[g] || g));
-  const custName = (p) => [p.name, p.segment, p.source_kind === 'STOCK' && p.brand ? '- ' + p.brand : ''].filter(Boolean).join(' ');
-  const term = q.trim().toLowerCase();
-  const prows = pieces.filter((p) => !term || [p.code, p.name, p.segment, p.season, p.brand, T.kinds[p.source_kind]].join(' ').toLowerCase().includes(term));
-  const wrows = wsub === 'BALE' ? [] : Array.from(new Set(wp.filter((x) => x.kind === wsub).map((x) => x.key)));
+  const fetchPriceLogs = async () => {
+    try {
+      const res = await axiosClient.get('/price-change-log/');
+      setPriceLog(res.data.results || res.data || []);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
-  const numStr = (v) => String(Number(v || 0));
-  const dirtyW = (wsub === 'BALE' || !!keyNow) && GRADES.some((g) => numStr(form[g]) !== numStr(priceOf(wsub, keyNow, g)));
-  const origP = pf.id ? pieces.find((x) => x.id === pf.id) : null;
-  const pSig = (x) => (x ? [x.code, x.name, x.source_kind, x.segment || '', x.source_kind === 'BALE' ? (x.purchase_grade || '') : '', x.season || '', x.source_kind === 'STOCK' ? (x.brand || '') : '', numStr(x.price_per_piece), numStr(x.price_per_kg)].join('|') : '');
-  const dirtyP = pf.id
-    ? (origP ? pSig(pf) !== pSig(origP) : true)
-    : !!(pf.code.trim() && pf.name.trim() && (Number(pf.price_per_piece) > 0 || Number(pf.price_per_kg) > 0));  const chip = (active, onClick, label) => (
-    <button key={label} type="button" onClick={onClick} className={`h-9 px-3 rounded-lg border text-xs font-bold cursor-pointer ${active ? 'bg-emerald-600 border-emerald-600 text-white' : 'bg-white border-slate-300 text-slate-800 hover:border-emerald-400'}`}>{label}</button>
-  );
-  const input = 'h-10 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-emerald-500';
+  // اختيار الكل زي الإكسل
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedItemIds(storeItems.map((i) => i.id));
+    } else {
+      setSelectedItemIds([]);
+    }
+  };
 
-  const weightsReport = () => {
-    const rows = [];
-    ['BALE', 'STOCK', 'DIRECT'].forEach((k) => {
-      Array.from(new Set(wp.filter((x) => x.kind === k).map((x) => x.key))).forEach((key) => {
-        rows.push({ kind: T.kinds[k], key: key === 'MIX' ? T.mix : (key || '—'), h: Number(priceOf(k, key, 'NEW_COLLECTION') || 0), m: Number(priceOf(k, key, 'MIDDLE') || 0), l: Number(priceOf(k, key, 'CLEARANCE') || 0) });
+  const handleSelectItem = (id) => {
+    setSelectedItemIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  // إنشاء وتكويد البنود المختارة
+  const handleCreateCodeAndBind = async (e, forceTransfer = false) => {
+    if (e) e.preventDefault();
+    setMsg({ type: '', text: '' });
+
+    if (!codeForm.code || !codeForm.name) {
+      setMsg({ type: 'error', text: '⚠️ يجب كتابة كود الصنف واسم الصنف!' });
+      return;
+    }
+
+    if (selectedItemIds.length === 0 && !forceTransfer) {
+      setMsg({ type: 'error', text: '⚠️ اختر بنداً واحدًا على الأقل من القائمة لتكويده وتسعيره!' });
+      return;
+    }
+
+    try {
+      setSaving(true);
+      let codeId = editingCode?.id;
+
+      // إنشاء كود بيع جديد لو مش بنربط بكود قائم
+      if (!codeId) {
+        const createRes = await axiosClient.post('/piece-items/', {
+          code: codeForm.code,
+          name: codeForm.name,
+          price_per_piece: codeForm.price_per_piece || '0.00',
+          price_per_kg: codeForm.price_per_kg || '0.00',
+        });
+        codeId = createRes.data.id;
+      }
+
+      // ربط البنود المختارة بكود البيع
+      const bindRes = await axiosClient.post('/piece-items/bind-items/', {
+        code_id: codeId,
+        item_ids: selectedItemIds,
+        force_transfer: forceTransfer,
       });
-    });
-    return { title: T.rWeights, filename: 'weight-prices', columns: [
-      { key: 'kind', header: T.kind, width: 16 }, { key: 'key', header: T.key, width: 24 },
-      { key: 'h', header: T.g.NEW_COLLECTION, type: 'money' }, { key: 'm', header: T.g.MIDDLE, type: 'money' }, { key: 'l', header: T.g.CLEARANCE, type: 'money' }
-    ], rows };
+
+      setMsg({ type: 'success', text: `🎉 ${bindRes.data.message}` });
+      setConflictData(null);
+      setCodeForm({ code: '', name: '', price_per_piece: '', price_per_kg: '' });
+      setSelectedItemIds([]);
+      fetchStoreItems();
+      fetchPieceItems();
+      fetchPriceLogs();
+    } catch (err) {
+      if (err.response?.status === 409) {
+        // تنبيه النقل والتعارض
+        setConflictData(err.response.data);
+      } else {
+        const errData = err.response?.data;
+      let errText = 'حدث خطأ أثناء التكويد والتسعير.';
+      if (errData) {
+        if (typeof errData === 'string') errText = errData;
+        else if (errData.code) errText = Array.isArray(errData.code) ? errData.code[0] : errData.code;
+        else if (errData.detail) errText = errData.detail;
+        else if (errData.non_field_errors) errText = errData.non_field_errors.join(', ');
+        else errText = Object.entries(errData).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : v}`).join(' | ');
+      }
+        setMsg({ type: 'error', text: `❌ ${errText}` });
+      }
+    } finally {
+      setSaving(false);
+    }
   };
-  const piecesReport = () => ({ title: T.rPieces, filename: 'piece-prices', filtersText: q, columns: [
-    { key: 'code', header: T.code, width: 12 }, { key: 'cust', header: T.showCust, width: 26 }, { key: 'kind', header: T.source, width: 14 },
-    { key: 'grade', header: T.grade, width: 14 }, { key: 'season', header: T.season, width: 12 },
-    { key: 'pp', header: T.pPiece, type: 'money' }, { key: 'pk', header: T.pKg, type: 'money' }
-  ], rows: prows.map((p) => ({ code: p.code, cust: custName(p), kind: T.kinds[p.source_kind], grade: p.purchase_grade ? gradeName(p.purchase_grade) : '—', season: p.season || '—', pp: Number(p.price_per_piece), pk: Number(p.price_per_kg) })) });
+
+  // حفظ تعديل السعر لكود محدد
+  const handleUpdatePrice = async (codeItem) => {
+    try {
+      setSaving(true);
+      await axiosClient.patch(`/piece-items/${codeItem.id}/`, {
+        price_per_piece: editPriceForm.price_per_piece,
+        price_per_kg: editPriceForm.price_per_kg,
+      });
+      setMsg({ type: 'success', text: `🎉 تم تحديث سعر الكود [${codeItem.code}] وتسجيل التغير بالسجل!` });
+      setEditingCode(null);
+      fetchPieceItems();
+      fetchPriceLogs();
+    } catch (err) {
+      setMsg({ type: 'error', text: '❌ فشل تعديل السعر.' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="space-y-4" dir={isRTL ? 'rtl' : 'ltr'}>
-      <div className="flex flex-wrap gap-2">
-        {chip(tab === 'W', () => setTab('W'), T.weights)}
-        {chip(tab === 'P', () => setTab('P'), T.pieces)}
-      </div>
-      {msg && <div className="bg-emerald-50 border border-emerald-300 text-emerald-800 p-2 rounded-lg text-sm font-bold">{msg}</div>}
+    <div className="space-y-6">
+      {/* الهيدر واختيار المحل/الفرع */}
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <span>🏷️</span> التكويد والتسعير لكل محل
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            البحث في هوية البنود الـ 7، التكويد كصنف بيع، وتسعير القطعة والكيلو مع سجل الأسعار
+          </p>
+        </div>
 
-      {tab === 'W' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
-          <div className="flex flex-wrap gap-2 items-center justify-between">
-            <div className="flex flex-wrap gap-2">
-              {chip(wsub === 'BALE', () => setWsub('BALE'), T.bales)}
-              {chip(wsub === 'STOCK', () => setWsub('STOCK'), T.stock)}
-              {chip(wsub === 'DIRECT', () => setWsub('DIRECT'), T.direct)}
-            </div>
-            <ExportButtons getReport={weightsReport} />
-          </div>
-
-          {wsub === 'STOCK' && (
-            <div className="flex flex-wrap gap-2 items-end">
-              <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.brand}
-                <select value={brand} onChange={(e) => setBrand(e.target.value)} className={input + ' w-64 block'}>
-                  <option value="">{T.choose}</option>
-                  <option value="MIX">{T.mix}</option>
-                  {opts.BRAND.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
-              </label>
-              <button type="button" onClick={() => addOption('BRAND', setBrand)} className="h-10 px-3 rounded-lg border border-dashed border-emerald-600 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer">{T.addBrand}</button>
-            </div>
-          )}
-          {wsub === 'DIRECT' && (
-            <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.item}
-              <select value={item} onChange={(e) => setItem(e.target.value)} className={input + ' w-72 block'}>
-                <option value="">{T.choose}</option>
-                {opts.SPECIAL_ITEM.map((b) => <option key={b} value={b}>{b}</option>)}
-              </select>
-              {opts.SPECIAL_ITEM.length === 0 && <span className="block text-amber-700 font-normal mt-1">{T.noItems}</span>}
-            </label>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {GRADES.map((g) => (
-              <label key={g} className="text-xs font-bold text-slate-600 space-y-1 block">{T.g[g]} ({T.perKg})
-                <input type="number" min="0" step="0.01" value={form[g]} onChange={(e) => setForm({ ...form, [g]: e.target.value })} className={input + ' w-full text-base font-bold'} />
-              </label>
+        <div className="flex items-center gap-3">
+          <label className="text-xs font-bold text-slate-600">المحل / الفرع:</label>
+                    <select
+            value={selectedBranch}
+            onChange={(e) => setSelectedBranch(e.target.value)}
+            className="bg-slate-50 border border-slate-300 font-bold text-slate-800 text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
+          >
+            <option value="ALL">🏬 جميع المحلات والأنشطة</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                🏬 {b.name}
+              </option>
             ))}
-          </div>
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="text-xs text-emerald-800 font-bold">{T.showCust}: {wsub === 'BALE' ? '—' : (wsub === 'STOCK' ? (brand === 'MIX' ? T.mix : (brand ? (isRTL ? 'استوك ' : 'Stock ') + brand : '—')) : (item || '—'))}</div>
-            <button type="button" disabled={busy || !dirtyW} onClick={saveWeights} className="h-10 px-6 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:hover:bg-slate-400 disabled:cursor-not-allowed text-white text-sm font-bold cursor-pointer">{T.save}</button>
-          </div>
+          </select>
+        </div>
+      </div>
 
-          {wrows.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead><tr className="bg-slate-100 text-slate-700"><th className="p-2 text-start">{T.key}</th>{GRADES.map((g) => <th key={g} className="p-2 text-center">{T.g[g]}</th>)}</tr></thead>
-                <tbody>
-                  {wrows.map((key) => (
-                    <tr key={key} className="border-b border-slate-100 cursor-pointer hover:bg-emerald-50" onClick={() => (wsub === 'STOCK' ? setBrand(key) : setItem(key))}>
-                      <td className="p-2 font-bold">{key === 'MIX' ? T.mix : key}</td>
-                      {GRADES.map((g) => <td key={g} className="p-2 text-center">{money(priceOf(wsub, key, g))}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+      {/* التبويبات الداخلية */}
+      <div className="flex border-b border-slate-200 bg-white rounded-t-xl px-4 pt-3 gap-2">
+        <button
+          onClick={() => setActiveTab('UNCODED')}
+          className={`px-4 py-2.5 text-sm font-bold border-b-2 transition-all ${
+            activeSubTab === 'UNCODED'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-lg'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          📦 البنود المفروزة بالتكويد والتسعير
+        </button>
+
+        <button
+          onClick={() => setActiveTab('CODED_LIST')}
+          className={`px-4 py-2.5 text-sm font-bold border-b-2 transition-all ${
+            activeSubTab === 'CODED_LIST'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-lg'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          🏷️ أصناف البيع والأكواد الحالية ({pieceItems.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('PRICE_LOG')}
+          className={`px-4 py-2.5 text-sm font-bold border-b-2 transition-all ${
+            activeSubTab === 'PRICE_LOG'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-lg'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          📜 سجل تغير الأسعار (Price Log)
+        </button>
+      </div>
+
+      {/* تنبيهات الرسائل */}
+      {msg.text && (
+        <div
+          className={`p-4 rounded-xl text-sm font-bold shadow-sm ${
+            msg.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : 'bg-rose-50 text-rose-800 border border-rose-200'
+          }`}
+        >
+          {msg.text}
         </div>
       )}
 
-      {tab === 'P' && (
-        <div className="space-y-4">
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.code}<input value={pf.code} onChange={(e) => setPf({ ...pf, code: e.target.value })} className={input + ' w-full font-mono font-bold'} /></label>
-              <label className="text-xs font-bold text-slate-600 space-y-1 block md:col-span-2">{T.name}<input value={pf.name} onChange={(e) => setPf({ ...pf, name: e.target.value })} className={input + ' w-full'} /></label>
+      {/* مودال تنبيه التعارض ونقل البند المربوط سابقاً */}
+      {conflictData && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-4">
+            <div className="flex items-center gap-3 text-amber-600">
+              <span className="text-3xl">⚠️</span>
+              <h3 className="text-lg font-bold text-slate-800">تنبيه تعارض في ربط الكود</h3>
             </div>
-            <div className="space-y-1">
-              <div className="text-xs font-bold text-slate-600">{T.source}</div>
-              <div className="flex flex-wrap gap-2">{['BALE', 'STOCK', 'DIRECT'].map((k) => chip(pf.source_kind === k, () => setPf({ ...pf, source_kind: k }), T.kinds[k]))}</div>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {conflictData.message}
+            </p>
+            <div className="bg-amber-50 p-3 rounded-lg border border-amber-200 text-xs font-bold text-amber-900 space-y-1">
+              {conflictData.conflicts?.map((c, i) => (
+                <div key={i}>
+                  • {c.item_name} (مربوط حالياً بكود: <span className="text-rose-600">{c.current_code}</span>)
+                </div>
+              ))}
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-              <div className="flex gap-2 items-end">
-                <label className="text-xs font-bold text-slate-600 space-y-1 block flex-1">{T.segment}
-                  <select value={pf.segment} onChange={(e) => setPf({ ...pf, segment: e.target.value })} className={input + ' w-full block'}>
-                    <option value="">{T.choose}</option>{opts.SEGMENT.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                </label>
-                <button type="button" onClick={() => addOption('SEGMENT', (n) => setPf((p) => ({ ...p, segment: n })))} className="h-10 px-2 rounded-lg border border-dashed border-emerald-600 bg-emerald-50 text-emerald-800 text-xs font-bold cursor-pointer whitespace-nowrap">{T.addSeg}</button>
-              </div>
-              <div className="flex gap-2 items-end">
-                <label className="text-xs font-bold text-slate-600 space-y-1 block flex-1">{T.season}
-                  <select value={pf.season} onChange={(e) => setPf({ ...pf, season: e.target.value })} className={input + ' w-full block'}>
-                    <option value="">{T.choose}</option>{opts.SEASON.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                </label>
-                <button type="button" onClick={() => addOption('SEASON', (n) => setPf((p) => ({ ...p, season: n })))} className="h-10 px-2 rounded-lg border border-dashed border-amber-600 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer whitespace-nowrap">{T.addSeason}</button>
-              </div>
-              {pf.source_kind === 'STOCK' && (
-                <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.brandOpt}
-                  <select value={pf.brand || ''} onChange={(e) => setPf({ ...pf, brand: e.target.value })} className={input + ' w-full block'}>
-                    <option value="">{T.none}</option>{opts.BRAND.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
-                </label>
-              )}
-            </div>
-            {pf.source_kind === 'BALE' && (
-              <div className="space-y-1">
-                <div className="text-xs font-bold text-slate-600">{T.grade}</div>
-                <div className="grid grid-cols-3 md:grid-cols-6 gap-2">{BALE_GRADES.map((g) => chip(pf.purchase_grade === g, () => setPf({ ...pf, purchase_grade: g }), gradeName(g)))}</div>
-              </div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-              <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.pPiece}<input type="number" min="0" step="0.01" value={pf.price_per_piece} onChange={(e) => setPf({ ...pf, price_per_piece: e.target.value })} className={input + ' w-full font-bold'} /></label>
-              <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.pKg}<input type="number" min="0" step="0.01" value={pf.price_per_kg} onChange={(e) => setPf({ ...pf, price_per_kg: e.target.value })} className={input + ' w-full font-bold'} /></label>
-              <div className="text-xs text-emerald-800 font-bold pb-3">{T.showCust}: {custName(pf) || '—'}</div>
-              <div className="flex gap-2">
-                <button type="button" disabled={busy || !dirtyP} onClick={savePiece} className="h-10 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:hover:bg-slate-400 disabled:cursor-not-allowed text-white text-sm font-bold cursor-pointer">{pf.id ? T.update : T.addPiece}</button>
-                {pf.id && <button type="button" onClick={() => setPf(emptyPiece)} className="h-10 px-3 rounded-lg border border-slate-300 bg-white text-xs font-bold cursor-pointer">{T.cancelEdit}</button>}
-              </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => setConflictData(null)}
+                className="px-4 py-2 bg-slate-200 text-slate-700 font-bold rounded-lg text-xs"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={() => handleCreateCodeAndBind(null, true)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow-md"
+              >
+                نعم، انقل البند للكود الجديد
+              </button>
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[220px]">
-                <Search size={16} className="absolute top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" style={isRTL ? { right: 12 } : { left: 12 }} />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={T.search} className={input + ' w-full'} style={isRTL ? { paddingRight: 36 } : { paddingLeft: 36 }} />
-              </div>
-              <div className="text-xs font-bold text-slate-500">{T.results}: {prows.length}</div>
-              <ExportButtons getReport={piecesReport} />
+      {/* ======================================================== */}
+      {/* التبويب 1: قائمة البنود والبحث الشامل الـ 7 والتكويد     */}
+      {/* ======================================================== */}
+      {activeSubTab === 'UNCODED' && (
+        <div className="space-y-6">
+          {/* بحث بخانة واحدة في كل الصفات */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 flex items-center gap-3">
+            <span className="text-slate-400">🔍</span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="بحث شامل في كل الصفات الـ 7 (مثلاً: بلوزة كريم، زارا صيفي، شراء مباشر...)"
+              className="w-full text-sm font-bold text-slate-800 outline-none placeholder:text-slate-400"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-xs text-slate-400 hover:text-slate-600 font-bold"
+              >
+                مسح
+              </button>
+            )}
+          </div>
+
+          {/* جدول البنود */}
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-800">
+                نتائج البنود المتاحة بالمحل ({storeItems.length})
+              </h3>
+              <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                المحدد: {selectedItemIds.length} بند
+              </span>
             </div>
+
             <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead><tr className="bg-slate-100 text-slate-700">
-                  <th className="p-2 text-start">{T.code}</th><th className="p-2 text-start">{T.showCust}</th><th className="p-2 text-start">{T.source}</th>
-                  <th className="p-2 text-start">{T.grade}</th><th className="p-2 text-start">{T.season}</th><th className="p-2 text-center">{T.pPiece}</th><th className="p-2 text-center">{T.pKg}</th><th className="p-2"></th>
-                </tr></thead>
-                <tbody>
-                  {prows.map((p) => (
-                    <tr key={p.id} className="border-b border-slate-100">
-                      <td className="p-2 font-mono font-bold">{p.code}</td>
-                      <td className="p-2 font-bold text-emerald-800">{custName(p)}</td>
-                      <td className="p-2">{T.kinds[p.source_kind]}</td>
-                      <td className="p-2">{p.purchase_grade ? gradeName(p.purchase_grade) : '—'}</td>
-                      <td className="p-2">{p.season || '—'}</td>
-                      <td className="p-2 text-center">{money(p.price_per_piece)}</td>
-                      <td className="p-2 text-center">{money(p.price_per_kg)}</td>
-                      <td className="p-2 flex gap-1">
-                        <button type="button" onClick={() => setPf({ ...emptyPiece, ...p, segment: p.segment || '', season: p.season || '', brand: p.brand || '', purchase_grade: p.purchase_grade || 'سوبر كريم' })} className="h-8 px-2 rounded-lg border border-slate-300 bg-white text-xs font-bold cursor-pointer">{T.edit}</button>
-                        <button type="button" onClick={() => stopPiece(p)} className="h-8 px-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold cursor-pointer">{T.stop}</button>
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                  <tr>
+                    <th className="p-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        onChange={handleSelectAll}
+                        checked={
+                          storeItems.length > 0 && selectedItemIds.length === storeItems.length
+                        }
+                        className="w-4 h-4 text-emerald-600 rounded"
+                      />
+                    </th>
+                    <th className="p-3">هوية البند الكاملة الـ 7</th>
+                    <th className="p-3">العدد المتاح</th>
+                    <th className="p-3">الوزن المتاح</th>
+                    <th className="p-3">التكلفة</th>
+                    <th className="p-3">كود البيع الحالي</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                  {loading ? (
+                    <tr>
+                      <td colSpan="6" className="p-6 text-center text-slate-400">
+                        جاري تحميل البنود...
                       </td>
                     </tr>
-                  ))}
+                  ) : storeItems.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="p-6 text-center text-slate-400">
+                        لا توجد بنود مطابقة للبحث حالياً في هذا المحل.
+                      </td>
+                    </tr>
+                  ) : (
+                    storeItems.map((item) => (
+                      <tr
+                        key={item.id}
+                        className={`hover:bg-slate-50 transition-colors ${
+                          selectedItemIds.includes(item.id) ? 'bg-emerald-50/60' : ''
+                        }`}
+                      >
+                        <td className="p-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedItemIds.includes(item.id)}
+                            onChange={() => handleSelectItem(item.id)}
+                            className="w-4 h-4 text-emerald-600 rounded"
+                          />
+                        </td>
+                        <td className="p-3 font-bold text-slate-900">{item.full_name}</td>
+                        <td className="p-3 text-emerald-700 font-bold">
+                          {item.quantity_pieces} قطعة
+                        </td>
+                        <td className="p-3">{item.weight_kg} كجم</td>
+                        <td className="p-3 text-slate-500">{item.total_allocated_cost} ج</td>
+                        <td className="p-3">
+                          {item.coding_code ? (
+                            <span className="bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded text-xs">
+                              {item.coding_code}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">غير مكوّد</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* الجزء السفلي: نموذج إنشاء صنف البيع والتسعير للبنود المختارة */}
+          <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+            <h3 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <span>🏷️</span> إنشاء كود وتسعير للبنود المحددة ({selectedItemIds.length})
+            </h3>
+
+            <form onSubmit={(e) => handleCreateCodeAndBind(e, false)} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                    كود الصنف (الفريد) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={codeForm.code}
+                    onChange={(e) => setCodeForm({ ...codeForm, code: e.target.value })}
+                    placeholder="مثال: 101"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                    اسم صنف البيع *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={codeForm.name}
+                    onChange={(e) => setCodeForm({ ...codeForm, name: e.target.value })}
+                    placeholder="مثال: بلوزة كريم"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                    سعر القطعة (ج)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={codeForm.price_per_piece}
+                    onChange={(e) => setCodeForm({ ...codeForm, price_per_piece: e.target.value })}
+                    placeholder="مثال: 350"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1">
+                    سعر الكيلو (ج)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={codeForm.price_per_kg}
+                    onChange={(e) => setCodeForm({ ...codeForm, price_per_kg: e.target.value })}
+                    placeholder="مثال: 250"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={saving || selectedItemIds.length === 0}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg transition-all shadow-sm flex items-center gap-2"
+                >
+                  {saving ? 'جاري التكويد...' : '✨ تكويد وتسعير البنود المحددة'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* التبويب 2: قائمة الأكواد الحالية وتغيير السعر             */}
+      {/* ======================================================== */}
+      {activeSubTab === 'CODED_LIST' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 font-bold text-sm text-slate-800">
+            قائمة أصناف البيع والأكواد المعتمدة في الشركة
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="p-3">الكود</th>
+                  <th className="p-3">اسم صنف البيع</th>
+                  <th className="p-3">سعر القطعة (ج)</th>
+                  <th className="p-3">سعر الكيلو (ج)</th>
+                  <th className="p-3">عدد البنود المربوطة</th>
+                  <th className="p-3 text-center">إجراءات والتعديل</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                {pieceItems.map((codeItem) => (
+                  <tr key={codeItem.id} className="hover:bg-slate-50">
+                    <td className="p-3 font-extrabold text-indigo-700 text-sm">{codeItem.code}</td>
+                    <td className="p-3 font-bold text-slate-900">{codeItem.name}</td>
+                    <td className="p-3 font-bold text-emerald-700">
+                      {editingCode?.id === codeItem.id ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editPriceForm.price_per_piece}
+                          onChange={(e) =>
+                            setEditPriceForm({ ...editPriceForm, price_per_piece: e.target.value })
+                          }
+                          className="w-24 border border-emerald-400 rounded px-2 py-1 font-bold outline-none"
+                        />
+                      ) : (
+                        `${codeItem.price_per_piece || 0} ج`
+                      )}
+                    </td>
+                    <td className="p-3 font-bold text-indigo-700">
+                      {editingCode?.id === codeItem.id ? (
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editPriceForm.price_per_kg}
+                          onChange={(e) =>
+                            setEditPriceForm({ ...editPriceForm, price_per_kg: e.target.value })
+                          }
+                          className="w-24 border border-indigo-400 rounded px-2 py-1 font-bold outline-none"
+                        />
+                      ) : (
+                        `${codeItem.price_per_kg || 0} ج`
+                      )}
+                    </td>
+                    <td className="p-3 text-slate-500">
+                      {codeItem.linked_items_count || 0} بند
+                    </td>
+                    <td className="p-3 text-center">
+                      {editingCode?.id === codeItem.id ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => handleUpdatePrice(codeItem)}
+                            disabled={saving}
+                            className="px-3 py-1 bg-emerald-600 text-white font-bold rounded text-xs"
+                          >
+                            حفظ
+                          </button>
+                          <button
+                            onClick={() => setEditingCode(null)}
+                            className="px-3 py-1 bg-slate-200 text-slate-700 font-bold rounded text-xs"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditingCode(codeItem);
+                            setEditPriceForm({
+                              price_per_piece: codeItem.price_per_piece || '',
+                              price_per_kg: codeItem.price_per_kg || '',
+                            });
+                          }}
+                          className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded border border-slate-300 text-xs"
+                        >
+                          ✏️ تعديل السعر
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* التبويب 3: سجل تغيير الأسعار (Price Change Log)          */}
+      {/* ======================================================== */}
+      {activeSubTab === 'PRICE_LOG' && (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 font-bold text-sm text-slate-800">
+            سجل كافة التغييرات على أسعار الأكواد (Price Change History)
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
+                <tr>
+                  <th className="p-3">التاريخ والوقت</th>
+                  <th className="p-3">الكود</th>
+                  <th className="p-3">اسم الصنف</th>
+                  <th className="p-3">نوع السعر</th>
+                  <th className="p-3">السعر القديم</th>
+                  <th className="p-3">السعر الجديد</th>
+                  <th className="p-3">بواسطة</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
+                {priceLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="p-6 text-center text-slate-400">
+                      لا يوجد تغييرات مسجلة بالسجل حتى الآن.
+                    </td>
+                  </tr>
+                ) : (
+                  priceLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50">
+                      <td className="p-3 text-slate-500">
+                        {new Date(log.created_at).toLocaleString('ar-EG')}
+                      </td>
+                      <td className="p-3 font-extrabold text-indigo-700">{log.code || '—'}</td>
+                      <td className="p-3 font-bold text-slate-900">{log.name || '—'}</td>
+                      <td className="p-3">
+                        {log.field === 'price_per_piece' ? 'سعر القطعة' : 'سعر الكيلو'}
+                      </td>
+                      <td className="p-3 text-rose-600 font-bold">{log.old_price} ج</td>
+                      <td className="p-3 text-emerald-600 font-bold">{log.new_price} ج</td>
+                      <td className="p-3 text-slate-600">{log.changed_by}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
