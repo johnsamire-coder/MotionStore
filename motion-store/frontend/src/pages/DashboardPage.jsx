@@ -48,8 +48,8 @@ export default function DashboardPage() {
       <div className="rounded-3xl p-6 text-white shadow-lg" style={{ background: 'linear-gradient(135deg, #064e3b 0%, #047857 55%, #0f766e 100%)' }}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div className="text-2xl md:text-3xl font-black">{greet} يا {d.user.name} 👋</div>
-            <div className="text-emerald-100 text-sm mt-1">{d.company} · {ROLE[d.user.role] || d.user.role} · {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+            <div className="text-2xl md:text-3xl font-black">{greet} يا {d.user?.name || 'المدير'} 👋</div>
+            <div className="text-emerald-100 text-sm mt-1">{d.company} · {ROLE[d.user?.role || 'ADMIN'] || d.user?.role} · {new Date().toLocaleDateString('ar-EG', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
           </div>
           {d.can_edit && <button type="button" onClick={() => { setForm({ daily_target: d.daily_target || '', announcement: d.announcement || '' }); setEdit(true); }} className="h-10 px-4 rounded-xl bg-white/15 hover:bg-white/25 text-sm font-bold flex items-center gap-2 cursor-pointer"><Pencil size={15} /> التارجت والرسالة</button>}
         </div>

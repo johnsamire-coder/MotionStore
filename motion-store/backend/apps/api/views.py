@@ -1,3 +1,6 @@
+from rest_framework import viewsets, permissions, status
+from rest_framework.response import Response
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from apps.users.models import RolePermission
 from apps.users.serializers import RolePermissionSerializer
@@ -2767,3 +2770,37 @@ class CompanyInfoViewSet(_rvs.ViewSet):
             pt.width = int(wv) if wf.get_internal_type() in ('IntegerField', 'PositiveIntegerField', 'SmallIntegerField', 'PositiveSmallIntegerField', 'DecimalField') else wv
         pt.save()
         return Response(_company_info(t))
+
+
+from apps.costing.models import CostingConfiguration, CostingMethod
+from .serializers import CostingConfigurationSerializer
+
+class CostingConfigurationViewSet(viewsets.ModelViewSet):
+    serializer_class = CostingConfigurationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        if tenant:
+            return CostingConfiguration.objects.filter(tenant=tenant)
+        return CostingConfiguration.objects.all()
+
+    @action(detail=False, methods=['get', 'patch', 'put'], url_path='current')
+    def current_config(self, request):
+        from apps.tenants.models import Tenant
+        tenant = getattr(request.user, 'tenant', None) or Tenant.objects.first()
+        config = CostingConfiguration.objects.filter(tenant=tenant, is_active=True).first()
+        if not config:
+            config = CostingConfiguration.objects.create(
+                tenant=tenant,
+                name="سياسة التكلفة الافتراضية",
+                method=CostingMethod.WEIGHT,
+                is_active=True
+            )
+        if request.method in ['PATCH', 'PUT']:
+            serializer = self.get_serializer(config, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        serializer = self.get_serializer(config)
+        return Response(serializer.data)

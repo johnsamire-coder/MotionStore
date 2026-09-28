@@ -486,3 +486,30 @@ class ExpenseSerializer(serializers.ModelSerializer):
     class Meta:
         model = Expense
         fields = '__all__'
+
+
+from apps.costing.models import CostingConfiguration, CostingMethod
+
+class CostingConfigurationSerializer(serializers.ModelSerializer):
+    method_display = serializers.CharField(source='get_method_display', read_only=True)
+
+    class Meta:
+        model = CostingConfiguration
+        fields = [
+            'id', 'name', 'method', 'method_display', 'waste_treatment',
+            'high_grade_pct', 'mid_grade_pct', 'liquidation_grade_pct', 'waste_grade_pct',
+            'normal_waste_percentage', 'is_active'
+        ]
+
+    def validate(self, data):
+        from decimal import Decimal
+        method = data.get('method', getattr(self.instance, 'method', None))
+        if method == CostingMethod.PERCENTAGE:
+            high = data.get('high_grade_pct', getattr(self.instance, 'high_grade_pct', 0)) or 0
+            mid = data.get('mid_grade_pct', getattr(self.instance, 'mid_grade_pct', 0)) or 0
+            liq = data.get('liquidation_grade_pct', getattr(self.instance, 'liquidation_grade_pct', 0)) or 0
+            waste = data.get('waste_grade_pct', getattr(self.instance, 'waste_grade_pct', 0)) or 0
+            total = Decimal(str(high)) + Decimal(str(mid)) + Decimal(str(liq)) + Decimal(str(waste))
+            if total != Decimal('100.00'):
+                raise serializers.ValidationError({'non_field_errors': [f'مجموع نسب الدرجات يجب أن يساوي 100% تماماً (المجموع الحالي: {total}%)']})
+        return data

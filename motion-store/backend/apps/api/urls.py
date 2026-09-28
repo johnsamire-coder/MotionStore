@@ -1,8 +1,10 @@
+from . import views
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from apps.api.views import *
 
 router = DefaultRouter()
+router.register('costing-config', views.CostingConfigurationViewSet, basename='costing-config')
 router.register(r"companies", CompanyViewSet, basename="companies")
 router.register(r"branches", BranchViewSet, basename="branches")
 router.register(r"warehouses", WarehouseViewSet, basename="warehouses")
