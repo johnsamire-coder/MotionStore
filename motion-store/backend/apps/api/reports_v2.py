@@ -233,17 +233,17 @@ def pending_lots(t, p):
 # ---------------- PURCHASES & SUPPLIERS ----------------
 def purchases_list(t, p):
     rows = [{'no': x.invoice_number, 'date': str(x.invoice_date), 'sup': x.supplier.name if x.supplier_id else '', 'total': f(x.total_cost), 'paid': f(x.paid_amount), 'rest': f(x.total_cost) - f(x.paid_amount)}
-            for x in rngd(M('purchasing', 'PurchaseInvoice').objects.filter(tenant=t), 'invoice_date', p).select_related('supplier').order_by('-invoice_date')]
+            for x in rngd(M('purchasing', 'PurchaseInvoice').objects.filter(tenant=t).exclude(status='CANCELLED'), 'invoice_date', p).select_related('supplier').order_by('-invoice_date')]
     return rep('فواتير الشراء', [('no', 'الفاتورة'), ('date', 'التاريخ'), ('sup', 'المورد'), ('total', 'الإجمالي', 'money'), ('paid', 'مدفوع عليها', 'money'), ('rest', 'الباقي', 'money')], rows, {k: round(sum(r[k] for r in rows), 2) for k in ('total', 'paid', 'rest')})
 
 def purchases_by_supplier(t, p):
-    rows = [{'sup': x['supplier__name'] or '—', 'n': x['n'], 'total': f(x['s'])} for x in rngd(M('purchasing', 'PurchaseInvoice').objects.filter(tenant=t), 'invoice_date', p).values('supplier__name').annotate(n=Count('id'), s=Sum('total_cost')).order_by('-s')]
+    rows = [{'sup': x['supplier__name'] or '—', 'n': x['n'], 'total': f(x['s'])} for x in rngd(M('purchasing', 'PurchaseInvoice').objects.filter(tenant=t).exclude(status='CANCELLED'), 'invoice_date', p).values('supplier__name').annotate(n=Count('id'), s=Sum('total_cost')).order_by('-s')]
     return rep('المشتريات حسب المورد', [('sup', 'المورد'), ('n', 'فواتير', 'number'), ('total', 'الإجمالي', 'money')], rows, {'total': sum(r['total'] for r in rows)})
 
 def supplier_balances(t, p):
     PI = M('purchasing', 'PurchaseInvoice'); SP = M('suppliers', 'SupplierPayment'); rows = []
     for s in M('suppliers', 'Supplier').objects.filter(tenant=t):
-        tot = f(PI.objects.filter(tenant=t, supplier=s).aggregate(x=Sum('total_cost'))['x']); paid = f(SP.objects.filter(tenant=t, supplier=s).aggregate(x=Sum('amount'))['x'])
+        tot = f(PI.objects.filter(tenant=t, supplier=s).exclude(status='CANCELLED').aggregate(x=Sum('total_cost'))['x']); paid = f(SP.objects.filter(tenant=t, supplier=s).aggregate(x=Sum('amount'))['x'])
         rows.append({'code': s.code, 'sup': s.name, 'total': round(tot, 2), 'paid': round(paid, 2), 'bal': round(tot - paid, 2)})
     rows.sort(key=lambda r: -r['bal'])
     return rep('أرصدة الموردين (عليكم كام)', [('code', 'الكود'), ('sup', 'المورد'), ('total', 'المشتريات', 'money'), ('paid', 'المدفوع', 'money'), ('bal', 'الرصيد', 'money')], rows, {k: round(sum(r[k] for r in rows), 2) for k in ('total', 'paid', 'bal')})
@@ -253,7 +253,7 @@ def supplier_aging(t, p):
     for s in M('suppliers', 'Supplier').objects.filter(tenant=t):
         paid = f(M('suppliers', 'SupplierPayment').objects.filter(tenant=t, supplier=s).aggregate(x=Sum('amount'))['x'])
         b = {'a': 0.0, 'b': 0.0, 'c': 0.0, 'd': 0.0}
-        for inv in PI.objects.filter(tenant=t, supplier=s).order_by('invoice_date'):
+        for inv in PI.objects.filter(tenant=t, supplier=s).exclude(status='CANCELLED').order_by('invoice_date'):
             amt = f(inv.total_cost); use = min(paid, amt); paid -= use; left = amt - use
             if left <= 0: continue
             days = (today - inv.invoice_date).days

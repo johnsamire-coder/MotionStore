@@ -31,6 +31,8 @@ class PurchaseOptionType(models.TextChoices):
     BRAND = 'BRAND', 'Brand (البراند)'
     SPECIAL_ITEM = 'SPECIAL_ITEM', 'Special Item (بند خاص)'
     SEASON = 'SEASON', 'Season (الموسم)'
+    ITEM = 'ITEM', 'Bale item'
+    CATEGORY = 'CATEGORY', 'Direct purchase category'
 
 
 class PurchaseInvoice(TenantAwareModel):
@@ -87,6 +89,11 @@ class PurchaseInvoice(TenantAwareModel):
 
 
 class PurchaseLineItem(TenantAwareModel):
+    season = models.CharField(max_length=20, blank=True, default='')
+    ton_type = models.CharField(max_length=10, blank=True, default='')
+    ton_group = models.CharField(max_length=40, blank=True, default='')
+    brands = models.JSONField(default=list, blank=True)
+    direct_category = models.CharField(max_length=100, blank=True, default='')
     invoice = models.ForeignKey(
         PurchaseInvoice,
         on_delete=models.CASCADE,

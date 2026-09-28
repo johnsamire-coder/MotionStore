@@ -108,7 +108,7 @@ class SupplierViewSet(BaseTenantViewSet):
         from apps.purchasing.models import PurchaseInvoice
         from apps.suppliers.models import SupplierPayment
         t = self.get_tenant()
-        inv = {str(r['supplier']): r for r in PurchaseInvoice.objects.filter(tenant=t).values('supplier').annotate(n=Count('id'), total=Sum('total_cost'), last=Max('invoice_date'))}
+        inv = {str(r['supplier']): r for r in PurchaseInvoice.objects.filter(tenant=t).exclude(status='CANCELLED').values('supplier').annotate(n=Count('id'), total=Sum('total_cost'), last=Max('invoice_date'))}
         pay = {str(r['supplier']): r['s'] for r in SupplierPayment.objects.filter(tenant=t).values('supplier').annotate(s=Sum('amount'))}
         rows = []
         for sp in Supplier.objects.filter(tenant=t).order_by('name'):
@@ -124,7 +124,7 @@ class SupplierViewSet(BaseTenantViewSet):
         from apps.purchasing.models import PurchaseLineItem
         _fk = next(f.name for f in PurchaseLineItem._meta.fields if f.is_relation and f.related_model is PurchaseInvoice)
         ev = []
-        for pi in PurchaseInvoice.objects.filter(tenant=sp.tenant, supplier=sp):
+        for pi in PurchaseInvoice.objects.filter(tenant=sp.tenant, supplier=sp).exclude(status='CANCELLED'):
             lines = []
             for l in PurchaseLineItem.objects.filter(**{_fk: pi}):
                 desc = ' - '.join([str(getattr(l, f)) for f in ('bale_type', 'segment', 'grade', 'brand', 'item_name', 'description') if getattr(l, f, None)])
@@ -337,6 +337,125 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
     model = PurchaseInvoice
     serializer_class = PurchaseInvoiceSerializer
 
+    def _lots_locked(self, inv):
+        from apps.raw_lots.models import RawLot
+        busy = RawLot.objects.filter(purchase_invoice=inv).exclude(status__in=['RECEIVED', 'CANCELLED']).first()
+        return busy.lot_code if busy else None
+
+    @action(detail=False, methods=['post'], url_path='check_manager')
+    def check_manager(self, request):
+        if not _verify_manager(self.get_tenant(), request.data.get('manager_password')):
+            return Response({'detail': 'باسورد المدير غلط'}, status=403)
+        return Response({'ok': True})
+
+    @action(detail=True, methods=['post'], url_path='replace')
+    def replace_invoice(self, request, pk=None):
+        from django.db import transaction as dbt
+        from apps.raw_lots.models import RawLot
+        old = self.get_object(); t = old.tenant
+        if not _verify_manager(t, request.data.get('manager_password')):
+            return Response({'detail': 'تعديل فاتورة الشراء محتاج باسورد المدير'}, status=403)
+        if old.status == 'CANCELLED':
+            return Response({'detail': 'الفاتورة دي ملغية'}, status=400)
+        busy = self._lots_locked(old)
+        if busy:
+            return Response({'detail': f'مينفعش تتعدّل: البالة {busy} بدأت تتفرز'}, status=400)
+
+        class _Stop(Exception):
+            pass
+        holder = {}
+        try:
+            with dbt.atomic():
+                RawLot.objects.filter(purchase_invoice=old).delete()
+                PurchaseLineItem.objects.filter(invoice=old).delete()
+                resp = self.create(request)
+                if resp.status_code != 201:
+                    holder['resp'] = resp
+                    raise _Stop()
+                new = PurchaseInvoice.objects.get(pk=resp.data['id'])
+                PurchaseLineItem.objects.filter(invoice=new).update(invoice=old)
+                for i, lot in enumerate(RawLot.objects.filter(purchase_invoice=new).order_by('lot_code')):
+                    lot.purchase_invoice = old
+                    lot.lot_code = f"LOT-{old.invoice_number}-{i + 1}"
+                    lot.notes = f"Edited invoice #{old.invoice_number}"
+                    lot.save()
+                old.supplier_id = new.supplier_id
+                old.warehouse_id = new.warehouse_id
+                old.subtotal = new.subtotal
+                old.additional_costs = new.additional_costs
+                old.total_cost = new.total_cost
+                old.save()
+                new.delete()
+        except _Stop:
+            return holder['resp']
+        except Exception as ex:
+            return Response({'detail': f'مينفعش تتعدّل: {str(ex)[:150]}'}, status=400)
+        return Response({'ok': True, 'id': str(old.id), 'invoice_number': old.invoice_number, 'total_amount': str(old.total_cost)})
+    @action(detail=True, methods=['post'], url_path='edit')
+    def edit_invoice(self, request, pk=None):
+        from django.db import transaction as dbt
+        from apps.raw_lots.models import RawLot
+        from apps.suppliers.models import Supplier
+        inv = self.get_object(); t = inv.tenant; d = request.data
+        if not _verify_manager(t, d.get('manager_password')):
+            return Response({'detail': 'تعديل فاتورة الشراء محتاج باسورد المدير'}, status=403)
+        if inv.status == 'CANCELLED':
+            return Response({'detail': 'الفاتورة دي ملغية'}, status=400)
+        busy = self._lots_locked(inv)
+        if busy:
+            return Response({'detail': f'مينفعش تتعدّل: البالة {busy} بدأت تتفرز'}, status=400)
+        try:
+            freight = Decimal(str(d.get('freight_cost') if d.get('freight_cost') not in (None, '') else inv.additional_costs))
+        except Exception:
+            return Response({'detail': 'مصاريف النقل لازم تبقى رقم'}, status=400)
+        if freight < 0:
+            return Response({'detail': 'مصاريف النقل مينفعش تبقى بالسالب'}, status=400)
+        sup = None
+        if d.get('supplier_id'):
+            sup = Supplier.objects.filter(tenant=t, pk=d.get('supplier_id')).first()
+            if not sup:
+                return Response({'detail': 'المورد مش موجود'}, status=400)
+        with dbt.atomic():
+            lines = list(inv.line_items.all().order_by('created_at')) if hasattr(inv, 'line_items') else list(PurchaseLineItem.objects.filter(invoice=inv).order_by('created_at'))
+            vals = [l.total_cost for l in lines]; tot = sum(vals, Decimal('0')); allocated = Decimal('0')
+            for i, l in enumerate(lines):
+                if tot <= 0 or freight <= 0:
+                    share = Decimal('0')
+                elif i == len(lines) - 1:
+                    share = freight - allocated
+                else:
+                    share = (freight * l.total_cost / tot).quantize(Decimal('0.01')); allocated += share
+                RawLot.objects.filter(purchase_line_item=l).update(purchase_cost=l.total_cost + share, **({'supplier': sup} if sup else {}))
+            inv.additional_costs = freight
+            inv.total_cost = inv.subtotal + freight
+            if sup:
+                inv.supplier = sup
+            if 'notes' in d:
+                inv.notes = d.get('notes') or ''
+            inv.save()
+        return Response({'ok': True, 'total_cost': str(inv.total_cost), 'freight': str(freight)})
+
+    @action(detail=True, methods=['post'], url_path='cancel')
+    def cancel_invoice(self, request, pk=None):
+        from django.db import transaction as dbt
+        from apps.raw_lots.models import RawLot
+        inv = self.get_object(); t = inv.tenant; d = request.data
+        if not _verify_manager(t, d.get('manager_password')):
+            return Response({'detail': 'إلغاء فاتورة الشراء محتاج باسورد المدير'}, status=403)
+        if inv.status == 'CANCELLED':
+            return Response({'detail': 'الفاتورة دي ملغية قبل كده'}, status=400)
+        reason = (d.get('reason') or '').strip()
+        if not reason:
+            return Response({'detail': 'اكتب سبب الإلغاء'}, status=400)
+        busy = self._lots_locked(inv)
+        if busy:
+            return Response({'detail': f'مينفعش تتلغي: البالة {busy} بدأت تتفرز'}, status=400)
+        with dbt.atomic():
+            RawLot.objects.filter(purchase_invoice=inv).update(status='CANCELLED')
+            inv.status = 'CANCELLED'
+            inv.notes = ((inv.notes or '') + f' | ملغية: {reason}').strip(' |')
+            inv.save()
+        return Response({'ok': True})
     def create(self, request, *args, **kwargs):
         tenant = self.get_tenant()
         data = request.data
@@ -351,6 +470,49 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
             supplier_id = _def_sup.id
         warehouse_id = data.get('warehouse_id')
         freight_cost = Decimal(str(data.get('freight_cost', '0.00')))
+        # ---- PURCHASES_V3 validation (nothing is saved if any row is wrong) ----
+        _GR6 = ['سوبر كريم', 'كريم', 'كريم في واحد', 'نمرة 1', 'نمرة 2', 'سحبة']
+        _SEG = ['حريمي', 'رجالي']
+        _items = data.get('items', []) or []
+        if not _items:
+            return Response({'detail': 'الفاتورة فاضية - ضيف سطر واحد على الأقل'}, status=400)
+        for _n, _it in enumerate(_items, start=1):
+            _k = _it.get('purchase_kind')
+            if _k not in ('BALE', 'STOCK', 'DIRECT'):
+                continue
+            _bad = lambda m: Response({'detail': f'السطر رقم {_n}: {m}'}, status=400)
+            try:
+                _w = Decimal(str(_it.get('weight_kg') or '0')); _p = Decimal(str(_it.get('unit_price') or '0'))
+            except Exception:
+                return _bad('الوزن أو سعر الكيلو مش أرقام')
+            if _w <= 0:
+                return _bad('لازم الوزن يبقى أكبر من صفر')
+            if _p <= 0:
+                return _bad('لازم سعر الكيلو يبقى أكبر من صفر')
+            if (_it.get('segment') or '') not in _SEG:
+                return _bad('اختار حريمي أو رجالي')
+            _season = _it.get('season') or ''
+            if _k in ('BALE', 'STOCK') and _season not in ('صيفي', 'شتوي'):
+                return _bad('اختار صيفي أو شتوي')
+            if _k == 'DIRECT' and _season not in ('صيفي', 'شتوي', 'ميكس', 'بدون'):
+                return _bad('اختار الموسم (صيفي، شتوي، ميكس، بدون)')
+            if _k == 'BALE':
+                if (_it.get('grade') or '') not in _GR6:
+                    return _bad('اختار درجة البالة')
+                if not (_it.get('item_name') or '').strip():
+                    return _bad('اختار صنف البالة')
+                if (_it.get('ton_type') or '') not in ('NORMAL', 'ASSORTED'):
+                    return _bad('اختار طن عادي ولا تشكيل')
+            if _k == 'STOCK':
+                if (_it.get('stock_type') or '') not in ('ONE_BRAND', 'MIX_BRAND'):
+                    return _bad('اختار وان براند ولا ميكس')
+                if _it.get('stock_type') == 'ONE_BRAND' and not (_it.get('brand') or '').strip():
+                    return _bad('اختار البراند')
+            if _k == 'DIRECT':
+                if not (_it.get('direct_category') or '').strip():
+                    return _bad('اختار التصنيف (أحذية، شنط...)')
+                if (_it.get('grade') or '') and _it.get('grade') not in _GR6:
+                    return _bad('الدرجة مش من الـ 6 درجات')
 
         inv_num = f"PINV-{timezone.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
 
@@ -400,6 +562,15 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
                     if not cat_id and p_obj.category_id:
                         cat_id = p_obj.category_id
 
+            if item.get('purchase_kind') in ('BALE', 'STOCK', 'DIRECT') and item.get('season'):
+                _pk = item.get('purchase_kind')
+                if _pk == 'BALE':
+                    desc = f"بالة - {item.get('segment')} - {item.get('season')} - {item.get('grade')} - {item.get('item_name')}"
+                elif _pk == 'STOCK':
+                    _bn = item.get('brand') if item.get('stock_type') == 'ONE_BRAND' else ('ميكس' + (' (' + '، '.join(item.get('brands') or []) + ')' if item.get('brands') else ''))
+                    desc = f"استوك - {item.get('segment')} - {item.get('season')} - {_bn}"
+                else:
+                    desc = ' - '.join([x for x in ['شراء مباشر', item.get('segment'), item.get('season'), item.get('direct_category'), item.get('brand') or '', item.get('grade') or ''] if x])
             if not desc:
                 desc = 'بند مشتريات'
 
@@ -429,7 +600,12 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
                 stock_type=item.get('stock_type') or None,
                 brand=item.get('brand') or None,
                 item_name=item.get('item_name') or None,
-                extra_description=item.get('extra_description') or None
+                extra_description=item.get('extra_description') or None,
+                season=item.get('season') or '',
+                ton_type=item.get('ton_type') or '',
+                ton_group=item.get('ton_group') or '',
+                brands=item.get('brands') or [],
+                direct_category=item.get('direct_category') or ''
             )
 
             # If RAW_BALE, create RawLot automatically for the Sorting Hub

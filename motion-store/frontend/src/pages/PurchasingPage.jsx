@@ -1,3 +1,4 @@
+import PurchaseInvoiceActions from '../components/PurchaseInvoiceActions';
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExportButtons from '../components/ExportButtons';
@@ -409,7 +410,7 @@ export default function PurchasingPage() {
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredInvoices.map(inv => (
                 <tr key={inv.id} className="hover:bg-slate-50">
-                  <td className="p-3 font-mono font-bold text-slate-600">{inv.invoice_number}</td>
+                  <td className="p-3 font-mono font-bold text-slate-600">{inv.invoice_number}<PurchaseInvoiceActions inv={inv} onDone={() => window.location.reload()} /></td>
                   <td className="p-3 font-black text-slate-900">{inv.supplier_name || '—'}</td>
                   <td className="p-3 font-bold text-slate-700">{inv.warehouse_name || '—'}</td>
                   <td className="p-3 text-rose-600 font-bold">+{parseFloat(inv.freight_cost || inv.additional_costs || 0).toFixed(2)} {t('common.currency')}</td>
