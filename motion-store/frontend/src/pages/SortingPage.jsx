@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 
 export default function SortingPage() {
@@ -28,25 +28,44 @@ export default function SortingPage() {
     }
   };
 
-  // صياغة اسم البند المجمع الصريح
-  const formatWeight = (val) => Number(val || 0).toString();
-
+  // صياغة الهوية المجمعة الصافية بدون أصل إنجليزي أو تكرار
   const getDisplayName = (lot) => {
-    const kind = lot.source_kind || 'بالة';
-    const segment = lot.segment || 'حريمي';
-    const season = lot.season || 'صيفي';
-    const grade = lot.purchase_grade || 'سوبر كريم';
-    const category = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name : 'بلوزة شيفون';
-    const brand = lot.brand && lot.brand !== 'بدون براند' ? ` - ${lot.brand}` : '';
+    let kind = (lot.source_kind || 'بالة').trim();
+    if (kind === 'RAW_BALE' || kind === 'BALE') kind = 'بالة';
+    if (kind === 'STOCK') kind = 'استوك';
+    if (kind === 'DIRECT_PURCHASE') kind = 'شراء مباشر';
 
-    if (kind === 'استوك') return `${kind} - ${segment} - ${season} - ${grade}${brand}`;
-    if (kind === 'شراء مباشر') return `${kind} - ${segment} - ${season} - ${category}${brand}`;
-    return `${kind} - ${segment} - ${season} - ${grade} - ${category}`;
+    const segment = (lot.segment || 'حريمي').trim();
+    const season = (lot.season || 'صيفي').trim();
+    const grade = (lot.purchase_grade || 'سوبر كريم').trim();
+    const category = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name.trim() : 'بلوزة';
+    const brand = (lot.brand && lot.brand !== 'بدون براند') ? lot.brand.trim() : '';
+
+    if (kind.includes('استوك')) {
+      const bType = brand ? 'وان براند' : 'ميكس براند';
+      const bStr = brand ? ` - ${brand}` : '';
+      return `استوك - ${segment} - ${season} - ${bType}${bStr}`;
+    }
+    if (kind.includes('شراء مباشر')) {
+      const cStr = category ? ` - ${category}` : '';
+      const bStr = brand ? ` - ${brand}` : '';
+      return `شراء مباشر - ${segment} - ${season}${cStr}${bStr}`;
+    }
+    // بالة
+    const gStr = grade ? ` - ${grade}` : ' - سوبر كريم';
+    const cStr = category ? ` - ${category}` : ' - بلوزة';
+    return `بالة - ${segment} - ${season}${gStr}${cStr}`;
+  };
+
+  const formatWeight = (val) => {
+    if (!val) return '0';
+    const num = parseFloat(val);
+    return num % 1 === 0 ? num.toFixed(0) : num.toFixed(3);
   };
 
   const openSortingModal = (lot) => {
     setSelectedLot(lot);
-    const catName = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name : 'بلوزة شيفون';
+    const catName = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name : 'بلوزة';
     const defaultRow = { category_name: catName, brand: lot.brand || '', quantity_pieces: '', weight_kg: '' };
     setSortingData({
       HIGH: [{ ...defaultRow }],
@@ -58,7 +77,7 @@ export default function SortingPage() {
   };
 
   const addRow = (grade) => {
-    const catName = (selectedLot?.category_name && selectedLot?.category_name !== 'صنف غير محدد') ? selectedLot.category_name : 'بلوزة شيفون';
+    const catName = (selectedLot?.category_name && selectedLot?.category_name !== 'صنف غير محدد') ? selectedLot.category_name : 'بلوزة';
     setSortingData(prev => ({
       ...prev,
       [grade]: [...prev[grade], { category_name: catName, brand: selectedLot?.brand || '', quantity_pieces: '', weight_kg: '' }]
@@ -77,7 +96,7 @@ export default function SortingPage() {
 
     try {
       const allLines = [];
-      const defaultCat = (selectedLot?.category_name && selectedLot?.category_name !== 'صنف غير محدد') ? selectedLot.category_name : 'بلوزة شيفون';
+      const defaultCat = (selectedLot?.category_name && selectedLot?.category_name !== 'صنف غير محدد') ? selectedLot.category_name : 'بلوزة';
 
       Object.entries(sortingData).forEach(([grade, rows]) => {
         rows.forEach(row => {
@@ -171,10 +190,10 @@ export default function SortingPage() {
         ) : (
           rawLots.map(lot => (
             <div key={lot.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow space-y-3">
-              {/* الاسم المجمع بالكامل */}
+              {/* الاسم المجمع الصافي المنظف بدون RAW_BALE أو تكرار */}
               <h3 className="font-extrabold text-slate-900 leading-relaxed text-sm bg-slate-50 p-2.5 rounded-lg border border-slate-100">{getDisplayName(lot)}</h3>
 
-              {/* بيانات الشحنة كاملة من بره */}
+              {/* بيانات الشحنة والمورد والوزن الأصلي */}
               <div className="space-y-1.5 text-xs font-bold text-slate-600 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">📄 رقم البالة / الفاتورة:</span>
@@ -183,7 +202,7 @@ export default function SortingPage() {
 
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">🏬 المورد:</span>
-                  <span className="text-slate-800">{lot.supplier_name || lot.supplier?.name || 'مورد عام'}</span>
+                  <span className="text-slate-800">{lot.supplier_name || lot.supplier?.name || 'أولاد ثابت'}</span>
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -213,7 +232,7 @@ export default function SortingPage() {
                 <h3 className="text-lg font-bold text-slate-800">{getDisplayName(selectedLot)}</h3>
                 <div className="text-xs font-bold text-indigo-700 mt-1 flex flex-wrap gap-4">
                   <span>📄 الشحنة: {selectedLot.lot_code || selectedLot.invoice_number || 'LOT'}</span>
-                  <span>🏬 المورد: {selectedLot.supplier_name || selectedLot.supplier?.name || 'مورد عام'}</span>
+                  <span>🏬 المورد: {selectedLot.supplier_name || selectedLot.supplier?.name || 'أولاد ثابت'}</span>
                   <span>⚖️ الوزن الكلي: {formatWeight(selectedLot.original_weight_kg)} كجم</span>
                 </div>
               </div>
