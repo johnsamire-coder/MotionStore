@@ -1,532 +1,222 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
-import { useLanguage } from '../context/LanguageContext';
-import { 
-  Layers, 
-  Scale, 
-  Trash2, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Play, 
-  Database,
-  PlusCircle,
-  ClipboardList
-} from 'lucide-react';
+import { Package, CheckCircle2, AlertTriangle, Layers, Tag, Info } from 'lucide-react';
 
 export default function SortingPage() {
-  const { t, isRTL } = useLanguage();
-  const LOT_GRADE_EN = {
-    'سوبر كريم': 'Super Cream', 'كريم': 'Cream', 'كريم في واحد': 'Cream in One',
-    'نمرة 1': 'No. 1', 'نمرة 2': 'No. 2', 'سحبة': 'Sahba',
-    'ستوك بيور': 'Pure Stock', 'ستوك ديفوه': 'Defect Stock'
-  };
-  const lotLabel = (lot) => {
-    const i = lot?.line_info;
-    if (!i) return `${t('common.lot')}: ${lot?.lot_code || ''}`;
-    const g = (x) => (isRTL ? x : (LOT_GRADE_EN[x] || x));
-    if (i.kind === 'BALE') return [isRTL ? 'بالة' : 'Bale', i.grade && g(i.grade), i.bale_type, i.segment].filter(Boolean).join(' - ');
-    if (i.kind === 'STOCK') return [isRTL ? 'استوك' : 'Stock', i.stock_type === 'ONE_BRAND' ? 'One Brand' : 'Mix Brand', i.stock_type === 'ONE_BRAND' ? i.brand : null, i.grade && g(i.grade)].filter(Boolean).join(' - ');
-    return [isRTL ? 'شراء مباشر' : 'Direct Purchase', i.item_name].filter(Boolean).join(' - ');
-  };
-
-  // Data States
   const [rawLots, setRawLots] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState({ type: '', text: '' });
   const [selectedLot, setSelectedLot] = useState(null);
-  const [warehouses, setWarehouses] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
 
-  // Sorting Workspace States
-  const [sortingOrder, setSortingOrder] = useState(null);
-  const [newWeight, setNewWeight] = useState('0.000');
-  const [newPieces, setNewPieces] = useState(0);
-  const [midWeight, setMidWeight] = useState('0.000');
-  const [midPieces, setMidPieces] = useState(0);
-  const [clrWeight, setClrWeight] = useState('0.000');
-  const [clrPieces, setClrPieces] = useState(0);
-  
-  const [wasteWeight, setWasteWeight] = useState('0.000');
-  const [wastePieces, setWastePieces] = useState(0);
-  const [wasteClass, setWasteClass] = useState('NORMAL');
-  const [wasteReason, setWasteReason] = useState('');
-
-  const [adjWeight, setAdjWeight] = useState('0.000');
-  const [adjReason, setAdjReason] = useState('');
-
-  // Workflow Progress States
-  const [isReconciled, setIsReconciled] = useState(false);
-  const [costingRecord, setCostingRecord] = useState(null);
-  const [isPosted, setIsPosted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  // حالة الفرز للأربع درجات
+  const [sortingData, setSortingData] = useState({
+    HIGH: [], MID: [], LIQUIDATION: [], WASTE: []
+  });
 
   useEffect(() => {
-    loadInitialData();
+    fetchRawLots();
   }, []);
 
-  const loadInitialData = async () => {
-    setLoading(true);
+  const fetchRawLots = async () => {
     try {
-      const lotRes = await axiosClient.get('/raw-lots/');
-      setRawLots((lotRes.data.results || lotRes.data || []).filter(l => l.status !== 'SORTED'));
-
-      const whRes = await axiosClient.get('/warehouses/?is_active=true');
-      setWarehouses(whRes.data.results || whRes.data || []);
-
-      const prodRes = await axiosClient.get('/products/?is_active=true');
-      setProducts(prodRes.data.results || prodRes.data || []);
-    } catch (err) {
-      console.error("Failed to load sorting data:", err);
+      setLoading(true);
+      const res = await axiosClient.get('/raw-lots/?status=PENDING');
+      setRawLots(res.data.results || res.data || []);
+    } catch (e) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleStartSorting = async (lot) => {
+  // صياغة هوية البند الكاملة في القائمة من بره
+  const getDisplayName = (lot) => {
+    const kind = lot.source_kind || 'بالة';
+    const segment = lot.segment || 'حريمي';
+    const season = lot.season || 'صيفي';
+    const grade = lot.purchase_grade || 'سوبر كريم';
+    const category = lot.category_name || 'صنف غير محدد';
+    const brand = lot.brand && lot.brand !== 'بدون براند' ? ` - ${lot.brand}` : '';
+
+    if (kind === 'استوك') return `${kind} - ${segment} - ${season} - ${grade}${brand}`;
+    if (kind === 'شراء مباشر') return `${kind} - ${segment} - ${season} - ${category}${brand}`;
+    return `${kind} - ${segment} - ${season} - ${grade} - ${category}`;
+  };
+
+  const openSortingModal = (lot) => {
     setSelectedLot(lot);
-    setNewWeight('0.000'); setNewPieces(0); setMidWeight('0.000'); setMidPieces(0); setClrWeight('0.000'); setClrPieces(0); setWasteWeight('0.000'); setWastePieces(0); setWasteClass('NORMAL'); setWasteReason(''); setAdjWeight('0.000'); setAdjReason('');
-    setSubmitting(true);
+    // تجهيز صف افتراضي لكل درجة
+    const defaultRow = { category_name: lot.category_name || '', brand: lot.brand || '', quantity_pieces: '', weight_kg: '' };
+    setSortingData({
+      HIGH: [{ ...defaultRow }],
+      MID: [{ ...defaultRow }],
+      LIQUIDATION: [{ ...defaultRow }],
+      WASTE: [{ ...defaultRow, category_name: 'هالك' }]
+    });
+    setMsg({ type: '', text: '' });
+  };
+
+  const addRow = (grade) => {
+    setSortingData(prev => ({
+      ...prev,
+      [grade]: [...prev[grade], { category_name: selectedLot.category_name || '', brand: selectedLot.brand || '', quantity_pieces: '', weight_kg: '' }]
+    }));
+  };
+
+  const updateRow = (grade, index, field, value) => {
+    const newData = { ...sortingData };
+    newData[grade][index][field] = value;
+    setSortingData(newData);
+  };
+
+  const handleMatchAndTransfer = async () => {
+    setMsg({ type: '', text: '' });
+    setSaving(true);
+
     try {
-      const orderCode = `SRT-${lot.lot_code}`;
-      const res = await axiosClient.post('/sorting-orders/', {
-        order_code: orderCode,
-        raw_lot: lot.id,
-        sorting_date: new Date().toISOString().split('T')[0],
-        status: 'DRAFT',
-        notes: `Sorting of bale lot #${lot.lot_code}`
+      // تجميع كل السطور المدخلة
+      const allLines = [];
+      Object.entries(sortingData).forEach(([grade, rows]) => {
+        rows.forEach(row => {
+          if (row.quantity_pieces || row.weight_kg) {
+            allLines.push({
+              grade: grade,
+              category_name: row.category_name || selectedLot.category_name || 'غير محدد',
+              brand: row.brand || selectedLot.brand || 'بدون براند',
+              quantity_pieces: parseInt(row.quantity_pieces) || 0,
+              weight_kg: parseFloat(row.weight_kg) || 0.0
+            });
+          }
+        });
       });
-      setSortingOrder(res.data);
-      setIsReconciled(false);
-      setCostingRecord(null);
-      setIsPosted(false);
-    } catch (err) {
-      alert(err.response?.data?.detail || "Failed to start sorting workspace.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
-  // Live Calculations for Reconciliation Check
-  const sumOutputs = parseFloat(newWeight || 0) + parseFloat(midWeight || 0) + parseFloat(clrWeight || 0);
-  const totalReconciledWeight = sumOutputs + parseFloat(wasteWeight || 0) + parseFloat(adjWeight || 0);
-  const originalBaleWeight = selectedLot ? parseFloat(selectedLot.original_weight_kg) : 0;
-  const discrepancy = totalReconciledWeight - originalBaleWeight;
-  const isWeightsBalanced = Math.abs(discrepancy) <= 0.001;
-
-    // Step 1: Reconcile Weights
-  const handleReconcile = async () => {
-    if (!isWeightsBalanced) {
-      alert("الأوزان غير متطابقة. يرجى تعديل أوزان الفرز أو الهالك لتبطابق وزن البالة الأصلي.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const payload = {
-        outputs: [
-          { grade: 'NEW_COLLECTION', weight_kg: parseFloat(newWeight || 0), quantity_pieces: parseInt(newPieces || 0) },
-          { grade: 'MIDDLE', weight_kg: parseFloat(midWeight || 0), quantity_pieces: parseInt(midPieces || 0) },
-          { grade: 'CLEARANCE', weight_kg: parseFloat(clrWeight || 0), quantity_pieces: parseInt(clrPieces || 0) }
-        ],
-        wastes: [
-          { weight_kg: parseFloat(wasteWeight || 0) + parseFloat(adjWeight || 0), quantity_pieces: parseInt(wastePieces || 0), waste_classification: wasteClass, notes: wasteReason || adjReason || 'هالك فرز' }
-        ]
-      };
-
-      const targetUrl = '/sorting-orders/' + sortingOrder.id + '/reconcile/';
-      const recRes = await axiosClient.post(targetUrl, payload);
-      if (recRes.data && recRes.data.balanced) {
-        setIsReconciled(true);
-        alert("تم حفظ ومطابقة أوزان الفرز بنجاح ✅");
-      } else {
-        alert(recRes.data?.message || "فشلت المطابقة، تأكد من الأوزان.");
+      if (allLines.length === 0) {
+        setMsg({ type: 'error', text: '⚠️ لم يتم إدخال أي أوزان أو أعداد للفرز!' });
+        setSaving(false);
+        return;
       }
+
+      // إرسال البيانات للباك اند كعملية مطابقة وترحيل فورية
+      await axiosClient.post(`/raw-lots/${selectedLot.id}/sort_and_transfer/`, {
+        lines: allLines
+      });
+
+      setMsg({ type: 'success', text: '🎉 تم المطابقة والترحيل كبنود في المحل بنجاح!' });
+      setTimeout(() => {
+        setSelectedLot(null);
+        fetchRawLots();
+      }, 2000);
     } catch (err) {
-      alert(err.response?.data?.detail || "فشل حفظ خطوط ومطابقة الفرز.");
+      setMsg({ type: 'error', text: '❌ حدث خطأ أثناء الترحيل. تأكد من البيانات.' });
     } finally {
-      setSubmitting(false);
+      setSaving(false);
     }
   };
 
-  // Step 2: Calculate Costing
-  const handleCalculateCosting = async () => {
-    setSubmitting(true);
-    try {
-      const res = await axiosClient.post(`/sorting-orders/${sortingOrder.id}/calculate_costing/`);
-      setCostingRecord(res.data);
-    } catch (err) {
-      alert(err.response?.data?.detail || "Failed to calculate costing allocation.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const renderCards = () => {
+    const grades = [
+      { key: 'HIGH', label: '⭐ درجة عالي', color: 'emerald' },
+      { key: 'MID', label: '🔹 درجة وسط', color: 'indigo' },
+      { key: 'LIQUIDATION', label: '🏷️ درجة تصفيات', color: 'amber' },
+      { key: 'WASTE', label: '🗑️ هالك (خسارة)', color: 'rose' }
+    ];
 
-  // Step 3: Post to Stock Inventory Ledger
-  const handlePostToInventory = async () => {
-    setSubmitting(true);
-    try {
-      await axiosClient.post(`/sorting-orders/${sortingOrder.id}/calculate_costing/`);
-      await axiosClient.post(`/sorting-orders/${sortingOrder.id}/post_inventory/`);
-      setIsPosted(true);
-      alert(isRTL ? 'تم ترحيل البضاعة المفروزة للمخزون بنجاح ✅' : 'Sorted goods posted to inventory successfully ✅');
-      setSelectedLot(null);
-      setSortingOrder(null);
-      loadInitialData();
-    } catch (err) {
-      alert(err.response?.data?.detail || "Failed to post to inventory.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    const kind = selectedLot?.source_kind || 'بالة';
 
-  if (loading) return <div className="text-center py-12 text-slate-500 text-sm">{t('common.loading')}</div>;
+    return grades.map(g => (
+      <div key={g.key} className={`bg-${g.color}-50 border border-${g.color}-200 p-4 rounded-xl space-y-3`}>
+        <div className={`font-bold text-${g.color}-800 flex justify-between items-center`}>
+          <span>{g.label}</span>
+          {(kind === 'استوك' || kind === 'شراء مباشر') && g.key !== 'WASTE' && (
+            <button onClick={() => addRow(g.key)} className={`text-xs bg-${g.color}-200 px-2 py-1 rounded hover:bg-${g.color}-300`}>+ إضافة صنف</button>
+          )}
+        </div>
+
+        {sortingData[g.key].map((row, idx) => (
+          <div key={idx} className="flex flex-wrap gap-2 items-center bg-white p-2 rounded border border-white/50 shadow-sm">
+            
+            {/* في الاستوك: البراند ثابت والصنف بيتكتب */}
+            {kind === 'استوك' && g.key !== 'WASTE' && (
+              <input type="text" placeholder="اسم الصنف (بلوزة..)" value={row.category_name} onChange={(e) => updateRow(g.key, idx, 'category_name', e.target.value)} className="flex-1 min-w-[100px] text-xs font-bold px-2 py-1.5 border rounded outline-none" />
+            )}
+
+            {/* في الشراء المباشر: الصنف ثابت والبراند بيتكتب */}
+            {kind === 'شراء مباشر' && g.key !== 'WASTE' && (
+              <input type="text" placeholder="البراند (اختياري)" value={row.brand} onChange={(e) => updateRow(g.key, idx, 'brand', e.target.value)} className="flex-1 min-w-[100px] text-xs font-bold px-2 py-1.5 border rounded outline-none" />
+            )}
+
+            <div className="flex gap-2 w-full sm:w-auto">
+              <input type="number" placeholder="العدد" value={row.quantity_pieces} onChange={(e) => updateRow(g.key, idx, 'quantity_pieces', e.target.value)} className="w-1/2 sm:w-20 text-xs font-bold px-2 py-1.5 border rounded outline-none text-center" />
+              <input type="number" step="0.01" placeholder="الوزن كجم" value={row.weight_kg} onChange={(e) => updateRow(g.key, idx, 'weight_kg', e.target.value)} className="w-1/2 sm:w-24 text-xs font-bold px-2 py-1.5 border rounded outline-none text-center" />
+            </div>
+          </div>
+        ))}
+      </div>
+    ));
+  };
 
   return (
-    <div className="space-y-8" dir={isRTL ? 'rtl' : 'ltr'}>
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">{t('sorting.title')}</h2>
-        <p className="text-sm text-slate-500">{t('sorting.subtitle')}</p>
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><span>📦</span> قايمة الفرز</h2>
+          <p className="text-xs text-slate-500 mt-1">المشتريات اللي دخلت المخزن ومستنية تتفرز وتترحل كبنود للمحل</p>
+        </div>
       </div>
 
-      {!selectedLot ? (
-        /* LIST OF RECEIVED BALES PENDING SORTING */
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-            <ClipboardList size={18} className="text-emerald-600" />
-            <span className="font-bold text-slate-800 text-sm">{t('sorting.pendingBales')}</span>
-          </div>
-
-          <div className="divide-y divide-slate-150">
-            {rawLots.map((lot) => (
-              <div key={lot.id} className="p-5 flex items-center justify-between hover:bg-slate-50/50 transition">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-sm">{lotLabel(lot)}<span className="block text-[10px] text-slate-400 font-mono font-normal">{lot.lot_code}</span></span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 uppercase tracking-wider">
-                      {lot.status?.replace('_', ' ')}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    {lot.supplier_name} | {lot.received_date} | {lot.warehouse_name}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-6">
-                  <div className={isRTL ? 'text-left' : 'text-right'}>
-                    <div className="font-extrabold text-slate-900 text-sm">{lot.original_weight_kg} {t('common.kg')}</div>
-                    <div className="text-xs text-slate-500 font-semibold">{lot.purchase_cost} {t('common.currency')}</div>
-                  </div>
-
-                  <button
-                    onClick={() => handleStartSorting(lot)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/10 cursor-pointer"
-                  >
-                    <Play size={12} fill="currentColor" /> {t('sorting.startSorting')}
-                  </button>
-                </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {loading ? (
+          <div className="col-span-full p-6 text-center text-slate-400 font-bold">جاري تحميل قايمة الفرز...</div>
+        ) : rawLots.length === 0 ? (
+          <div className="col-span-full p-6 text-center text-slate-400 font-bold bg-white rounded border border-slate-200">مفيش مشتريات مستنية الفرز حالياً.</div>
+        ) : (
+          rawLots.map(lot => (
+            <div key={lot.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+              <h3 className="font-extrabold text-slate-800 leading-relaxed mb-2 text-sm">{getDisplayName(lot)}</h3>
+              <div className="flex items-center gap-2 text-xs text-slate-500 mb-4 font-bold">
+                <span className="bg-slate-100 px-2 py-1 rounded">الوزن الكلي: {lot.original_weight_kg} كجم</span>
               </div>
-            ))}
-
-            {rawLots.length === 0 && (
-              <div className="py-20 text-center text-slate-400 text-xs">
-                {t('sorting.pendingBales')} - 0
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* SORTING WORKSPACE */
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Inputs Panel */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-slate-900 text-white p-5 rounded-2xl flex items-center justify-between shadow-md">
-              <div className="space-y-1">
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">{t('sorting.activeWorkspace')}</span>
-                <button type="button" onClick={() => { setSelectedLot(null); setSortingOrder(null); }} className="mb-2 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-bold text-white cursor-pointer">{isRTL ? '→ رجوع للبالات' : '← Back to bales'}</button>
-                <h3 className="text-lg font-bold">{lotLabel(selectedLot)}</h3>
-                <div className="text-xs text-slate-400 font-mono">{selectedLot.lot_code}</div>
-                <p className="text-xs text-slate-400">{selectedLot.supplier_name} | {selectedLot.warehouse_name}</p>
-              </div>
-
-              <div className={`border-slate-800 ${isRTL ? 'border-r pr-6 text-left' : 'border-l pl-6 text-right'} space-y-1`}>
-                <div className="text-xs text-slate-400">{t('sorting.targetWeight')}</div>
-                <div className="text-xl font-black text-emerald-400 flex items-center gap-1.5">
-                  <Scale size={18} /> {selectedLot.original_weight_kg} {t('common.kg')}
-                </div>
-              </div>
-            </div>
-
-            {/* Weights Input Form */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-              <h3 className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
-                <PlusCircle size={16} className="text-emerald-600" /> {t('sorting.weightKg')} & {t('sorting.countPcs')}
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* New Collection */}
-                <div className="p-4 bg-emerald-50/20 border border-emerald-100 rounded-xl space-y-3">
-                  <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">{t('sorting.newCollection')}</span>
-                  <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.weightKg')}</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      disabled={isReconciled}
-                      value={newWeight}
-                      onChange={(e) => setNewWeight(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.countPcs')}</label>
-                    <input
-                      type="number"
-                      disabled={isReconciled}
-                      value={newPieces}
-                      onChange={(e) => setNewPieces(parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Middle Grade */}
-                <div className="p-4 bg-blue-50/20 border border-blue-100 rounded-xl space-y-3">
-                  <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">{t('sorting.middle')}</span>
-                  <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.weightKg')}</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      disabled={isReconciled}
-                      value={midWeight}
-                      onChange={(e) => setMidWeight(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.countPcs')}</label>
-                    <input
-                      type="number"
-                      disabled={isReconciled}
-                      value={midPieces}
-                      onChange={(e) => setMidPieces(parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Clearance */}
-                <div className="p-4 bg-amber-50/20 border border-amber-100 rounded-xl space-y-3">
-                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">{t('sorting.clearance')}</span>
-                  <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.weightKg')}</label>
-                    <input
-                      type="number"
-                      step="0.001"
-                      disabled={isReconciled}
-                      value={clrWeight}
-                      onChange={(e) => setClrWeight(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.countPcs')}</label>
-                    <input
-                      type="number"
-                      disabled={isReconciled}
-                      value={clrPieces}
-                      onChange={(e) => setClrPieces(parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Waste Section */}
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="md:col-span-4 border-b border-slate-200 pb-1 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                    <Trash2 size={13} /> {t('sorting.waste')}
-                  </span>
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.weightKg')}</label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    disabled={isReconciled}
-                    value={wasteWeight}
-                    onChange={(e) => setWasteWeight(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.countPcs')}</label>
-                  <input
-                    type="number"
-                    disabled={isReconciled}
-                    value={wastePieces}
-                    onChange={(e) => setWastePieces(parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">{t('sorting.wasteClass')}</label>
-                  <select
-                    disabled={isReconciled}
-                    value={wasteClass}
-                    onChange={(e) => setWasteClass(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="NORMAL">{t('sorting.normalWaste')}</option>
-                    <option value="ABNORMAL">{t('sorting.abnormalWaste')}</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 font-semibold mb-1 block">Notes</label>
-                  <input
-                    type="text"
-                    disabled={isReconciled}
-                    value={wasteReason}
-                    onChange={(e) => setWasteReason(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-              </div>
-
-              {/* Adjustments Section */}
-              <div className="p-4 bg-rose-50/10 rounded-xl border border-rose-100 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[11px] text-rose-700 font-bold mb-1 block">{t('sorting.moistureAdj')}</label>
-                  <input
-                    type="number"
-                    step="0.001"
-                    disabled={isReconciled}
-                    value={adjWeight}
-                    onChange={(e) => setAdjWeight(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-rose-200 rounded-lg text-xs font-bold text-slate-800 focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-rose-700 font-bold mb-1 block">{t('sorting.adjReason')}</label>
-                  <input
-                    type="text"
-                    disabled={isReconciled}
-                    value={adjReason}
-                    onChange={(e) => setAdjReason(e.target.value)}
-                    className="w-full px-3 py-1.5 bg-white border border-rose-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-rose-500"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Reconciliation & Workflow Dashboard */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-6">
-              <h3 className="font-bold text-slate-800 text-sm border-b border-slate-100 pb-3 flex items-center gap-1.5">
-                <Scale size={16} className="text-emerald-600" /> {t('sorting.statusTitle')}
-              </h3>
-
-              <div className={`p-4 rounded-xl border text-center space-y-1.5 ${
-                isWeightsBalanced
-                  ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
-                  : 'bg-rose-50 border-rose-100 text-rose-800'
-              }`}>
-                <div className="text-2xl font-black flex items-center justify-center gap-2">
-                  {isWeightsBalanced ? <CheckCircle2 className="text-emerald-600" /> : <AlertTriangle className="text-rose-600" />}
-                  {isWeightsBalanced ? t('sorting.balanced') : t('sorting.unbalanced')}
-                </div>
-                <p className="text-xs font-medium">
-                  {isWeightsBalanced 
-                    ? 'Outputs + Waste + Adjustments matches target weight.' 
-                    : `Discrepancy: ${discrepancy >= 0 ? '+' : ''}${discrepancy.toFixed(3)} KG`
-                  }
-                </p>
-              </div>
-
-              <div className="space-y-2.5 text-xs font-medium">
-                <div className="flex justify-between text-slate-500">
-                  <span>Target:</span>
-                  <span className="font-bold text-slate-900">{originalBaleWeight.toFixed(3)} {t('common.kg')}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Good Outputs:</span>
-                  <span className="font-bold text-slate-900">{sumOutputs.toFixed(3)} {t('common.kg')}</span>
-                </div>
-                <div className="flex justify-between text-slate-500">
-                  <span>Waste:</span>
-                  <span className="font-bold text-slate-900">{parseFloat(wasteWeight || 0).toFixed(3)} {t('common.kg')}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Workflow Control Steps */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-              <button
-                onClick={handleReconcile}
-                disabled={isReconciled || !isWeightsBalanced || submitting}
-                className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-left transition ${
-                  isReconciled 
-                    ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed font-medium' 
-                    : 'border-emerald-600 bg-emerald-50 text-emerald-800 font-bold hover:bg-emerald-100/50 cursor-pointer'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${isReconciled ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 text-white'}`}>
-                    1
-                  </div>
-                  <span className="text-xs">{t('sorting.step1')}</span>
-                </div>
-                {isReconciled && <CheckCircle2 size={16} className="text-emerald-600" />}
-              </button>
-
-
-              <button
-                onClick={handlePostToInventory}
-                disabled={!isReconciled || isPosted || submitting}
-                className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-left transition ${
-                  !isReconciled || isPosted
-                    ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed font-medium'
-                    : 'border-emerald-600 bg-emerald-50 text-emerald-800 font-bold hover:bg-emerald-100/50 cursor-pointer'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${isPosted ? 'bg-slate-200 text-slate-500' : 'bg-emerald-600 text-white'}`}>
-                    2
-                  </div>
-                  <span className="text-xs">{t('sorting.step3')}</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => { setSelectedLot(null); setSortingOrder(null); }}
-                className="w-full text-center py-2 text-xs text-slate-400 hover:text-slate-600 transition"
-              >
-                {t('common.cancel')}
+              <button onClick={() => openSortingModal(lot)} className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors text-xs flex items-center justify-center gap-2">
+                <span>✂️</span> ابدأ الفرز والترحيل
               </button>
             </div>
+          ))
+        )}
+      </div>
 
-            {costingRecord && (
-              <div className="bg-emerald-950 text-emerald-300 p-5 rounded-2xl shadow-xs space-y-4">
-                <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-400 border-b border-emerald-900 pb-2">
-                  {t('sorting.costingPreview')}
-                </h4>
-                <div className="space-y-2.5 text-xs">
-                  <div className="flex justify-between">
-                    <span>Method:</span>
-                    <span className="font-bold text-white">{costingRecord.method}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Waste Loss:</span>
-                    <span className="font-bold text-white">{costingRecord.waste_loss} {t('common.currency')}</span>
-                  </div>
-                  <div className="flex justify-between border-t border-emerald-900 pt-2 font-bold text-sm text-white">
-                    <span>Good Cost:</span>
-                    <span>{costingRecord.allocated_cost} {t('common.currency')}</span>
-                  </div>
+      {selectedLot && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800">{getDisplayName(selectedLot)}</h3>
+                <div className="text-xs font-bold text-indigo-700 mt-1 flex gap-3">
+                  {selectedLot.source_kind === 'بالة' ? <span>الصنف ثابت: {selectedLot.category_name}</span> : <span>البراند ثابت: {selectedLot.brand}</span>}
+                  <span>الوزن الأصلي: {selectedLot.original_weight_kg} كجم</span>
                 </div>
               </div>
-            )}
+              <button onClick={() => setSelectedLot(null)} className="text-slate-400 hover:text-slate-600 font-bold text-xl">✕</button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1">
+              {msg.text && (
+                <div className={`mb-4 p-3 rounded-lg text-sm font-bold text-center ${msg.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'}`}>
+                  {msg.text}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {renderCards()}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl flex justify-end gap-3">
+              <button onClick={() => setSelectedLot(null)} className="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-lg text-sm hover:bg-slate-300">إلغاء</button>
+              <button onClick={handleMatchAndTransfer} disabled={saving} className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-lg text-sm shadow-md flex items-center gap-2">
+                {saving ? 'جاري الترحيل...' : '✨ مطابقة وترحيل للمخزون'}
+              </button>
+            </div>
           </div>
         </div>
       )}
