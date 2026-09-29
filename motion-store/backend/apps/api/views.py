@@ -1669,35 +1669,8 @@ from apps.customers.models import Customer
 from apps.payments.models import PaymentMethod
 
 from apps.purchasing.models import PurchaseOption, PurchaseOptionType
-from apps.api.serializers import PurchaseOptionSerializer
+# removed legacy import
 
-class PurchaseOptionViewSet(BaseTenantViewSet):
-    model = PurchaseOption
-    serializer_class = PurchaseOptionSerializer
-
-    def get_queryset(self):
-        qs = super().get_queryset().filter(is_active=True)
-        t = self.request.query_params.get('option_type')
-        if t:
-            qs = qs.filter(option_type=t)
-        return qs
-
-    def create(self, request, *args, **kwargs):
-        tenant = self.get_tenant()
-        name = (request.data.get('name') or '').strip()
-        otype = request.data.get('option_type')
-        if not name or otype not in PurchaseOptionType.values:
-            return Response({'detail': 'اكتب الاسم واختار النوع'}, status=400)
-        obj, created = PurchaseOption.objects.get_or_create(tenant=tenant, option_type=otype, name=name, defaults={'is_active': True})
-        if not obj.is_active:
-            obj.is_active = True
-            obj.save()
-        return Response(PurchaseOptionSerializer(obj).data, status=201 if created else 200)
-
-from django.db.models import Q
-from apps.transfers.models import TransferOrder
-from apps.transfers.services import create_transfer_order, ship_transfer_order, receive_transfer_order
-from apps.api.serializers import TransferOrderSerializer
 
 class TransferOrderViewSet(BaseTenantViewSet):
     model = TransferOrder

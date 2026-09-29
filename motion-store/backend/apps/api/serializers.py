@@ -1,3 +1,4 @@
+from apps.transfers.models import TransferOrder, TransferLineItem
 from apps.customers.models import Customer
 from apps.payments.models import PaymentMethod
 from apps.users.models import User
@@ -88,9 +89,9 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class RawLotSerializer(serializers.ModelSerializer):
-    supplier_name = serializers.ReadOnlyField(source='supplier.name')
-    warehouse_name = serializers.ReadOnlyField(source='warehouse.name')
-    line_info = serializers.SerializerMethodField()
+    supplier_name = serializers.CharField(source='purchase_invoice.supplier.name', read_only=True, allow_null=True)
+    invoice_number = serializers.CharField(source='purchase_invoice.invoice_number', read_only=True, allow_null=True)
+
     class Meta:
         model = RawLot
         fields = '__all__'
@@ -98,10 +99,16 @@ class RawLotSerializer(serializers.ModelSerializer):
 
     def get_line_info(self, obj):
         li = getattr(obj, 'purchase_line_item', None)
-        if not li or not li.purchase_kind:
+        if not li:
             return None
-        return {'kind': li.purchase_kind, 'grade': li.grade, 'bale_type': li.bale_type, 'segment': li.segment,
-                'stock_type': li.stock_type, 'brand': li.brand, 'item_name': li.item_name}
+        return {
+            'kind': getattr(li, 'item_type', 'بالة'),
+            'grade': getattr(li, 'grade', 'سوبر كريم'),
+            'segment': getattr(li, 'segment', 'حريمي'),
+            'brand': getattr(li, 'brand', ''),
+            'item_name': getattr(li, 'description', '')
+        }
+
 
 class SortingOutputLineSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
@@ -336,15 +343,8 @@ class PaymentMethodSerializer(serializers.ModelSerializer):
         fields = ['id', 'tenant', 'created_at', 'updated_at', 'name', 'method_type', 'treasury', 'treasury_name', 'is_active']
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'treasury_name']
 
-from apps.purchasing.models import PurchaseOption
 
-class PurchaseOptionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PurchaseOption
-        fields = '__all__'
-        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
-from apps.transfers.models import TransferOrder, TransferLineItem
 
 class TransferLineItemSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')
@@ -388,11 +388,54 @@ class Meta:
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class PieceItemSerializer(serializers.ModelSerializer):
+    linked_items_count = serializers.IntegerField(source='linked_store_items.count', read_only=True)
+    linked_items_details = serializers.SerializerMethodField()
+    total_available_pieces = serializers.SerializerMethodField()
+    total_available_weight_kg = serializers.SerializerMethodField()
+
+    source_kind = serializers.CharField(required=False, default="بالة", allow_blank=True, allow_null=True)
+    segment = serializers.CharField(required=False, default="حريمي", allow_blank=True, allow_null=True)
+    season = serializers.CharField(required=False, default="صيفي", allow_blank=True, allow_null=True)
+    purchase_grade = serializers.CharField(required=False, default="سوبر كريم", allow_blank=True, allow_null=True)
+    brand = serializers.CharField(required=False, default="بدون براند", allow_blank=True, allow_null=True)
+    price_per_piece = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0.00)
+    price_per_kg = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0.00)
+
     class Meta:
         model = PieceItem
         fields = '__all__'
         read_only_fields = ['tenant']
-        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
+
+    def get_linked_items_details(self, obj):
+        return [
+            {
+                'id': str(item.id),
+                'full_name': item.full_name,
+                'quantity_pieces': item.quantity_pieces,
+                'weight_kg': float(item.weight_kg or 0),
+                'total_allocated_cost': float(item.total_allocated_cost or 0)
+            }
+            for item in obj.linked_store_items.all()
+        ]
+
+    def get_total_available_pieces(self, obj):
+        return sum((item.quantity_pieces or 0) for item in obj.linked_store_items.all())
+
+    def get_total_available_weight_kg(self, obj):
+        return float(sum((item.weight_kg or 0) for item in obj.linked_store_items.all()))
+
+    def validate_code(self, value):
+        request = self.context.get('request')
+        tenant = getattr(request.user, 'tenant', None) if request else None
+        qs = PieceItem.objects.filter(code=value)
+        if tenant:
+            qs = qs.filter(tenant=tenant)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(f"❌ الكود [{value}] مستخدم بالفعل في الشركة! كود البيع يجب أن يكون فريداً.")
+        return value
+
 
 class PriceChangeLogSerializer(serializers.ModelSerializer):
     changed_by_name = serializers.ReadOnlyField(source='changed_by.username')
@@ -573,18 +616,6 @@ class StoreItemSerializer(serializers.ModelSerializer):
 class PieceItemSerializer(serializers.ModelSerializer):
     linked_items_count = serializers.IntegerField(source='linked_store_items.count', read_only=True)
     linked_items_details = serializers.SerializerMethodField()
-
-    def get_linked_items_details(self, obj):
-        return [
-            {
-                'id': str(item.id),
-                'full_name': item.full_name,
-                'quantity_pieces': item.quantity_pieces,
-                'weight_kg': float(item.weight_kg or 0),
-                'total_allocated_cost': float(item.total_allocated_cost or 0)
-            }
-            for item in obj.linked_store_items.all()
-        ]
     total_available_pieces = serializers.SerializerMethodField()
     total_available_weight_kg = serializers.SerializerMethodField()
 
@@ -600,6 +631,18 @@ class PieceItemSerializer(serializers.ModelSerializer):
         model = PieceItem
         fields = '__all__'
         read_only_fields = ['tenant']
+
+    def get_linked_items_details(self, obj):
+        return [
+            {
+                'id': str(item.id),
+                'full_name': item.full_name,
+                'quantity_pieces': item.quantity_pieces,
+                'weight_kg': float(item.weight_kg or 0),
+                'total_allocated_cost': float(item.total_allocated_cost or 0)
+            }
+            for item in obj.linked_store_items.all()
+        ]
 
     def get_total_available_pieces(self, obj):
         return sum((item.quantity_pieces or 0) for item in obj.linked_store_items.all())
@@ -619,9 +662,6 @@ class PieceItemSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"❌ الكود [{value}] مستخدم بالفعل في الشركة! كود البيع يجب أن يكون فريداً.")
         return value
 
-
-from apps.costing.models import CostingConfiguration, CostingMethod
-from apps.pricing.models import StoreItem, PieceItem, PriceChangeLog
 
 class CostingConfigurationSerializer(serializers.ModelSerializer):
     method_display = serializers.CharField(source='get_method_display', read_only=True)
@@ -661,18 +701,6 @@ class StoreItemSerializer(serializers.ModelSerializer):
 class PieceItemSerializer(serializers.ModelSerializer):
     linked_items_count = serializers.IntegerField(source='linked_store_items.count', read_only=True)
     linked_items_details = serializers.SerializerMethodField()
-
-    def get_linked_items_details(self, obj):
-        return [
-            {
-                'id': str(item.id),
-                'full_name': item.full_name,
-                'quantity_pieces': item.quantity_pieces,
-                'weight_kg': float(item.weight_kg or 0),
-                'total_allocated_cost': float(item.total_allocated_cost or 0)
-            }
-            for item in obj.linked_store_items.all()
-        ]
     total_available_pieces = serializers.SerializerMethodField()
     total_available_weight_kg = serializers.SerializerMethodField()
 
@@ -688,6 +716,18 @@ class PieceItemSerializer(serializers.ModelSerializer):
         model = PieceItem
         fields = '__all__'
         read_only_fields = ['tenant']
+
+    def get_linked_items_details(self, obj):
+        return [
+            {
+                'id': str(item.id),
+                'full_name': item.full_name,
+                'quantity_pieces': item.quantity_pieces,
+                'weight_kg': float(item.weight_kg or 0),
+                'total_allocated_cost': float(item.total_allocated_cost or 0)
+            }
+            for item in obj.linked_store_items.all()
+        ]
 
     def get_total_available_pieces(self, obj):
         return sum((item.quantity_pieces or 0) for item in obj.linked_store_items.all())
@@ -706,3 +746,4 @@ class PieceItemSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError(f"❌ الكود [{value}] مستخدم بالفعل في الشركة! كود البيع يجب أن يكون فريداً.")
         return value
+
