@@ -31,6 +31,7 @@ export default function PricingV2() {
 
   // نموذج تعديل السعر
   const [editingCode, setEditingCode] = useState(null);
+  const [selectedCodeDetails, setSelectedCodeDetails] = useState(null);
   const [editPriceForm, setEditPriceForm] = useState({ price_per_piece: '', price_per_kg: '' });
 
   useEffect(() => {
@@ -186,6 +187,56 @@ export default function PricingV2() {
       setSaving(false);
     }
   };
+
+  
+      {/* مودال عرض تفاصيل البنود المربوطة بالكود */}
+      {selectedCodeDetails && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span>🏷️</span> البنود المربوطة بالكود [{selectedCodeDetails.code}] - {selectedCodeDetails.name}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSelectedCodeDetails(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto space-y-2">
+              {(!selectedCodeDetails.linked_items_details || selectedCodeDetails.linked_items_details.length === 0) ? (
+                <p className="text-xs text-slate-400 p-4 text-center">لا توجد بنود مربوطة بهذا الكود حالياً.</p>
+              ) : (
+                selectedCodeDetails.linked_items_details.map((item, idx) => (
+                  <div key={idx} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
+                    <div>
+                      <span className="text-emerald-700 font-extrabold">{idx + 1}. </span>
+                      {item.full_name}
+                    </div>
+                    <div className="flex items-center gap-3 text-slate-600">
+                      <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">{item.quantity_pieces} قطعة</span>
+                      <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">{item.weight_kg} كجم</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSelectedCodeDetails(null)}
+                className="px-5 py-2 bg-slate-800 text-white font-bold rounded-lg text-xs shadow-md"
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
   return (
     <div className="space-y-6">
@@ -547,7 +598,13 @@ export default function PricingV2() {
                       )}
                     </td>
                     <td className="p-3 text-slate-500">
-                      {codeItem.linked_items_count || 0} بند
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCodeDetails(codeItem)}
+                        className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-lg border border-indigo-200 text-xs flex items-center gap-1 shadow-sm cursor-pointer"
+                      >
+                        👁️ {codeItem.linked_items_count || 0} بند مربوط
+                      </button>
                     </td>
                     <td className="p-3 text-center">
                       {editingCode?.id === codeItem.id ? (

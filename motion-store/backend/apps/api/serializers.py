@@ -556,6 +556,19 @@ class StoreItemSerializer(serializers.ModelSerializer):
 
 class PieceItemSerializer(serializers.ModelSerializer):
     linked_items_count = serializers.IntegerField(source='linked_store_items.count', read_only=True)
+    linked_items_details = serializers.SerializerMethodField()
+
+    def get_linked_items_details(self, obj):
+        return [
+            {
+                'id': str(item.id),
+                'full_name': item.full_name,
+                'quantity_pieces': item.quantity_pieces,
+                'weight_kg': float(item.weight_kg or 0),
+                'total_allocated_cost': float(item.total_allocated_cost or 0)
+            }
+            for item in obj.linked_store_items.all()
+        ]
     total_available_pieces = serializers.SerializerMethodField()
     total_available_weight_kg = serializers.SerializerMethodField()
 
@@ -631,6 +644,19 @@ class StoreItemSerializer(serializers.ModelSerializer):
 
 class PieceItemSerializer(serializers.ModelSerializer):
     linked_items_count = serializers.IntegerField(source='linked_store_items.count', read_only=True)
+    linked_items_details = serializers.SerializerMethodField()
+
+    def get_linked_items_details(self, obj):
+        return [
+            {
+                'id': str(item.id),
+                'full_name': item.full_name,
+                'quantity_pieces': item.quantity_pieces,
+                'weight_kg': float(item.weight_kg or 0),
+                'total_allocated_cost': float(item.total_allocated_cost or 0)
+            }
+            for item in obj.linked_store_items.all()
+        ]
     total_available_pieces = serializers.SerializerMethodField()
     total_available_weight_kg = serializers.SerializerMethodField()
 
