@@ -1275,6 +1275,11 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
             return Response({'detail': 'إنت مربوط بنقطة بيع تانية'}, status=403)
         if any(__import__('apps.payments.models', fromlist=['PaymentMethod']).PaymentMethod.objects.filter(pk=p.get('payment_method_id'), method_type='CREDIT').exists() for p in (request.data.get('payments') or [])) and not __import__('apps.api.screen_permissions', fromlist=['can']).can(request.user, 'sell_credit'):
             return Response({'detail': 'البيع الآجل مش مسموح ليك - كلّم المدير'}, status=403)
+        _exp = _expand_piece_items(self.get_tenant(), request.data)
+        if isinstance(_exp, str):
+            return Response({'detail': _exp}, status=400)
+        if _exp is not None:
+            request.data['items'] = _exp
         _vmsg = _verify_checkout(self.get_tenant(), request.data, __import__('apps.shifts.models', fromlist=['Shift']).Shift.objects.filter(pk=request.data.get('shift_id')).select_related('terminal').first().terminal if request.data.get('shift_id') else None)
         if _vmsg:
             return Response({'detail': _vmsg}, status=400)
@@ -3289,3 +3294,65 @@ def _rebuild_store_items(tenant):
                 obj.save(update_fields=['quantity_pieces', 'weight_kg'])
         else:
             obj.delete()
+
+
+def _band_stock_for_piece(piece, warehouse):
+    """ SELL_FROM_BANDS: stock behind the bands bound to this code in this warehouse, oldest sorting first """
+    from datetime import date as _date
+    from django.apps import apps as _a
+    ST = _a.get_model('pricing', 'StoreItem'); SI = _a.get_model('inventory', 'StockItem'); OL = _a.get_model('sorting', 'SortingOutputLine')
+    KIND = {'BALE': 'بالة', 'STOCK': 'استوك', 'DIRECT': 'شراء مباشر'}
+    GR = {'NEW_COLLECTION': 'عالي', 'MIDDLE': 'وسط', 'CLEARANCE': 'تصفيات'}
+    bands = list(ST.objects.filter(tenant=piece.tenant, coding_item=piece, warehouse=warehouse))
+    if not bands:
+        return []
+    keys = {(b.source_kind or '', b.segment or '', b.season or '', b.purchase_grade or '', b.sort_grade or '', b.category_name or '', b.brand or '') for b in bands}
+    found = []
+    for si in SI.objects.filter(tenant=piece.tenant, warehouse=warehouse, total_quantity_pieces__gt=0).select_related('source_lot__purchase_line_item'):
+        lot = si.source_lot
+        li = getattr(lot, 'purchase_line_item', None) if lot else None
+        if not li or li.purchase_kind not in KIND:
+            continue
+        ol = OL.objects.filter(sorting_order__raw_lot=lot, product=si.product, grade=si.grade).select_related('sorting_order').first()
+        if li.purchase_kind == 'BALE':
+            item, brand = (li.item_name or ''), ''
+        else:
+            item = (getattr(ol, 'item_name', '') or '') or (li.direct_category or '')
+            brand = (getattr(ol, 'brand', '') or '') or (li.brand or '')
+        k = (KIND[li.purchase_kind], li.segment or '', li.season or '', li.grade or '', GR.get(si.grade, si.grade or ''), item, brand)
+        if k in keys:
+            sd = getattr(getattr(ol, 'sorting_order', None), 'sorting_date', None) or _date.min
+            found.append((sd, si.created_at, si))
+    found.sort(key=lambda x: (x[0], x[1]))
+    return [x[2] for x in found]
+def _expand_piece_items(tenant, data):
+    """ split each code line over the oldest shipments of its bands; None = nothing to change, str = error """
+    from django.apps import apps as _a
+    from apps.shifts.models import Shift
+    sh = Shift.objects.filter(pk=data.get('shift_id')).select_related('terminal__default_warehouse').first()
+    wh = getattr(getattr(sh, 'terminal', None), 'default_warehouse', None)
+    if not wh:
+        return None
+    PI = _a.get_model('pricing', 'PieceItem')
+    out = []; changed = False
+    for it in (data.get('items') or []):
+        if not it.get('piece_item_id') or it.get('stock_item_id'):
+            out.append(it); continue
+        piece = PI.objects.filter(tenant=tenant, pk=it['piece_item_id']).first()
+        stocks = _band_stock_for_piece(piece, wh) if piece else []
+        need = int(it.get('quantity_pieces') or 0)
+        if not stocks or need <= 0:
+            out.append(it); continue
+        avail = sum(int(s.total_quantity_pieces or 0) for s in stocks)
+        if need > avail:
+            return f'الكود {piece.code} ({piece.name}): المتاح في المحل {avail} قطعة بس'
+        kg = Decimal(str(it.get('weight_kg') or 0)); left_q = need; left_w = kg
+        for s in stocks:
+            if left_q <= 0:
+                break
+            take = min(left_q, int(s.total_quantity_pieces or 0))
+            w = left_w if take == left_q else (kg * take / need).quantize(Decimal('0.001'))
+            out.append({**it, 'stock_item_id': str(s.pk), 'quantity_pieces': take, 'weight_kg': str(w)})
+            left_q -= take; left_w -= w
+        changed = True
+    return out if changed else None

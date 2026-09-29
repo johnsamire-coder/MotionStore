@@ -80,7 +80,7 @@ def process_pos_sale(
             piece = PieceItem.objects.get(pk=item_data['piece_item_id'], tenant=tenant)
             if qty_pieces < 1:
                 qty_pieces = 1
-            stock_item = _find_stock_for_piece(piece, terminal, qty_pieces)
+            stock_item = StockItem.objects.select_for_update().get(pk=item_data['stock_item_id']) if item_data.get('stock_item_id') else _find_stock_for_piece(piece, terminal, qty_pieces)
             given_w = Decimal(str(item_data.get('weight_kg') or '0'))
             if given_w > 0:
                 weight_kg = given_w
