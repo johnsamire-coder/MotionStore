@@ -11,8 +11,9 @@ const num = (v) => parseFloat(v || 0) || 0;
 const r2 = (n) => Math.round(n * 100) / 100;
 const money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const kgf = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 3 });
-const GRADE_WORDS = /\s*-\s*(عالي|وسط|تصفيات)\s*$/;
-const custName = (s) => { const n = (s.product_name || '').replace(GRADE_WORDS, '').trim(); return n && !['عالي', 'وسط', 'تصفيات'].includes(n) ? n : 'بضاعة'; };
+const FORBIDDEN_WORDS = new Set(['بالة', 'استوك', 'شراء مباشر', 'حريمي', 'رجالي', 'صيفي', 'شتوي', 'ميكس', 'بدون', 'عالي', 'وسط', 'تصفيات', 'هالك', 'سوبر كريم', 'كريم في واحد', 'كريم', 'نمرة 1', 'نمرة 2', 'سحبة']);
+const cleanCustomerStr = (str) => (str || '').split('-').map((p) => p.trim()).filter((p) => p && !FORBIDDEN_WORDS.has(p)).join(' - ');
+const custName = (s) => cleanCustomerStr(s.product_name) || 'بضاعة';
 const TERM_KEY = 'ms_pos_terminal';
 const HOLD_KEY = (id) => `ms_pos_held_${id}`;
 const lineTotal = (l) => (l.mode === 'PIECE' ? num(l.qty) * num(l.price) : num(l.kg) * num(l.price));
@@ -81,6 +82,7 @@ export default function POSPage() {
   const [terminal, setTerminal] = useState(null);
   const [shift, setShift] = useState(null);
   const [stock, setStock] = useState([]);
+  const [pieceItems, setPieceItems] = useState([]);
   const [payMethods, setPayMethods] = useState([]);
   const [activeOffers, setActiveOffers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -200,15 +202,17 @@ export default function POSPage() {
     if (!term) return;
     try {
       const wh = term.default_warehouse ? `&warehouse=${term.default_warehouse}` : '';
-      const [shRes, stRes, pmRes, ofRes] = await Promise.all([
+      const [shRes, stRes, piRes, pmRes, ofRes] = await Promise.all([
         axiosClient.get(`/shifts/?terminal=${term.id}&status=OPEN`),
         axiosClient.get(`/stock-items/?all=1&only_positive=1${wh}`),
+        axiosClient.get(`/piece-items/?all=1${term.default_warehouse ? `&warehouse=${term.default_warehouse}` : ''}`),
         axiosClient.get('/payments/?is_active=true'),
         axiosClient.get(`/offers/active_now/?${term.default_warehouse ? `warehouse=${term.default_warehouse}` : ''}`)
       ]);
       const sh = listOf(shRes.data).find((x) => (String(x.terminal) === String(term.id) || String(x.terminal_id) === String(term.id)) && x.status === 'OPEN') || null;
       setShift(sh); if (!sh) { setShowOpenShift(true); try { const trr = await axiosClient.get('/treasuries/'); const dd = listOf(trr.data).find((x) => String(x.id) === String(term.cash_drawer)); if (dd) setOpeningCash(String(dd.current_balance)); } catch (e2) { /* ignore */ } }
       setStock(listOf(stRes.data));
+      setPieceItems(listOf(piRes.data));
       setPayMethods(listOf(pmRes.data));
       setActiveOffers(listOf(ofRes.data));
       try { const allH = JSON.parse(localStorage.getItem(HOLD_KEY(term.id)) || '[]'); const keepH = allH.filter((h) => sh && h.shiftId === sh.id); setHeld(keepH); localStorage.setItem(HOLD_KEY(term.id), JSON.stringify(keepH)); } catch (e) { setHeld([]); }
@@ -267,10 +271,11 @@ export default function POSPage() {
   const addPiece = (p, qtyVal, kgVal) => {
     const n = Math.max(1, parseInt(qtyVal || '1', 10) || 1);
     const inScaleByKg = !!bundle && num(p.price_per_kg) > 0;
-    const perPiece = num(p.price_per_piece) > 0 && !inScaleByKg;
+    const hasKgVal = num(kgVal) > 0;
+    const perPiece = num(p.price_per_piece) > 0 && !hasKgVal && !inScaleByKg;
     if (!perPiece && num(kgVal) <= 0) { showErr(T.needKg); return false; }
     const offerName = p.offer ? (activeOffers.find((o) => o.id === p.offer)?.name || T.offerLine) : null;
-    const name = [p.name, p.segment, p.source_kind === 'STOCK' && p.brand ? '- ' + p.brand : ''].filter(Boolean).join(' ');
+    const name = (p.name || '').trim();
     setCart((c) => [...c, { key: `${Date.now()}-${Math.random()}`, type: 'PIECE', piece_item_id: p.id, code: p.code, name, offer: offerName, mode: perPiece ? 'PIECE' : 'KG', qty: String(n), kg: perPiece ? '' : String(num(kgVal)), price: String(perPiece ? num(p.price_per_piece) : num(p.price_per_kg)), bundle, kind: p.source_kind, segment: p.segment, brand: p.brand, season: p.season }]);
     return true;
   };
@@ -400,7 +405,14 @@ export default function POSPage() {
   };
 
   const term = q.trim().toLowerCase();
-  const dir = stock.filter((s) => !term || [custName(s), s.product_name, s.product_code].join(' ').toLowerCase().includes(term));
+  const sourceList = pieceItems.length > 0 ? pieceItems : stock;
+  const dir = sourceList.filter((s) => {
+    const termStr = (q || '').trim().toLowerCase();
+    if (!termStr) return true;
+    const codeStr = String(s.code || s.product_code || '').toLowerCase();
+    const nameStr = String(s.name || s.product_name || '').toLowerCase();
+    return codeStr.includes(termStr) || nameStr.includes(termStr);
+  });
   const input = 'h-10 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-emerald-500';
   const grouped = []; cart.forEach((l) => { const g = l.bundle || ''; let grp = grouped.find((x) => x.name === g); if (!grp) { grp = { name: g, lines: [] }; grouped.push(grp); } grp.lines.push(l); });
   const cashierOffers = activeOffers.filter((o) => o.apply_mode === 'CASHIER');
@@ -417,7 +429,7 @@ export default function POSPage() {
           {terminals.length > 1 && <button type="button" onClick={() => setShowTermPick(true)} className="h-7 px-2 rounded-md bg-white/10 hover:bg-white/20 font-bold cursor-pointer">{T.change}</button>}
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={openDefList} className="h-8 px-3 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold cursor-pointer">{isRTL ? 'المؤجلة' : 'Deferred'}</button>
+          {/* button openDefList hidden */}
           <button type="button" onClick={() => setShowHeld(true)} className="h-8 px-3 rounded-md bg-white/10 hover:bg-white/20 font-bold cursor-pointer">{T.held} ({held.length})</button>
           {!shift && terminal && <button type="button" onClick={() => setShowOpenShift(true)} className="h-8 px-3 rounded-md bg-emerald-600 hover:bg-emerald-500 font-bold cursor-pointer">{T.openShift}</button>}
         </div>
@@ -452,19 +464,31 @@ export default function POSPage() {
           <div className="overflow-y-auto max-h-[55vh]">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-slate-100"><tr className="text-slate-700">
-                <th className="p-2 text-start">{T.code}</th><th className="p-2 text-start">{T.item}</th><th className="p-2 text-center">{T.grade}</th><th className="p-2 text-center">{T.price}</th><th className="p-2 text-center">{T.avail}</th>
+                <th className="p-2 text-start">{T.code}</th><th className="p-2 text-start">{T.item}</th><th className="p-2 text-center">{T.price}</th><th className="p-2 text-center">{T.avail}</th>
               </tr></thead>
               <tbody>
                 {dir.length === 0 && <tr><td colSpan={5} className="p-3 text-center text-slate-500">{T.noStock}</td></tr>}
-                {dir.map((s) => (
-                  <tr key={s.id} onClick={() => addWeight(s, kg || '1')} className="border-b border-slate-100 cursor-pointer hover:bg-emerald-50">
-                    <td className="p-2 font-mono">{s.product_code || '—'}</td>
-                    <td className="p-2 font-bold">{custName(s)}</td>
-                    <td className="p-2 text-center text-[10px] text-slate-500">{(GL[lang] || GL.ar)[s.grade] || ''}</td>
-                    <td className="p-2 text-center font-bold text-emerald-800">{money(s.selling_price_per_kg)}</td>
-                    <td className="p-2 text-center">{kgf(s.total_weight_kg)}</td>
-                  </tr>
-                ))}
+                {dir.map((item) => {
+                  const isPiece = !!item.price_per_piece || !!item.price_per_kg;
+                  const itemCode = item.code || item.product_code || '—';
+                  const itemName = item.name || custName(item);
+                  const pPiece = num(item.price_per_piece);
+                  const pKg = num(item.price_per_kg || item.selling_price_per_kg);
+                  const priceStr = isPiece
+                    ? (pPiece > 0 ? `${money(pPiece)} ج/ق` + (pKg > 0 ? ` · ${money(pKg)} ج/ك` : '') : `${money(pKg)} ج/ك`)
+                    : `${money(pKg)} ج/ك`;
+                  const availStr = isPiece
+                    ? `${item.total_available_pieces || 0} ق · ${kgf(item.total_available_weight_kg || 0)} ك`
+                    : `${kgf(item.total_weight_kg)} ك`;
+                  return (
+                    <tr key={item.id} onClick={() => { isPiece ? addPiece(item, qty, kg) : addWeight(item, kg || '1'); }} className="border-b border-slate-100 cursor-pointer hover:bg-emerald-50">
+                      <td className="p-2 font-mono font-extrabold text-indigo-700">{itemCode}</td>
+                      <td className="p-2 font-bold text-slate-900">{itemName}</td>
+                      <td className="p-2 text-center font-bold text-emerald-800 text-[11px]">{priceStr}</td>
+                      <td className="p-2 text-center font-bold text-slate-700 text-[11px]">{availStr}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -536,7 +560,7 @@ export default function POSPage() {
               {offersDisc > 0 && <div className="text-violet-700 font-bold">{T.offersDisc}: -{money(offersDisc)}</div>}
               <div className="text-sm font-bold text-emerald-900">{T.required}: <span className="text-2xl">{money(required)}</span> {T.cur}</div>
             </div>
-            <button type="button" onClick={openDefNew} disabled={!cart.length} className="h-12 px-5 rounded-xl border-2 border-amber-500 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 text-amber-900 text-sm font-black cursor-pointer">{isRTL ? 'فاتورة مؤجلة' : 'Deferred'}</button>
+          {/* button openDefNew hidden */}
             <button type="button" onClick={openPay} disabled={!cart.length} className="h-12 px-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white text-sm font-black cursor-pointer">{T.pay}</button>
           </div>
         </div>
@@ -562,7 +586,7 @@ export default function POSPage() {
           </div>
         </div>
       )}
-      {showDefNew && (
+      {false && showDefNew && (
         <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-5 space-y-3">
             <div className="flex items-center justify-between"><div className="text-base font-bold">{isRTL ? 'فاتورة مؤجلة (أمانة)' : 'Deferred invoice'}</div><button type="button" onClick={() => setShowDefNew(false)} aria-label="close" className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><X size={16} /></button></div>
@@ -584,7 +608,7 @@ export default function POSPage() {
         </div>
       )}
 
-      {showDefList && (
+      {false && showDefList && (
         <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center p-3 z-50">
           <div className="bg-white rounded-2xl max-w-3xl w-full p-5 space-y-3 max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between"><div className="text-base font-bold">{isRTL ? 'الفواتير المؤجلة المفتوحة' : 'Open deferred invoices'}</div><button type="button" onClick={() => setShowDefList(false)} aria-label="close" className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><X size={16} /></button></div>

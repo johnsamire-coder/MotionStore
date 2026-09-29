@@ -158,6 +158,27 @@ export default function PricingV2() {
     } catch (err) { const errDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message; setMsg({ type: 'error', text: `❌ فشل حفظ أوزان البالة: ${errDetail}` }); } finally { setSaving(false); }
   };
 
+    const handleSaveCodePriceEdit = async (codeItemId) => {
+    if (!codeItemId) return;
+    try {
+      setSaving(true);
+      await axiosClient.patch(`/piece-items/${codeItemId}/`, {
+        price_per_piece: editPriceForm.price_per_piece || '0.00',
+        price_per_kg: editPriceForm.price_per_kg || '0.00',
+      });
+      setMsg({ type: 'success', text: '🎉 تم تحديث سعر الكود بنجاح!' });
+      setEditingCode(null);
+      fetchPieceItems();
+      fetchPriceLogs();
+      fetchStoreItems();
+    } catch (err) {
+      const errDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message;
+      setMsg({ type: 'error', text: `❌ فشل تحديث السعر: ${errDetail}` });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSaveStockWeightPrice = async (e) => {
     e.preventDefault();
     try {
@@ -583,7 +604,7 @@ export default function PricingV2() {
                     <td className="p-3 text-center">
                       {editingCode?.id === codeItem.id ? (
                         <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => {}} className="px-3 py-1 bg-emerald-600 text-white font-bold rounded text-xs">حفظ</button>
+                          <button onClick={() => handleSaveCodePriceEdit(codeItem.id)} disabled={saving} className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded text-xs">حفظ</button>
                           <button onClick={() => setEditingCode(null)} className="px-3 py-1 bg-slate-200 text-slate-700 font-bold rounded text-xs">إلغاء</button>
                         </div>
                       ) : (
