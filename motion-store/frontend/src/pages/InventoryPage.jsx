@@ -85,7 +85,15 @@ export default function InventoryPage() {
   const [transfers, setTransfers] = useState([]);
 
   const [showT, setShowT] = useState(false);
-  const [tf, setTf] = useState({ src: '', dst: '', pick: '', kg: '', lines: [], notes: '' });
+  const [tf, setTf] = useState({ src: '', dst: '', pick: '', kg: '', pcs: '', lines: [], notes: '' });
+  const [bandCodes, setBandCodes] = useState({});
+  const fetchBandCodes = async (whId) => {
+    if (!whId) { setBandCodes({}); return; }
+    try {
+      const r = await axiosClient.get(`/stock-items/band_codes/?warehouse=${whId}`);
+      setBandCodes(r.data || {});
+    } catch (e) { console.error(e); }
+  };
   const [showLoc, setShowLoc] = useState(false);
   const [locForm, setLocForm] = useState({ name: '', kind: 'STORE' });
   const [saving, setSaving] = useState(false);
@@ -202,22 +210,49 @@ export default function InventoryPage() {
 
   // ---------- transfer modal ----------
   const srcItems = stock.filter((s) => s.warehouse === tf.src && num(s.total_weight_kg) > 0);
-  const inLines = (id) => tf.lines.filter((l) => l.stock_item_id === id).reduce((a, l) => a + l.kg, 0);
+  const inLinesKg = (id) => tf.lines.filter((l) => l.stock_item_id === id).reduce((a, l) => a + l.kg, 0);
+  const inLinesPcs = (id) => tf.lines.filter((l) => l.stock_item_id === id).reduce((a, l) => a + l.pcs, 0);
   const pickItem = srcItems.find((s) => s.id === tf.pick);
-  const pickAvail = pickItem ? num(pickItem.total_weight_kg) - inLines(pickItem.id) : 0;
-  const openTransfer = () => { setTf({ src: activeWh.find((w) => w.warehouse_type !== 'STORE')?.id || '', dst: '', pick: '', kg: '', lines: [], notes: '' }); setShowT(true); };
+  const pickAvailKg = pickItem ? num(pickItem.total_weight_kg) - inLinesKg(pickItem.id) : 0;
+  const pickAvailPcs = pickItem ? Math.max(0, parseInt(pickItem.total_quantity_pieces || 0) - inLinesPcs(pickItem.id)) : 0;
+  const openTransfer = () => {
+    const sId = activeWh.find((w) => w.warehouse_type !== 'STORE')?.id || '';
+    setTf({ src: sId, dst: '', pick: '', kg: '', pcs: '', lines: [], notes: '' });
+    fetchBandCodes(sId);
+    setShowT(true);
+  };
   const addTLine = () => {
     const kg = num(tf.kg);
-    if (!pickItem || kg <= 0) { alert(T.errPick); return; }
-    if (kg > pickAvail + 0.0001) { alert(T.errMore + ` (${kgf(pickAvail)} ${T.kg})`); return; }
-    setTf({ ...tf, pick: '', kg: '', lines: [...tf.lines, { stock_item_id: pickItem.id, kg, label: `${pickItem.product_name} - ${G[pickItem.grade] || pickItem.grade}` }] });
+    const pcs = parseInt(tf.pcs) || 0;
+    if (!pickItem || kg <= 0 || pcs <= 0) { alert('اختار الصنف واكتب الوزن والعدد بشكل صحيح'); return; }
+    if (kg > pickAvailKg + 0.0001) { alert(T.errMore + ` (${kgf(pickAvailKg)} ${T.kg})`); return; }
+    if (pcs > pickAvailPcs) { alert(`عدد القطع المطلوب أكبر من المتاح (${pickAvailPcs} قطعة)`); return; }
+    const isFullKg = kg >= pickAvailKg - 0.0001;
+    if (!isFullKg && pcs >= pickAvailPcs && pickAvailPcs > 0) {
+      alert(`طالما لم تنقل الوزن بالكامل، يجب ترك قطعة واحدة على الأقل في المخزن (أقصى عدد مسموح به: ${Math.max(0, pickAvailPcs - 1)} قطعة)`);
+      return;
+    }
+    let label = pickItem.product_name;
+    const gradeSuffix = G[pickItem.grade] || pickItem.grade;
+    if (gradeSuffix && !label.includes(gradeSuffix)) { label = `${label} - ${gradeSuffix}`; }
+    const codePrefix = bandCodes[pickItem.id] ? `🏷️ [${bandCodes[pickItem.id]}] ` : '';
+    setTf({ ...tf, pick: '', kg: '', pcs: '', lines: [...tf.lines, { stock_item_id: pickItem.id, kg, pcs, label: `${codePrefix}${label}` }] });
   };
   const submitTransfer = async () => {
     if (!tf.src || !tf.dst || tf.src === tf.dst) { alert(T.errSame); return; }
     if (!tf.lines.length) { alert(T.errLines); return; }
     setSaving(true);
     try {
-      const r = await axiosClient.post('/transfers/', { source_warehouse_id: tf.src, destination_warehouse_id: tf.dst, notes: tf.notes, items: tf.lines.map((l) => ({ stock_item_id: l.stock_item_id, weight_kg: l.kg.toFixed(3) })) });
+      const r = await axiosClient.post('/transfers/', {
+        source_warehouse_id: tf.src,
+        destination_warehouse_id: tf.dst,
+        notes: tf.notes,
+        items: tf.lines.map((l) => ({
+          stock_item_id: l.stock_item_id,
+          weight_kg: l.kg.toFixed(3),
+          quantity_pieces: parseInt(l.pcs)
+        }))
+      });
       setShowT(false);
       flash(`${T.doneTransfer} ${r.data.transfer_code}`);
       loadBase(); if (view === 'ledger') loadLedger(); if (view === 'transfers') loadTransfers();
@@ -433,7 +468,7 @@ export default function InventoryPage() {
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.tFrom}
-                <select value={tf.src} onChange={(e) => setTf({ ...tf, src: e.target.value, pick: '', lines: [] })} className={inputCls + ' w-full'}>
+                <select value={tf.src} onChange={(e) => { const sId = e.target.value; setTf({ ...tf, src: sId, pick: '', kg: '', pcs: '', lines: [] }); fetchBandCodes(sId); }} className={inputCls + ' w-full'}>
                   <option value="">{T.choose}</option>{activeWh.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
                 </select>
               </label>
@@ -443,18 +478,29 @@ export default function InventoryPage() {
                 </select>
               </label>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end bg-slate-50 border border-slate-200 rounded-xl p-3">
               <label className="text-xs font-bold text-slate-600 space-y-1 block md:col-span-2">{T.tItem}
-                <select value={tf.pick} onChange={(e) => setTf({ ...tf, pick: e.target.value })} className={inputCls + ' w-full'}>
+                <select value={tf.pick} onChange={(e) => setTf({ ...tf, pick: e.target.value, kg: '', pcs: '' })} className={inputCls + ' w-full'}>
                   <option value="">{T.choose}</option>
-                  {srcItems.map((s) => <option key={s.id} value={s.id}>{s.product_name} - {G[s.grade] || s.grade} ({kgf(num(s.total_weight_kg) - inLines(s.id))} {T.kg})</option>)}
+                  {srcItems.map((s) => {
+                    const code = bandCodes[s.id] ? `🏷️ [${bandCodes[s.id]}] ` : '';
+                    const availKg = kgf(num(s.total_weight_kg) - inLinesKg(s.id));
+                    const availPcs = Math.max(0, parseInt(s.total_quantity_pieces || 0) - inLinesPcs(s.id));
+                    let label = s.product_name;
+                    const gradeSuffix = G[s.grade] || s.grade;
+                    if (gradeSuffix && !label.includes(gradeSuffix)) { label = label + ' - ' + gradeSuffix; }
+                    return <option key={s.id} value={s.id}>{code}{label} ({availKg} {T.kg} · {availPcs} ق)</option>;
+                  })}
                 </select>
               </label>
               <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.tKg}
                 <input type="number" min="0" step="0.001" value={tf.kg} onChange={(e) => setTf({ ...tf, kg: e.target.value })} className={inputCls + ' w-full'} />
               </label>
-              <div className="text-xs text-slate-600 md:col-span-2">{pickItem ? `${T.avail}: ${kgf(pickAvail)} ${T.kg}` : ''}</div>
-              <button type="button" onClick={addTLine} className="h-10 px-4 rounded-lg bg-slate-900 text-white text-xs font-bold cursor-pointer">{T.addLine}</button>
+              <label className="text-xs font-bold text-slate-600 space-y-1 block">العدد (قطعة)
+                <input type="number" min="0" step="1" value={tf.pcs} onChange={(e) => setTf({ ...tf, pcs: e.target.value })} className={inputCls + ' w-full'} />
+              </label>
+              <div className="text-xs text-slate-600 md:col-span-3">{pickItem ? `${T.avail}: ${kgf(pickAvailKg)} ${T.kg} · ${pickAvailPcs} قطعة` : ''}</div>
+              <button type="button" onClick={addTLine} className="h-10 px-4 rounded-lg bg-slate-900 text-white text-xs font-bold cursor-pointer md:col-span-1">{T.addLine}</button>
             </div>
             <div className="space-y-2">
               <div className="text-xs font-bold text-slate-700">{T.tLines}</div>
@@ -462,7 +508,7 @@ export default function InventoryPage() {
               {tf.lines.map((l, i) => (
                 <div key={i} className="flex items-center justify-between border border-slate-200 rounded-lg px-3 py-2 text-sm">
                   <span className="font-bold">{l.label}</span>
-                  <span className="flex items-center gap-3"><span>{kgf(l.kg)} {T.kg}</span>
+                  <span className="flex items-center gap-3"><span>{kgf(l.kg)} {T.kg} · {l.pcs} قطعة</span>
                     <button type="button" onClick={() => setTf({ ...tf, lines: tf.lines.filter((_, j) => j !== i) })} className="h-8 w-8 rounded-lg border border-red-200 bg-red-50 text-red-700 flex items-center justify-center cursor-pointer"><Trash2 size={14} /></button>
                   </span>
                 </div>

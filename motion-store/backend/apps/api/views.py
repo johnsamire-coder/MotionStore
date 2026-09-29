@@ -876,6 +876,30 @@ class SortingOrderViewSet(BaseTenantViewSet):
 class StockItemViewSet(BaseTenantViewSet):
     model = StockItem
     serializer_class = StockItemSerializer
+
+    @action(detail=False, methods=['get'], url_path='band_codes')
+    def band_codes(self, request):
+        from django.apps import apps as _a
+        t = self.get_tenant()
+        _rebuild_store_items(t)
+        ST = _a.get_model('pricing', 'StoreItem')
+        bands = {}
+        for b in ST.objects.filter(tenant=t).exclude(coding_item=None).select_related('coding_item'):
+            k = (b.source_kind or '', b.segment or '', b.season or '', b.purchase_grade or '', b.sort_grade or '', b.category_name or '', b.brand or '')
+            lbl = f"{b.coding_item.code} - {b.coding_item.name}"
+            bands[(b.warehouse_id,) + k] = lbl
+            bands.setdefault(('ANY',) + k, lbl)
+        qs = StockItem.objects.filter(tenant=t, total_weight_kg__gt=0).select_related('source_lot__purchase_line_item', 'product')
+        if request.query_params.get('warehouse'):
+            qs = qs.filter(warehouse_id=request.query_params['warehouse'])
+        out = {}
+        for si in qs:
+            k = _stock_identity(si)
+            if k:
+                lbl = bands.get((si.warehouse_id,) + k) or bands.get(('ANY',) + k)
+                if lbl:
+                    out[str(si.pk)] = lbl
+        return Response(out)
     def get_queryset(self):
         qs = super().get_queryset().select_related('product', 'warehouse')
         p = self.request.query_params
@@ -1817,16 +1841,29 @@ class TransferOrderViewSet(BaseTenantViewSet):
             pcs = it.get('quantity_pieces')
             if pcs in (None, ''):
                 pcs = int(round(float(si.total_quantity_pieces) * float(w) / float(si.total_weight_kg))) if si.total_weight_kg > 0 else 0
-            pcs = max(0, min(int(pcs), int(si.total_quantity_pieces)))
+            try:
+                pcs = int(pcs)
+            except Exception:
+                return Response({'detail': 'عدد القطع لازم يبقى رقم'}, status=400)
+            avail_w = si.total_weight_kg
+            avail_pcs = int(si.total_quantity_pieces or 0)
+            if pcs < 0 or pcs > avail_pcs:
+                return Response({'detail': f'عدد القطع المطلوب من {si.product.name} أكبر من المتاح ({avail_pcs} قطعة)'}, status=400)
+            is_full_w = (w >= avail_w - Decimal('0.0001'))
+            if not is_full_w and pcs >= avail_pcs and avail_pcs > 0:
+                max_allowed = max(0, avail_pcs - 1)
+                return Response({'detail': f'طالما لم تنقل الوزن بالكامل من {si.product.name}، يجب ترك قطعة واحدة على الأقل (أقصى عدد مسموح به: {max_allowed} قطعة)'}, status=400)
             items.append({'stock_item_id': si.pk, 'weight_kg': w, 'quantity_pieces': pcs})
         if not items:
             return Response({'detail': 'ضيف صنف واحد على الأقل'}, status=400)
         user = request.user if request.user.is_authenticated else None
         try:
             with dbt.atomic():
+                from apps.transfers.services import create_transfer_order, ship_transfer_order, receive_transfer_order
                 tr = create_transfer_order(tenant, src, dst, user, items, d.get('notes'))
                 ship_transfer_order(tr.pk)
                 receive_transfer_order(tr.pk)
+                _rebuild_store_items(tenant)
         except DjVE as e:
             return Response({'detail': '; '.join(e.messages)}, status=400)
         tr.refresh_from_db()
@@ -3284,6 +3321,10 @@ def _rebuild_store_items(tenant):
         if not obj:
             obj = ST(tenant=tenant, warehouse_id=wh_id, source_kind=kind, segment=seg, season=sea, purchase_grade=pg, sort_grade=sg, category_name=item, brand=brand, sorted_at=timezone.now())
         obj.branch_id = getattr(a['wh'], 'branch_id', None)
+        if not obj.coding_item_id:
+            _sib = ST.objects.filter(tenant=tenant, source_kind=kind, segment=seg, season=sea, purchase_grade=pg, sort_grade=sg, category_name=item, brand=brand).exclude(coding_item=None).exclude(warehouse_id=wh_id).first()
+            if _sib:
+                obj.coding_item_id = _sib.coding_item_id
         obj.quantity_pieces = a['q']; obj.weight_kg = a['w']; obj.total_allocated_cost = a['c']
         obj.save()
         seen.add(obj.pk)
@@ -3356,3 +3397,21 @@ def _expand_piece_items(tenant, data):
             left_q -= take; left_w -= w
         changed = True
     return out if changed else None
+
+
+def _stock_identity(si):
+    from django.apps import apps as _a
+    OL = _a.get_model('sorting', 'SortingOutputLine')
+    KIND = {'BALE': 'بالة', 'STOCK': 'استوك', 'DIRECT': 'شراء مباشر'}
+    GR = {'NEW_COLLECTION': 'عالي', 'MIDDLE': 'وسط', 'CLEARANCE': 'تصفيات'}
+    lot = si.source_lot
+    li = getattr(lot, 'purchase_line_item', None) if lot else None
+    if not li or li.purchase_kind not in KIND:
+        return None
+    ol = OL.objects.filter(sorting_order__raw_lot=lot, product=si.product, grade=si.grade).first()
+    if li.purchase_kind == 'BALE':
+        item, brand = (li.item_name or ''), ''
+    else:
+        item = (getattr(ol, 'item_name', '') or '') or (li.direct_category or '')
+        brand = (getattr(ol, 'brand', '') or '') or (li.brand or '')
+    return (KIND[li.purchase_kind], li.segment or '', li.season or '', li.grade or '', GR.get(si.grade, si.grade or ''), item, brand)
