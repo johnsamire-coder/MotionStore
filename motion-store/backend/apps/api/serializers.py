@@ -91,6 +91,7 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
 class RawLotSerializer(serializers.ModelSerializer):
     supplier_name = serializers.CharField(source='purchase_invoice.supplier.name', read_only=True, allow_null=True)
     invoice_number = serializers.CharField(source='purchase_invoice.invoice_number', read_only=True, allow_null=True)
+    line_info = serializers.SerializerMethodField()
 
     class Meta:
         model = RawLot
@@ -101,12 +102,18 @@ class RawLotSerializer(serializers.ModelSerializer):
         li = getattr(obj, 'purchase_line_item', None)
         if not li:
             return None
+        kind_map = {'BALE': 'بالة', 'STOCK': 'استوك', 'DIRECT': 'شراء مباشر'}
+        pk = getattr(li, 'purchase_kind', '')
         return {
-            'kind': getattr(li, 'item_type', 'بالة'),
-            'grade': getattr(li, 'grade', 'سوبر كريم'),
-            'segment': getattr(li, 'segment', 'حريمي'),
-            'brand': getattr(li, 'brand', ''),
-            'item_name': getattr(li, 'description', '')
+            'kind': kind_map.get(pk, pk),
+            'purchase_kind': pk,
+            'segment': getattr(li, 'segment', '') or '',
+            'season': getattr(li, 'season', '') or '',
+            'grade': getattr(li, 'grade', '') or '',
+            'item_name': getattr(li, 'item_name', '') or getattr(li, 'direct_category', '') or '',
+            'brand': getattr(li, 'brand', '') or '',
+            'stock_type': getattr(li, 'stock_type', '') or '',
+            'direct_category': getattr(li, 'direct_category', '') or ''
         }
 
 
@@ -747,3 +754,10 @@ class PieceItemSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"❌ الكود [{value}] مستخدم بالفعل في الشركة! كود البيع يجب أن يكون فريداً.")
         return value
 
+
+from apps.purchasing.models import PurchaseOption
+class PurchaseOptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PurchaseOption
+        fields = ["id", "tenant", "option_type", "name", "created_at"]
+        read_only_fields = ["tenant", "created_at"]

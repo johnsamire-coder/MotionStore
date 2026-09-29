@@ -619,6 +619,8 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
             # If RAW_BALE, create RawLot automatically for the Sorting Hub
             if item_type == PurchaseItemType.RAW_BALE or not prod_id:
                 lot_code = f"LOT-{inv_num}-{idx+1}"
+                kind_map = {'BALE': 'بالة', 'STOCK': 'استوك', 'DIRECT': 'شراء مباشر'}
+                pk_val = line.purchase_kind or 'BALE'
                 RawLot.objects.create(
                     tenant=tenant,
                     lot_code=lot_code,
@@ -627,6 +629,12 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
                     supplier_id=supplier_id,
                     warehouse_id=warehouse_id,
                     category_id=cat_id if cat_id else None,
+                    source_kind=kind_map.get(pk_val, pk_val),
+                    segment=line.segment or 'حريمي',
+                    season=line.season or 'صيفي',
+                    purchase_grade=line.grade or 'سوبر كريم',
+                    category_name=line.item_name or line.direct_category or 'بلوزه',
+                    brand=line.brand or '',
                     original_weight_kg=weight_kg,
                     original_quantity_pieces=qty_pcs,
                     purchase_cost=line_total + _freight_shares[idx],
@@ -3415,3 +3423,15 @@ def _stock_identity(si):
         item = (getattr(ol, 'item_name', '') or '') or (li.direct_category or '')
         brand = (getattr(ol, 'brand', '') or '') or (li.brand or '')
     return (KIND[li.purchase_kind], li.segment or '', li.season or '', li.grade or '', GR.get(si.grade, si.grade or ''), item, brand)
+
+from apps.purchasing.models import PurchaseOption
+from apps.api.serializers import PurchaseOptionSerializer
+class PurchaseOptionViewSet(BaseTenantViewSet):
+    model = PurchaseOption
+    serializer_class = PurchaseOptionSerializer
+    def get_queryset(self):
+        qs = super().get_queryset()
+        ot = self.request.query_params.get('option_type')
+        if ot:
+            qs = qs.filter(option_type=ot)
+        return qs
