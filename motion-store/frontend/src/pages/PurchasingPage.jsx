@@ -63,18 +63,15 @@ export default function PurchasingPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [invRes, supRes, whRes, prodRes, catRes] = await Promise.all([
-        axiosClient.get('/purchases/'),
-        axiosClient.get('/suppliers/'),
-        axiosClient.get('/warehouses/'),
-        axiosClient.get('/products/'),
-        axiosClient.get('/categories/')
+      const safeGet = async (url) => { try { const r = await axiosClient.get(url); return r.data.results || r.data || []; } catch(e) { return []; } };
+      const [invList, sList, wList, pList, cList] = await Promise.all([
+        safeGet('/purchases/'),
+        safeGet('/suppliers/'),
+        safeGet('/warehouses/'),
+        safeGet('/products/'),
+        safeGet('/categories/')
       ]);
-      setInvoices(invRes.data.results || invRes.data || []);
-      const sList = supRes.data.results || supRes.data || [];
-      const wList = whRes.data.results || whRes.data || [];
-      const pList = prodRes.data.results || prodRes.data || [];
-      const cList = catRes.data.results || catRes.data || [];
+      setInvoices(invList);
 
       setSuppliers(sList);
       setWarehouses(wList);

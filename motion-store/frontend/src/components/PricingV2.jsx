@@ -118,6 +118,16 @@ export default function PricingV2() {
       let codeId = editingCode?.id;
 
       if (!codeId) {
+        // REUSE_EXISTING_CODE: if this code number already exists, use it (no second create)
+        const _lr = await axiosClient.get('/piece-items/?page_size=1000').catch(() => ({ data: [] }));
+        const _ex = (_lr.data.results || _lr.data || []).find((p) => String(p.code).trim() === String(codeForm.code).trim());
+        if (_ex) {
+          if (!forceTransfer && !window.confirm('الكود ' + _ex.code + ' موجود بالفعل باسم ' + _ex.name + ' - تربط البنود المحددة بيه وتحدث اسمه وسعره للي كتبته؟')) { setSaving(false); return; }
+          await axiosClient.patch('/piece-items/' + _ex.id + '/', { name: codeForm.name, price_per_piece: codeForm.price_per_piece || '0.00', price_per_kg: codeForm.price_per_kg || '0.00' }).catch(() => {});
+          codeId = _ex.id;
+        }
+      }
+      if (!codeId) {
         const createRes = await axiosClient.post('/piece-items/', {
           code: codeForm.code,
           name: codeForm.name,
@@ -142,7 +152,7 @@ export default function PricingV2() {
       fetchPriceLogs();
     } catch (err) {
       if (err.response?.status === 409) setConflictData(err.response.data);
-      else setMsg({ type: 'error', text: '❌ حدث خطأ أثناء التكويد والتسعير.' });
+      else { const _d = err.response?.data; const _t = (_d && (_d.detail || _d.message)) || (_d && typeof _d === 'object' ? Object.values(_d).flat().join(' ') : '') || err.message; setMsg({ type: 'error', text: '❌ ' + _t }); }
     } finally { setSaving(false); }
   };
 
