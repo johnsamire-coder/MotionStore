@@ -28,33 +28,31 @@ export default function SortingPage() {
     }
   };
 
-  // صياغة الهوية المجمعة الصافية بدون أصل إنجليزي أو تكرار
-    // صياغة الهوية المجمعة الصافية بدون تركيب أو تكرار
-    const getDisplayName = (lot) => {
-    let cat = lot.category_name ? String(lot.category_name).trim() : '';
-    let kind = lot.source_kind ? String(lot.source_kind).trim() : 'بالة';
-    let seg = lot.segment ? String(lot.segment).trim() : 'حريمي';
-    let sea = lot.season ? String(lot.season).trim() : 'صيفي';
-    let grd = lot.purchase_grade ? String(lot.purchase_grade).trim() : 'سوبر كريم';
-    let brd = lot.brand ? String(lot.brand).trim() : '';
+  const getDisplayName = (lot) => {
+    let kind = (lot.source_kind || 'بالة').trim();
+    if (kind === 'RAW_BALE' || kind === 'BALE') kind = 'بالة';
+    if (kind === 'STOCK') kind = 'استوك';
+    if (kind === 'DIRECT_PURCHASE') kind = 'شراء مباشر';
 
-    if (cat.includes('شراء مباشر') || cat.includes('استوك') || cat.includes('بالة')) {
-      const parts = cat.split('-').map(s => s.trim());
-      cat = parts[parts.length - 1];
-    }
+    const segment = (lot.segment || 'حريمي').trim();
+    const season = (lot.season || 'صيفي').trim();
+    const grade = (lot.purchase_grade || 'سوبر كريم').trim();
+    const category = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name.trim() : 'بلوزة';
+    const brand = (lot.brand && lot.brand !== 'بدون براند') ? lot.brand.trim() : '';
 
-    if (kind.includes('استوك') || cat.includes('استوك')) {
-      const b = (brd && brd !== 'بدون براند') ? brd : (cat || 'نايك');
-      return 'استوك - ' + seg + ' - ' + sea + ' - ' + b;
+    if (kind.includes('استوك')) {
+      const bStr = brand ? ` - ${brand}` : ' - وان براند';
+      return `استوك - ${segment} - ${season}${bStr}`;
     }
-    if (kind.includes('شراء مباشر') || cat.includes('شراء مباشر')) {
-      const c = cat || 'احذية';
-      return 'شراء مباشر - ' + seg + ' - ' + sea + ' - ' + c;
+    if (kind.includes('شراء مباشر')) {
+      const cStr = category ? ` - ${category}` : '';
+      const bStr = brand ? ` - ${brand}` : '';
+      return `شراء مباشر - ${segment} - ${season}${cStr}${bStr}`;
     }
-
-    const c = cat || 'بلوزة';
-    const g = grd || 'سوبر كريم';
-    return 'بالة - ' + seg + ' - ' + sea + ' - ' + g + ' - ' + c;
+    // بالة
+    const gStr = grade ? ` - ${grade}` : ' - سوبر كريم';
+    const cStr = category ? ` - ${category}` : ' - بلوزة';
+    return `بالة - ${segment} - ${season}${gStr}${cStr}`;
   };
 
   const formatWeight = (val) => {
@@ -65,8 +63,13 @@ export default function SortingPage() {
 
   const openSortingModal = (lot) => {
     setSelectedLot(lot);
-    const catName = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name : 'بلوزة';
-    const defaultRow = { category_name: catName, brand: lot.brand || '', quantity_pieces: '', weight_kg: '' };
+    const kind = lot.source_kind || 'بالة';
+    
+    // في الاستوك والشراء المباشر ينزل الحقل فاضي ليكتب الفرّاز الصنف بحرية
+    const defaultCat = (kind === 'بالة') ? (lot.category_name || 'بلوزة') : '';
+    const defaultBrand = lot.brand || '';
+
+    const defaultRow = { category_name: defaultCat, brand: defaultBrand, quantity_pieces: '', weight_kg: '' };
     setSortingData({
       HIGH: [{ ...defaultRow }],
       MID: [{ ...defaultRow }],
@@ -77,11 +80,26 @@ export default function SortingPage() {
   };
 
   const addRow = (grade) => {
-    const catName = (selectedLot?.category_name && selectedLot?.category_name !== 'صنف غير محدد') ? selectedLot.category_name : 'بلوزة';
+    const kind = selectedLot?.source_kind || 'بالة';
+    const defaultCat = (kind === 'بالة') ? (selectedLot?.category_name || 'بلوزة') : '';
     setSortingData(prev => ({
       ...prev,
-      [grade]: [...prev[grade], { category_name: catName, brand: selectedLot?.brand || '', quantity_pieces: '', weight_kg: '' }]
+      [grade]: [...prev[grade], { category_name: defaultCat, brand: selectedLot?.brand || '', quantity_pieces: '', weight_kg: '' }]
     }));
+  };
+
+  // دالة حذف الصنف/السطر
+  const deleteRow = (grade, index) => {
+    setSortingData(prev => {
+      const currentRows = [...prev[grade]];
+      if (currentRows.length > 1) {
+        currentRows.splice(index, 1);
+      } else {
+        // لو فاضل سطر واحد يتفرغ
+        currentRows[0] = { category_name: '', brand: '', quantity_pieces: '', weight_kg: '' };
+      }
+      return { ...prev, [grade]: currentRows };
+    });
   };
 
   const updateRow = (grade, index, field, value) => {
@@ -96,7 +114,7 @@ export default function SortingPage() {
 
     try {
       const allLines = [];
-      const defaultCat = (selectedLot?.category_name && selectedLot?.category_name !== 'صنف غير محدد') ? selectedLot.category_name : 'بلوزة';
+      const defaultCat = selectedLot?.category_name || 'بلوزة';
 
       Object.entries(sortingData).forEach(([grade, rows]) => {
         rows.forEach(row => {
@@ -149,23 +167,50 @@ export default function SortingPage() {
         <div className={`font-bold text-${g.color}-800 flex justify-between items-center`}>
           <span>{g.label}</span>
           {(kind === 'استوك' || kind === 'شراء مباشر') && g.key !== 'WASTE' && (
-            <button type="button" onClick={() => addRow(g.key)} className={`text-xs bg-${g.color}-200 px-2 py-1 rounded hover:bg-${g.color}-300`}>+ إضافة صنف</button>
+            <button type="button" onClick={() => addRow(g.key)} className={`text-xs bg-${g.color}-200 text-${g.color}-900 font-extrabold px-2.5 py-1 rounded-lg hover:bg-${g.color}-300 transition-colors`}>+ إضافة صنف</button>
           )}
         </div>
 
         {sortingData[g.key].map((row, idx) => (
-          <div key={idx} className="flex flex-wrap gap-2 items-center bg-white p-2 rounded border border-white/50 shadow-sm">
-            {kind === 'استوك' && g.key !== 'WASTE' && (
-              <input type="text" placeholder="اسم الصنف (بلوزة..)" value={row.category_name} onChange={(e) => updateRow(g.key, idx, 'category_name', e.target.value)} className="flex-1 min-w-[100px] text-xs font-bold px-2 py-1.5 border rounded outline-none" />
+          <div key={idx} className="flex flex-wrap gap-2 items-center bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
+            
+            {/* في الاستوك والشراء المباشر: خانة اسم الصنف */}
+            {(kind === 'استوك' || kind === 'شراء مباشر') && g.key !== 'WASTE' && (
+              <input
+                type="text"
+                placeholder="اسم الصنف (مثلاً: فستان، بنطلون..)"
+                value={row.category_name}
+                onChange={(e) => updateRow(g.key, idx, 'category_name', e.target.value)}
+                className="flex-1 min-w-[120px] text-xs font-bold px-2.5 py-1.5 border border-slate-300 rounded outline-none focus:ring-1 focus:ring-emerald-500"
+              />
             )}
 
+            {/* في الشراء المباشر: البراند اختياري */}
             {kind === 'شراء مباشر' && g.key !== 'WASTE' && (
-              <input type="text" placeholder="البراند (اختياري)" value={row.brand} onChange={(e) => updateRow(g.key, idx, 'brand', e.target.value)} className="flex-1 min-w-[100px] text-xs font-bold px-2 py-1.5 border rounded outline-none" />
+              <input
+                type="text"
+                placeholder="البراند (اختياري)"
+                value={row.brand}
+                onChange={(e) => updateRow(g.key, idx, 'brand', e.target.value)}
+                className="w-24 text-xs font-bold px-2 py-1.5 border border-slate-300 rounded outline-none"
+              />
             )}
 
-            <div className="flex gap-2 w-full sm:w-auto">
-              <input type="number" placeholder="العدد" value={row.quantity_pieces} onChange={(e) => updateRow(g.key, idx, 'quantity_pieces', e.target.value)} className="w-1/2 sm:w-20 text-xs font-bold px-2 py-1.5 border rounded outline-none text-center" />
-              <input type="number" step="0.01" placeholder="الوزن كجم" value={row.weight_kg} onChange={(e) => updateRow(g.key, idx, 'weight_kg', e.target.value)} className="w-1/2 sm:w-24 text-xs font-bold px-2 py-1.5 border rounded outline-none text-center" />
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              <input type="number" placeholder="العدد" value={row.quantity_pieces} onChange={(e) => updateRow(g.key, idx, 'quantity_pieces', e.target.value)} className="w-1/2 sm:w-20 text-xs font-bold px-2 py-1.5 border border-slate-300 rounded outline-none text-center" />
+              <input type="number" step="0.01" placeholder="الوزن كجم" value={row.weight_kg} onChange={(e) => updateRow(g.key, idx, 'weight_kg', e.target.value)} className="w-1/2 sm:w-24 text-xs font-bold px-2 py-1.5 border border-slate-300 rounded outline-none text-center" />
+              
+              {/* زرار حذف السطر */}
+              {g.key !== 'WASTE' && (
+                <button
+                  type="button"
+                  onClick={() => deleteRow(g.key, idx)}
+                  title="حذف هذا السطر"
+                  className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors border border-rose-200"
+                >
+                  🗑️
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -190,10 +235,8 @@ export default function SortingPage() {
         ) : (
           rawLots.map(lot => (
             <div key={lot.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow space-y-3">
-              {/* الاسم المجمع الصافي المنظف بدون RAW_BALE أو تكرار */}
               <h3 className="font-extrabold text-slate-900 leading-relaxed text-sm bg-slate-50 p-2.5 rounded-lg border border-slate-100">{getDisplayName(lot)}</h3>
 
-              {/* بيانات الشحنة والمورد والوزن الأصلي */}
               <div className="space-y-1.5 text-xs font-bold text-slate-600 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">📄 رقم البالة / الفاتورة:</span>
