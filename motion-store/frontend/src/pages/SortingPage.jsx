@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
-import { Package, CheckCircle2, AlertTriangle, Layers, Tag, Info } from 'lucide-react';
 
 export default function SortingPage() {
   const [rawLots, setRawLots] = useState([]);
@@ -9,7 +8,6 @@ export default function SortingPage() {
   const [msg, setMsg] = useState({ type: '', text: '' });
   const [selectedLot, setSelectedLot] = useState(null);
 
-  // حالة الفرز للأربع درجات
   const [sortingData, setSortingData] = useState({
     HIGH: [], MID: [], LIQUIDATION: [], WASTE: []
   });
@@ -30,13 +28,15 @@ export default function SortingPage() {
     }
   };
 
-  // صياغة هوية البند الكاملة في القائمة من بره
+  // صياغة اسم البند المجمع الصريح
+  const formatWeight = (val) => Number(val || 0).toString();
+
   const getDisplayName = (lot) => {
     const kind = lot.source_kind || 'بالة';
     const segment = lot.segment || 'حريمي';
     const season = lot.season || 'صيفي';
     const grade = lot.purchase_grade || 'سوبر كريم';
-    const category = lot.category_name || 'صنف غير محدد';
+    const category = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name : 'بلوزة شيفون';
     const brand = lot.brand && lot.brand !== 'بدون براند' ? ` - ${lot.brand}` : '';
 
     if (kind === 'استوك') return `${kind} - ${segment} - ${season} - ${grade}${brand}`;
@@ -46,8 +46,8 @@ export default function SortingPage() {
 
   const openSortingModal = (lot) => {
     setSelectedLot(lot);
-    // تجهيز صف افتراضي لكل درجة
-    const defaultRow = { category_name: lot.category_name || '', brand: lot.brand || '', quantity_pieces: '', weight_kg: '' };
+    const catName = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name : 'بلوزة شيفون';
+    const defaultRow = { category_name: catName, brand: lot.brand || '', quantity_pieces: '', weight_kg: '' };
     setSortingData({
       HIGH: [{ ...defaultRow }],
       MID: [{ ...defaultRow }],
@@ -58,9 +58,10 @@ export default function SortingPage() {
   };
 
   const addRow = (grade) => {
+    const catName = (selectedLot?.category_name && selectedLot?.category_name !== 'صنف غير محدد') ? selectedLot.category_name : 'بلوزة شيفون';
     setSortingData(prev => ({
       ...prev,
-      [grade]: [...prev[grade], { category_name: selectedLot.category_name || '', brand: selectedLot.brand || '', quantity_pieces: '', weight_kg: '' }]
+      [grade]: [...prev[grade], { category_name: catName, brand: selectedLot?.brand || '', quantity_pieces: '', weight_kg: '' }]
     }));
   };
 
@@ -75,15 +76,16 @@ export default function SortingPage() {
     setSaving(true);
 
     try {
-      // تجميع كل السطور المدخلة
       const allLines = [];
+      const defaultCat = (selectedLot?.category_name && selectedLot?.category_name !== 'صنف غير محدد') ? selectedLot.category_name : 'بلوزة شيفون';
+
       Object.entries(sortingData).forEach(([grade, rows]) => {
         rows.forEach(row => {
           if (row.quantity_pieces || row.weight_kg) {
             allLines.push({
               grade: grade,
-              category_name: row.category_name || selectedLot.category_name || 'غير محدد',
-              brand: row.brand || selectedLot.brand || 'بدون براند',
+              category_name: row.category_name || defaultCat,
+              brand: row.brand || selectedLot?.brand || 'بدون براند',
               quantity_pieces: parseInt(row.quantity_pieces) || 0,
               weight_kg: parseFloat(row.weight_kg) || 0.0
             });
@@ -97,7 +99,6 @@ export default function SortingPage() {
         return;
       }
 
-      // إرسال البيانات للباك اند كعملية مطابقة وترحيل فورية
       await axiosClient.post(`/raw-lots/${selectedLot.id}/sort_and_transfer/`, {
         lines: allLines
       });
@@ -129,19 +130,16 @@ export default function SortingPage() {
         <div className={`font-bold text-${g.color}-800 flex justify-between items-center`}>
           <span>{g.label}</span>
           {(kind === 'استوك' || kind === 'شراء مباشر') && g.key !== 'WASTE' && (
-            <button onClick={() => addRow(g.key)} className={`text-xs bg-${g.color}-200 px-2 py-1 rounded hover:bg-${g.color}-300`}>+ إضافة صنف</button>
+            <button type="button" onClick={() => addRow(g.key)} className={`text-xs bg-${g.color}-200 px-2 py-1 rounded hover:bg-${g.color}-300`}>+ إضافة صنف</button>
           )}
         </div>
 
         {sortingData[g.key].map((row, idx) => (
           <div key={idx} className="flex flex-wrap gap-2 items-center bg-white p-2 rounded border border-white/50 shadow-sm">
-            
-            {/* في الاستوك: البراند ثابت والصنف بيتكتب */}
             {kind === 'استوك' && g.key !== 'WASTE' && (
               <input type="text" placeholder="اسم الصنف (بلوزة..)" value={row.category_name} onChange={(e) => updateRow(g.key, idx, 'category_name', e.target.value)} className="flex-1 min-w-[100px] text-xs font-bold px-2 py-1.5 border rounded outline-none" />
             )}
 
-            {/* في الشراء المباشر: الصنف ثابت والبراند بيتكتب */}
             {kind === 'شراء مباشر' && g.key !== 'WASTE' && (
               <input type="text" placeholder="البراند (اختياري)" value={row.brand} onChange={(e) => updateRow(g.key, idx, 'brand', e.target.value)} className="flex-1 min-w-[100px] text-xs font-bold px-2 py-1.5 border rounded outline-none" />
             )}
@@ -172,12 +170,34 @@ export default function SortingPage() {
           <div className="col-span-full p-6 text-center text-slate-400 font-bold bg-white rounded border border-slate-200">مفيش مشتريات مستنية الفرز حالياً.</div>
         ) : (
           rawLots.map(lot => (
-            <div key={lot.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
-              <h3 className="font-extrabold text-slate-800 leading-relaxed mb-2 text-sm">{getDisplayName(lot)}</h3>
-              <div className="flex items-center gap-2 text-xs text-slate-500 mb-4 font-bold">
-                <span className="bg-slate-100 px-2 py-1 rounded">الوزن الكلي: {lot.original_weight_kg} كجم</span>
+            <div key={lot.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow space-y-3">
+              {/* الاسم المجمع بالكامل */}
+              <h3 className="font-extrabold text-slate-900 leading-relaxed text-sm bg-slate-50 p-2.5 rounded-lg border border-slate-100">{getDisplayName(lot)}</h3>
+
+              {/* بيانات الشحنة كاملة من بره */}
+              <div className="space-y-1.5 text-xs font-bold text-slate-600 bg-slate-50/50 p-3 rounded-lg border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">📄 رقم البالة / الفاتورة:</span>
+                  <span className="text-indigo-700 font-extrabold">{lot.lot_code || lot.invoice_number || `LOT-${lot.id.substring(0, 6)}`}</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">🏬 المورد:</span>
+                  <span className="text-slate-800">{lot.supplier_name || lot.supplier?.name || 'مورد عام'}</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">📅 تاريخ الشراء:</span>
+                  <span className="text-slate-700">{lot.created_at ? new Date(lot.created_at).toLocaleDateString('ar-EG') : 'اليوم'}</span>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                  <span className="text-slate-500">⚖️ الوزن الأصلي:</span>
+                  <span className="text-emerald-700 font-extrabold">{formatWeight(lot.original_weight_kg)} كجم</span>
+                </div>
               </div>
-              <button onClick={() => openSortingModal(lot)} className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors text-xs flex items-center justify-center gap-2">
+
+              <button onClick={() => openSortingModal(lot)} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors text-xs flex items-center justify-center gap-2 shadow-sm">
                 <span>✂️</span> ابدأ الفرز والترحيل
               </button>
             </div>
@@ -191,9 +211,10 @@ export default function SortingPage() {
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50 rounded-t-2xl">
               <div>
                 <h3 className="text-lg font-bold text-slate-800">{getDisplayName(selectedLot)}</h3>
-                <div className="text-xs font-bold text-indigo-700 mt-1 flex gap-3">
-                  {selectedLot.source_kind === 'بالة' ? <span>الصنف ثابت: {selectedLot.category_name}</span> : <span>البراند ثابت: {selectedLot.brand}</span>}
-                  <span>الوزن الأصلي: {selectedLot.original_weight_kg} كجم</span>
+                <div className="text-xs font-bold text-indigo-700 mt-1 flex flex-wrap gap-4">
+                  <span>📄 الشحنة: {selectedLot.lot_code || selectedLot.invoice_number || 'LOT'}</span>
+                  <span>🏬 المورد: {selectedLot.supplier_name || selectedLot.supplier?.name || 'مورد عام'}</span>
+                  <span>⚖️ الوزن الكلي: {formatWeight(selectedLot.original_weight_kg)} كجم</span>
                 </div>
               </div>
               <button onClick={() => setSelectedLot(null)} className="text-slate-400 hover:text-slate-600 font-bold text-xl">✕</button>
