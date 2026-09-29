@@ -82,6 +82,7 @@ export default function POSPage() {
   const [terminal, setTerminal] = useState(null);
   const [shift, setShift] = useState(null);
   const [stock, setStock] = useState([]);
+  const [sellMode, setSellMode] = useState('PIECE'); // 'WEIGHT' | 'PIECE' | 'MIX'
   const [pieceItems, setPieceItems] = useState([]);
   const [payMethods, setPayMethods] = useState([]);
   const [activeOffers, setActiveOffers] = useState([]);
@@ -194,6 +195,7 @@ export default function POSPage() {
   };
   const verifyMgr = async () => { try { const r = await axiosClient.post('/sales/verify_manager/', { password: mgrPwd }); setApprovedBy(r.data.manager); setApprovedPwd(mgrPwd); setShowMgr(false); setMgrPwd(''); setMgrErr(''); } catch (e) { setMgrErr(e.response?.data?.detail || e.message); } };
   const codeRef = useRef(null);
+  const kgRef = useRef(null);
 
   const showErr = (m) => { setErr(m); setTimeout(() => setErr(''), 4500); };
   const apiErr = (e) => showErr(T.failed + (e.response?.data?.detail || e.message));
@@ -269,26 +271,70 @@ export default function POSPage() {
     return true;
   };
   const addPiece = (p, qtyVal, kgVal) => {
+    if (!p) return false;
+    const isWeightMode = sellMode === 'WEIGHT' || (sellMode === 'MIX' && num(kgVal) > 0);
+    const w = num(kgVal);
+    const actualW = isWeightMode ? (w > 0 ? w : 1.0) : w;
     const n = Math.max(1, parseInt(qtyVal || '1', 10) || 1);
-    const inScaleByKg = !!bundle && num(p.price_per_kg) > 0;
-    const hasKgVal = num(kgVal) > 0;
-    const perPiece = num(p.price_per_piece) > 0 && !hasKgVal && !inScaleByKg;
-    if (!perPiece && num(kgVal) <= 0) { showErr(T.needKg); return false; }
+    if (isWeightMode) {
+      const availKg = num(p.total_available_weight_kg || p.total_weight_kg || 0);
+      const usedKg = cart.filter((l) => l.piece_item_id === p.id).reduce((a, l) => a + num(l.kg), 0);
+      if (availKg > 0 && actualW + usedKg > availKg + 0.0001) {
+        showErr(`الوزن المطلوب أكبر من المتاح (${kgf(availKg - usedKg)} كجم)`);
+        return false;
+      }
+    } else {
+      const availPcs = parseInt(p.total_available_pieces || p.total_quantity_pieces || 0, 10) || 0;
+      const usedPcs = cart.filter((l) => l.piece_item_id === p.id).reduce((a, l) => a + parseInt(l.qty || 0, 10), 0);
+      if (availPcs > 0 && n + usedPcs > availPcs) {
+        showErr(`عدد القطع المطلوب أكبر من المتاح (${availPcs - usedPcs} قطعة)`);
+        return false;
+      }
+    }
     const offerName = p.offer ? (activeOffers.find((o) => o.id === p.offer)?.name || T.offerLine) : null;
     const name = (p.name || '').trim();
-    setCart((c) => [...c, { key: `${Date.now()}-${Math.random()}`, type: 'PIECE', piece_item_id: p.id, code: p.code, name, offer: offerName, mode: perPiece ? 'PIECE' : 'KG', qty: String(n), kg: perPiece ? '' : String(num(kgVal)), price: String(perPiece ? num(p.price_per_piece) : num(p.price_per_kg)), bundle, kind: p.source_kind, segment: p.segment, brand: p.brand, season: p.season }]);
+    const priceUnit = isWeightMode ? num(p.price_per_kg || p.selling_price_per_kg) : num(p.price_per_piece);
+    setCart((c) => [...c, {
+      key: `${Date.now()}-${Math.random()}`,
+      type: 'PIECE',
+      piece_item_id: p.id,
+      code: p.code || p.product_code || '',
+      name,
+      offer: offerName,
+      mode: isWeightMode ? 'KG' : 'PIECE',
+      qty: String(n),
+      kg: actualW > 0 ? String(actualW) : '',
+      price: String(priceUnit),
+      bundle,
+      kind: p.source_kind,
+      segment: p.segment,
+      brand: p.brand,
+      season: p.season
+    }]);
     return true;
   };
   const onCodeEnter = async () => {
     const c = code.trim(); if (!c) return;
+    const needsKg = sellMode === 'WEIGHT';
+    if (needsKg && num(kg) <= 0) {
+      showErr('اكتب الوزن الفعلي بالكجم للميزان ثم اضغط Enter');
+      setTimeout(() => kgRef.current && kgRef.current.focus(), 50);
+      return;
+    }
     try {
       const r = await axiosClient.get(`/piece-items/by_code/?code=${encodeURIComponent(c)}`);
-      if (addPiece(r.data, qty, kg)) { setCode(''); setQty('1'); setKg(''); }
+      if (addPiece(r.data, qty, kg)) {
+        setCode(''); setQty('1'); setKg('');
+        setTimeout(() => codeRef.current && codeRef.current.focus(), 50);
+      }
       return;
     } catch (e) { if (e.response?.status !== 404) { apiErr(e); return; } }
     const s = stock.find((x) => String(x.product_code || '').toLowerCase() === c.toLowerCase());
     if (!s) { showErr(T.notFound); return; }
-    if (addWeight(s, kg)) { setCode(''); setQty('1'); setKg(''); }
+    if (addWeight(s, kg)) {
+      setCode(''); setQty('1'); setKg('');
+      setTimeout(() => codeRef.current && codeRef.current.focus(), 50);
+    }
   };
   const updLine = (key, field, val) => setCart((c) => c.map((l) => (l.key === key ? { ...l, [field]: val } : l)));
   const delLine = (key) => setCart((c) => c.filter((l) => l.key !== key));
@@ -343,6 +389,9 @@ export default function POSPage() {
         else if (showPay) submitSale(true);
         else openPay();
       }
+      if (e.key === '+') { setSellMode('WEIGHT'); }
+      if (e.key === '-') { setSellMode('PIECE'); }
+      if (e.key === '/') { setSellMode('MIX'); }
       if (e.key === 'F1') { e.preventDefault(); if (!showPay && !receipt) openPay(); }
       if (e.key === 'F3') { e.preventDefault(); if (!showPay) { resetSale(); setReceipt(null); } }
     };
@@ -350,10 +399,13 @@ export default function POSPage() {
     return () => window.removeEventListener('keydown', h);
   });
 
-  const submitSale = async (printAfterSave = false) => {
+  const submitSale = async (printAfterSave = true) => {
     if (busy) return;
     if (Math.abs(remaining) >= 0.01 || (cashRow && changeDue < 0)) { showErr(isRTL ? 'راجع قيمة الدفع قبل التأكيد' : 'Check the payment amount before confirming'); return; }
-    if (hasCredit && !cust && phoneDigits.length < 6) { showErr(T.needPhone); return; }
+    if (!cust && (!phoneDigits || phoneDigits.length < 6 || !custNameIn.trim())) {
+      showErr('برجاء كتابة اسم العميل ورقم التليفون قبل تأكيد الفاتورة');
+      return;
+    }
     setBusy(true);
     const items = cart.map((l) => (l.type === 'PIECE'
       ? { piece_item_id: l.piece_item_id, quantity_pieces: parseInt(l.qty || '1', 10) || 1, weight_kg: l.mode === 'KG' ? num(l.kg).toFixed(3) : '0', unit_price: num(l.price).toFixed(2), price_mode: l.mode, display_name: l.name, bundle_label: l.bundle || null, offer_label: l.offer || null }
@@ -371,6 +423,7 @@ export default function POSPage() {
         customer: cust ? `${cust.code || ''} ${cust.name}` : '', custName: rc ? rc.name : custNameIn, custPhone: rc ? rc.phone : phoneDigits, custCode: rc ? (rc.code || '') : '', at: new Date().toLocaleString('en-GB') };
       setReceipt(nextReceipt);
       setShowPay(false); resetSale(); loadShop(terminal);
+      setTimeout(() => { codeRef.current && codeRef.current.focus(); }, 100);
       if (printAfterSave) setTimeout(() => printReceipt(nextReceipt), 0);
     } catch (e) { apiErr(e); } finally { setBusy(false); }
   };
@@ -385,7 +438,7 @@ export default function POSPage() {
     const co = await getCompanyInfo();
     const R = receiptToPrint; const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
     const groups = []; R.lines.forEach((l) => { const g = l.bundle || ''; let grp = groups.find((x) => x.name === g); if (!grp) { grp = { name: g, lines: [] }; groups.push(grp); } grp.lines.push(l); });
-    const lineHtml = (l, pad) => `<tr><td style="${pad ? 'padding-right:8px' : ''}">${esc(l.name)}${l.offer ? ` <b>(${esc(T.offerLine)}: ${esc(l.offer)})</b>` : ''}<br><small>${l.mode === 'PIECE' ? `${esc(l.qty)} ${T.pcs}` : `${kgf(l.kg)} ${T.kg}`} × ${money(l.price)}</small></td><td style="text-align:left">${money(lineTotal(l))}</td></tr>`;
+    const lineHtml = (l, pad) => `<tr><td style="${pad ? 'padding-right:8px' : ''}">${esc(l.name)}${l.offer ? ` <b>(${esc(T.offerLine)}: ${esc(l.offer)})</b>` : ''}<br><small>${l.mode === 'PIECE' ? `${esc(l.qty)} ${T.pcs}` : `${kgf(l.kg)} ${T.kg} (${esc(l.qty || 1)} ق)`} × ${money(l.price)}</small></td><td style="text-align:left">${money(lineTotal(l))}</td></tr>`;
     const body = groups.map((g) => (g.name ? `<tr><td colspan="2" style="font-weight:700;padding-top:4px">${esc(g.name)} — ${money(g.lines.reduce((a, l) => a + lineTotal(l), 0))}</td></tr>` + g.lines.map((l) => lineHtml(l, true)).join('') : g.lines.map((l) => lineHtml(l, false)).join(''))).join('');
     const row = (a, b) => `<tr><td>${a}</td><td style="text-align:left">${b}</td></tr>`;
     const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(R.number)}</title><style>
@@ -407,11 +460,13 @@ export default function POSPage() {
   const term = q.trim().toLowerCase();
   const sourceList = pieceItems.length > 0 ? pieceItems : stock;
   const dir = sourceList.filter((s) => {
-    const termStr = (q || '').trim().toLowerCase();
+    const termStr = ((code || '') + ' ' + (q || '')).trim().toLowerCase();
     if (!termStr) return true;
     const codeStr = String(s.code || s.product_code || '').toLowerCase();
-    const nameStr = String(s.name || s.product_name || '').toLowerCase();
-    return codeStr.includes(termStr) || nameStr.includes(termStr);
+    const nameStr = String(s.name || s.product_name || s.category_name || '').toLowerCase();
+    const pPieceStr = String(s.price_per_piece || '').toLowerCase();
+    const pKgStr = String(s.price_per_kg || s.selling_price_per_kg || '').toLowerCase();
+    return codeStr.includes(termStr) || nameStr.includes(termStr) || pPieceStr.includes(termStr) || pKgStr.includes(termStr);
   });
   const input = 'h-10 px-3 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:border-emerald-500';
   const grouped = []; cart.forEach((l) => { const g = l.bundle || ''; let grp = grouped.find((x) => x.name === g); if (!grp) { grp = { name: g, lines: [] }; grouped.push(grp); } grp.lines.push(l); });
@@ -437,21 +492,53 @@ export default function POSPage() {
 
       {err && <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2.5 rounded-lg text-sm font-bold">{err}</div>}
 
-      <div className="bg-emerald-600 rounded-xl p-3 flex flex-wrap items-end gap-2">
-        <label className="text-[11px] font-bold text-emerald-50 space-y-1 block">{T.code}
-          <input ref={codeRef} autoFocus value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onCodeEnter(); } }} className={input + ' w-36 font-mono font-bold text-base block'} />
+      {/* Mode Selection Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div onClick={() => setSellMode('WEIGHT')} className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${sellMode === 'WEIGHT' ? 'border-emerald-600 bg-emerald-50 shadow-md' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="flex items-center gap-2">
+            <Scale className={sellMode === 'WEIGHT' ? 'text-emerald-700' : 'text-slate-500'} size={20} />
+            <div>
+              <div className="font-extrabold text-sm text-slate-900">بيع بالميزان</div>
+              <div className="text-[10px] text-slate-500 font-bold">حساب الفاتورة بسعر الكيلو</div>
+            </div>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-mono font-black text-xs">+</span>
+        </div>
+        <div onClick={() => setSellMode('PIECE')} className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${sellMode === 'PIECE' ? 'border-indigo-600 bg-indigo-50 shadow-md' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="flex items-center gap-2">
+            <Tag className={sellMode === 'PIECE' ? 'text-indigo-700' : 'text-slate-500'} size={20} />
+            <div>
+              <div className="font-extrabold text-sm text-slate-900">بيع بالقطعة</div>
+              <div className="text-[10px] text-slate-500 font-bold">حساب الفاتورة بسعر القطعة</div>
+            </div>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-mono font-black text-xs">-</span>
+        </div>
+        <div onClick={() => setSellMode('MIX')} className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${sellMode === 'MIX' ? 'border-amber-600 bg-amber-50 shadow-md' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="flex items-center gap-2">
+            <Plus className={sellMode === 'MIX' ? 'text-amber-700' : 'text-slate-500'} size={20} />
+            <div>
+              <div className="font-extrabold text-sm text-slate-900">بيع ميكس (مخلوط)</div>
+              <div className="text-[10px] text-slate-500 font-bold">بيع قطعة أو ميزان حسب الصنف</div>
+            </div>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-mono font-black text-xs">/</span>
+        </div>
+      </div>
+      {/* Inputs Bar */}
+      <div className="bg-slate-900 rounded-xl p-3 flex flex-wrap items-end gap-3 text-white">
+        <label className="text-[11px] font-bold text-slate-300 space-y-1 block">رمز الكود 🏷️
+          <input ref={codeRef} autoFocus value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onCodeEnter(); } }} placeholder="الكود..." className={input + ' w-32 font-mono font-bold text-base block text-slate-900'} />
         </label>
-        <label className="text-[11px] font-bold text-emerald-50 space-y-1 block">{T.qty}
-          <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onCodeEnter(); } }} className={input + ' w-20 block'} />
+        <label className="text-[11px] font-bold text-slate-300 space-y-1 block flex-1 min-w-[200px]">بحث سريع (اسم / كود / سعر) 🔍
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="اكتب أي حرف أو رقم..." className={input + ' w-full block text-slate-900 font-bold'} />
         </label>
-        <label className="text-[11px] font-bold text-emerald-50 space-y-1 block">{T.kg}
-          <input type="number" min="0" step="0.001" value={kg} onChange={(e) => setKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onCodeEnter(); } }} className={input + ' w-24 block'} />
+        <label className="text-[11px] font-bold text-slate-300 space-y-1 block">العدد (قطعة)
+          <input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onCodeEnter(); } }} className={input + ' w-24 block text-slate-900 text-center font-bold'} />
         </label>
-        <button type="button" onClick={onCodeEnter} className="h-10 px-4 rounded-lg bg-slate-900 text-white text-xs font-bold cursor-pointer">{T.add}</button>
-        {!bundle
-          ? <button type="button" onClick={openScale} className="h-10 px-4 rounded-lg bg-amber-100 text-amber-900 text-xs font-bold flex items-center gap-1 cursor-pointer"><Scale size={14} /> {T.scaleOpen}</button>
-          : <button type="button" onClick={() => setBundle(null)} className="h-10 px-4 rounded-lg bg-amber-600 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"><Scale size={14} /> {T.scaleClose}: {bundle}</button>}
-        {bundle && <span className="text-[11px] font-bold text-amber-100">{T.scaleOn}</span>}
+        <label className="text-[11px] font-bold text-slate-300 space-y-1 block">الوزن الفعلي (كجم)
+          <input type="number" min="0" step="0.001" value={kg} ref={kgRef} onChange={(e) => setKg(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onCodeEnter(); } }} className={input + ' w-28 block text-slate-900 text-center font-bold'} />
+        </label>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-5 gap-3">
@@ -464,7 +551,11 @@ export default function POSPage() {
           <div className="overflow-y-auto max-h-[55vh]">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-slate-100"><tr className="text-slate-700">
-                <th className="p-2 text-start">{T.code}</th><th className="p-2 text-start">{T.item}</th><th className="p-2 text-center">{T.price}</th><th className="p-2 text-center">{T.avail}</th>
+                <th className="p-2 text-start">الكود</th>
+                <th className="p-2 text-start">الصنف</th>
+                {(sellMode === 'PIECE' || sellMode === 'MIX') && <th className="p-2 text-center">سعر القطعة</th>}
+                {(sellMode === 'WEIGHT' || sellMode === 'MIX') && <th className="p-2 text-center">سعر الكيلو</th>}
+                <th className="p-2 text-center">المتاح الفعلي</th>
               </tr></thead>
               <tbody>
                 {dir.length === 0 && <tr><td colSpan={5} className="p-3 text-center text-slate-500">{T.noStock}</td></tr>}
@@ -480,12 +571,23 @@ export default function POSPage() {
                   const availStr = isPiece
                     ? `${item.total_available_pieces || 0} ق · ${kgf(item.total_available_weight_kg || 0)} ك`
                     : `${kgf(item.total_weight_kg)} ك`;
+                  const pcsAvail = item.total_available_pieces || 0;
+                  const kgAvail = item.total_available_weight_kg || item.total_weight_kg || 0;
+                  const isOutOfStock = pcsAvail <= 0 && kgAvail <= 0;
                   return (
-                    <tr key={item.id} onClick={() => { isPiece ? addPiece(item, qty, kg) : addWeight(item, kg || '1'); }} className="border-b border-slate-100 cursor-pointer hover:bg-emerald-50">
+                    <tr key={item.id} onClick={() => {
+                      if (isOutOfStock) { showErr('⚠️ لا يوجد رصيد متاح من هذا الصنف!'); return; }
+                      addPiece(item, qty, kg);
+                    }} className={`border-b border-slate-100 cursor-pointer ${isOutOfStock ? 'opacity-50 bg-slate-50' : 'hover:bg-emerald-50'}`}>
                       <td className="p-2 font-mono font-extrabold text-indigo-700">{itemCode}</td>
                       <td className="p-2 font-bold text-slate-900">{itemName}</td>
-                      <td className="p-2 text-center font-bold text-emerald-800 text-[11px]">{priceStr}</td>
-                      <td className="p-2 text-center font-bold text-slate-700 text-[11px]">{availStr}</td>
+                      {(sellMode === 'PIECE' || sellMode === 'MIX') && (
+                        <td className="p-2 text-center font-bold text-emerald-700 text-xs">{pPiece > 0 ? `${money(pPiece)} ج` : '—'}</td>
+                      )}
+                      {(sellMode === 'WEIGHT' || sellMode === 'MIX') && (
+                        <td className="p-2 text-center font-bold text-indigo-700 text-xs">{pKg > 0 ? `${money(pKg)} ج` : '—'}</td>
+                      )}
+                      <td className="p-2 text-center font-bold text-slate-700 text-xs">{`${pcsAvail} ق · ${kgf(kgAvail)} ك`}</td>
                     </tr>
                   );
                 })}
@@ -522,7 +624,7 @@ export default function POSPage() {
                 <div key={l.key} className="grid grid-cols-12 gap-2 items-center border-b border-slate-100 py-1.5 text-xs">
                   <div className="col-span-4 font-bold">{l.name}{l.offer && <span className="text-violet-700"> ({T.offerLine}: {l.offer})</span>}<div className="text-[10px] text-slate-500 font-normal">{l.mode === 'PIECE' ? T.perPiece : T.perKg}</div></div>
                   <input type="number" min="1" disabled={l.type === 'WEIGHT'} value={l.type === 'WEIGHT' ? '' : l.qty} onChange={(e) => updLine(l.key, 'qty', e.target.value)} className={input + ' col-span-2 h-8 text-xs disabled:bg-slate-50'} placeholder={T.pcs} />
-                  <input type="number" min="0" step="0.001" disabled={l.mode === 'PIECE'} value={l.mode === 'PIECE' ? '' : l.kg} onChange={(e) => updLine(l.key, 'kg', e.target.value)} className={input + ' col-span-2 h-8 text-xs disabled:bg-slate-50'} placeholder={T.kg} />
+                  <input type="number" min="0" step="0.001" value={l.kg || ''} onChange={(e) => updLine(l.key, 'kg', e.target.value)} className={input + ' col-span-2 h-8 text-xs'} placeholder={T.kg} />
                   <input type="number" min="0" step="0.01" value={l.price} disabled={!approvedBy} onChange={(e) => updLine(l.key, 'price', e.target.value)} className={input + ' col-span-2 h-8 text-xs disabled:bg-slate-100 disabled:text-slate-700'} />
                   <div className="col-span-1 font-bold text-emerald-800 text-center">{money(lineTotal(l))}</div>
                   <button type="button" onClick={() => delLine(l.key)} aria-label="delete" className="col-span-1 h-8 w-8 rounded-lg border border-red-200 bg-red-50 text-red-700 flex items-center justify-center cursor-pointer"><Trash2 size={13} /></button>
@@ -716,7 +818,7 @@ export default function POSPage() {
             {payRows.map((r) => (
               <div key={r.key} className="flex gap-2 items-center">
                 <select value={r.id} onChange={(e) => updPay(r.key, 'id', e.target.value)} className={input + ' flex-1'}>{payMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
-                <input type="number" min="0" step="0.01" value={r.amount} onChange={(e) => updPay(r.key, 'amount', e.target.value)} className={input + ' w-32 text-center font-bold'} />
+                <input type="number" min="0" step="0.01" value={r.amount} onChange={(e) => updPay(r.key, 'amount', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSale(true); } }} className={input + ' w-32 text-center font-bold'} />
                 {payRows.length > 1 && <button type="button" onClick={() => setPayRows(payRows.filter((x) => x.key !== r.key))} aria-label="remove" className="h-10 w-10 rounded-lg border border-red-200 bg-red-50 text-red-700 flex items-center justify-center cursor-pointer"><Trash2 size={14} /></button>}
               </div>
             ))}
@@ -724,7 +826,7 @@ export default function POSPage() {
             <div className={`text-center text-sm font-bold ${Math.abs(remaining) < 0.01 ? 'text-emerald-700' : 'text-rose-700'}`}>{T.remaining}: {money(remaining)} {T.cur}</div>
             {cashRow && (
               <div className="grid grid-cols-2 gap-2 items-end">
-                <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.cashGiven}<input type="number" min="0" step="0.01" value={cashGiven} onChange={(e) => setCashGiven(e.target.value)} className={input + ' w-full text-center font-bold'} /></label>
+                <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.cashGiven}<input type="number" min="0" step="0.01" value={cashGiven} onChange={(e) => setCashGiven(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSale(true); } }} className={input + ' w-full text-center font-bold'} /></label>
                 <div className={`text-center text-sm font-bold pb-2 ${changeDue >= 0 ? 'text-slate-800' : 'text-rose-700'}`}>{T.changeDue}: {money(changeDue)}</div>
               </div>
             )}
@@ -776,7 +878,7 @@ export default function POSPage() {
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={printReceipt} className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-sm font-bold flex items-center justify-center gap-1 cursor-pointer"><Printer size={15} /> {T.print}</button>
-              <button type="button" onClick={() => { setReceipt(null); setTimeout(() => codeRef.current && codeRef.current.focus(), 50); }} className="flex-1 h-11 rounded-xl bg-emerald-600 text-white text-sm font-bold cursor-pointer">{T.newSale}</button>
+              <button type="button" onClick={() => { setReceipt(null); resetSale(); setTimeout(() => codeRef.current && codeRef.current.focus(), 50); }} className="flex-1 h-11 rounded-xl bg-emerald-600 text-white text-sm font-bold cursor-pointer">{T.newSale}</button>
             </div>
           </div>
         </div>
