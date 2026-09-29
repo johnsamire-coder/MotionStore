@@ -9,6 +9,13 @@ class RawLotStatus(models.TextChoices):
 
 
 class RawLot(TenantAwareModel):
+    source_kind = models.CharField(max_length=50, default="بالة", blank=True)
+    segment = models.CharField(max_length=50, default="حريمي", blank=True)
+    season = models.CharField(max_length=50, default="صيفي", blank=True)
+    purchase_grade = models.CharField(max_length=50, default="سوبر كريم", blank=True)
+    category_name = models.CharField(max_length=100, default="بلوزه", blank=True)
+    brand = models.CharField(max_length=100, default="", blank=True)
+
     lot_code = models.CharField(
         max_length=100,
         db_index=True,
