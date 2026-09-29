@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from apps.api.views import *
 
 router = DefaultRouter()
+router.register('brands', views.BrandViewSet, basename='brand')
 router.register('store-items', views.StoreItemViewSet, basename='store-item')
 router.register('costing-config', views.CostingConfigurationViewSet, basename='costing-config')
 router.register(r"companies", CompanyViewSet, basename="companies")

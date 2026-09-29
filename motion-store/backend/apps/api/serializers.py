@@ -366,9 +366,25 @@ class TransferOrderSerializer(serializers.ModelSerializer):
 from apps.pricing.models import WeightPrice, PieceItem, PriceChangeLog
 
 class WeightPriceSerializer(serializers.ModelSerializer):
+    kind = serializers.CharField(required=False, allow_blank=True, default="بالة")
+    key = serializers.CharField(required=False, allow_blank=True, default="")
+    grade = serializers.CharField(required=False, allow_blank=True, default="")
+    price_per_kg = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0.00)
+
     class Meta:
         model = WeightPrice
         fields = '__all__'
+        read_only_fields = ['tenant']
+
+class Meta:
+        model = WeightPrice
+        fields = '__all__'
+        read_only_fields = ['tenant']
+
+class Meta:
+        model = WeightPrice
+        fields = '__all__'
+        read_only_fields = ['tenant']
         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 class PieceItemSerializer(serializers.ModelSerializer):

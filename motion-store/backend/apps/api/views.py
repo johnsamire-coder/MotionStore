@@ -3124,3 +3124,54 @@ class PieceItemViewSet(viewsets.ModelViewSet):
 
         items.update(coding_item=piece_item)
         return Response({'status': 'success', 'message': f'تم ربط {items.count()} بند بالكود [{piece_item.code}] بنجاح!'})
+
+
+class BrandViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request):
+        from apps.pricing.models import StoreItem, PieceItem
+        from apps.purchasing.models import PurchaseLineItem
+        
+        tenant = getattr(request.user, 'tenant', None)
+        brands = set(['زارا', 'ديجافو', 'H&M', 'LC Waikiki', 'شي إن', 'Bershka', 'Mango', 'Pull & Bear', 'Nike', 'Adidas'])
+
+        s_items = StoreItem.objects.filter(tenant=tenant) if tenant else StoreItem.objects.all()
+        for s in s_items:
+            if s.brand and s.brand != 'بدون براند':
+                brands.add(str(s.brand).strip())
+
+        p_items = PieceItem.objects.filter(tenant=tenant) if tenant else PieceItem.objects.all()
+        for p in p_items:
+            if hasattr(p, 'brand') and p.brand and p.brand != 'بدون براند':
+                brands.add(str(p.brand).strip())
+
+        return Response(sorted(list(brands)))
+
+
+
+class WeightPriceViewSet(viewsets.ModelViewSet):
+    serializer_class = WeightPriceSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        tenant = getattr(self.request.user, 'tenant', None)
+        return WeightPrice.objects.filter(tenant=tenant) if tenant else WeightPrice.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        from apps.tenants.models import Tenant
+        tenant = getattr(request.user, 'tenant', None) or Tenant.objects.first()
+        kind = request.data.get('kind', 'بالة') or 'بالة'
+        key = request.data.get('key', '') or ''
+        grade = request.data.get('grade', '') or ''
+        price_per_kg = request.data.get('price_per_kg', 0.0)
+
+        obj, created = WeightPrice.objects.update_or_create(
+            tenant=tenant,
+            kind=kind,
+            key=key,
+            grade=grade,
+            defaults={'price_per_kg': price_per_kg}
+        )
+        serializer = self.get_serializer(obj)
+        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)

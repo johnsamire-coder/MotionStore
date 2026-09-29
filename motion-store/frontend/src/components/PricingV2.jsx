@@ -13,6 +13,7 @@ export default function PricingV2() {
   const [pieceItems, setPieceItems] = useState([]);
   const [weightPrices, setWeightPrices] = useState([]);
   const [priceLogs, setPriceLog] = useState([]);
+  const [allBrands, setAllBrands] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState({ type: '', text: '' });
@@ -27,7 +28,7 @@ export default function PricingV2() {
   const [editPriceForm, setEditPriceForm] = useState({ price_per_piece: '', price_per_kg: '' });
 
   useEffect(() => { fetchBranches(); }, []);
-  useEffect(() => { fetchStoreItems(); fetchPieceItems(); fetchWeightPrices(); fetchPriceLogs(); }, [selectedBranch, searchQuery]);
+  useEffect(() => { fetchStoreItems(); fetchPieceItems(); fetchWeightPrices(); fetchPriceLogs(); fetchBrands(); }, [selectedBranch, searchQuery]);
 
   const fetchBranches = async () => {
     try {
@@ -58,6 +59,16 @@ export default function PricingV2() {
       const res = await axiosClient.get('/weight-prices/');
       setWeightPrices(res.data.results || res.data || []);
     } catch (e) { console.error(e); }
+  };
+
+  
+  const fetchBrands = async () => {
+    try {
+      const res = await axiosClient.get('/brands/');
+      setAllBrands(res.data || []);
+    } catch (e) {
+      setAllBrands(['زارا', 'ديجافو', 'H&M', 'LC Waikiki', 'شي إن', 'Bershka', 'Mango']);
+    }
   };
 
   const fetchPriceLogs = async () => {
@@ -144,7 +155,7 @@ export default function PricingV2() {
       await axiosClient.post('/weight-prices/', { kind: 'بالة', grade: 'تصفيات', price_per_kg: baleWeightForm.liq });
       setMsg({ type: 'success', text: '🎉 تم حفظ وتحديث أسعار كيلو البالة (عالي / وسط / تصفيات) بنجاح!' });
       fetchWeightPrices();
-    } catch (err) { setMsg({ type: 'error', text: '❌ فشل حفظ أوزان البالة.' }); } finally { setSaving(false); }
+    } catch (err) { const errDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message; setMsg({ type: 'error', text: `❌ فشل حفظ أوزان البالة: ${errDetail}` }); } finally { setSaving(false); }
   };
 
   const handleSaveStockWeightPrice = async (e) => {
@@ -160,7 +171,7 @@ export default function PricingV2() {
       setMsg({ type: 'success', text: '🎉 تم حفظ سعر كيلو الاستوك (للصنف والبراند والدرجة) بنجاح!' });
       setStockWeightForm({ category_name: '', brand: '', grade: 'عالي', price_per_kg: '' });
       fetchWeightPrices();
-    } catch (err) { setMsg({ type: 'error', text: '❌ فشل حفظ أوزان الاستوك.' }); } finally { setSaving(false); }
+    } catch (err) { const errDetail = err.response?.data ? JSON.stringify(err.response.data) : err.message; setMsg({ type: 'error', text: `❌ فشل حفظ أوزان الاستوك: ${errDetail}` }); } finally { setSaving(false); }
   };
 
   return (
@@ -459,7 +470,7 @@ export default function PricingV2() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">اسم الصنف *</label>
-                  <input type="text" required list="stockCategoriesList" value={stockWeightForm.category_name} onChange={(e) => setStockWeightForm({ ...stockWeightForm, category_name: e.target.value })} placeholder="اختر أو اكتب الصنف..." className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500" />
+                  <input type="text" list="stockCategoriesList" value={stockWeightForm.category_name} onChange={(e) => setStockWeightForm({ ...stockWeightForm, category_name: e.target.value })} placeholder="اختر صنف (أو اتركه فاضي لكل الأصناف)" className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500" />
                   <datalist id="stockCategoriesList">
                     {existingCategories.map((c, i) => (<option key={i} value={c} />))}
                   </datalist>
@@ -467,9 +478,9 @@ export default function PricingV2() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1">البراند / الماركة (من الحالية) *</label>
-                  <input type="text" required list="stockBrandsList" value={stockWeightForm.brand} onChange={(e) => setStockWeightForm({ ...stockWeightForm, brand: e.target.value })} placeholder="اختر أو اكتب البراند..." className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500" />
+                  <input type="text" list="stockBrandsList" value={stockWeightForm.brand} onChange={(e) => setStockWeightForm({ ...stockWeightForm, brand: e.target.value })} placeholder="اختر براند (أو اتركه فاضي لكل البراندات)" className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-500" />
                   <datalist id="stockBrandsList">
-                    {existingBrands.map((b, i) => (<option key={i} value={b} />))}
+                    {allBrands.map((b, i) => (<option key={i} value={b} />))}
                   </datalist>
                 </div>
 
