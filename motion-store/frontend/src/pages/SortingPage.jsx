@@ -29,32 +29,32 @@ export default function SortingPage() {
   };
 
   // صياغة الهوية المجمعة الصافية بدون أصل إنجليزي أو تكرار
-  const getDisplayName = (lot) => {
-    let kind = (lot.source_kind || 'بالة').trim();
-    if (kind === 'RAW_BALE' || kind === 'BALE') kind = 'بالة';
-    if (kind === 'STOCK') kind = 'استوك';
-    if (kind === 'DIRECT_PURCHASE') kind = 'شراء مباشر';
+    // صياغة الهوية المجمعة الصافية بدون تركيب أو تكرار
+    const getDisplayName = (lot) => {
+    let cat = lot.category_name ? String(lot.category_name).trim() : '';
+    let kind = lot.source_kind ? String(lot.source_kind).trim() : 'بالة';
+    let seg = lot.segment ? String(lot.segment).trim() : 'حريمي';
+    let sea = lot.season ? String(lot.season).trim() : 'صيفي';
+    let grd = lot.purchase_grade ? String(lot.purchase_grade).trim() : 'سوبر كريم';
+    let brd = lot.brand ? String(lot.brand).trim() : '';
 
-    const segment = (lot.segment || 'حريمي').trim();
-    const season = (lot.season || 'صيفي').trim();
-    const grade = (lot.purchase_grade || 'سوبر كريم').trim();
-    const category = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name.trim() : 'بلوزة';
-    const brand = (lot.brand && lot.brand !== 'بدون براند') ? lot.brand.trim() : '';
+    if (cat.includes('شراء مباشر') || cat.includes('استوك') || cat.includes('بالة')) {
+      const parts = cat.split('-').map(s => s.trim());
+      cat = parts[parts.length - 1];
+    }
 
-    if (kind.includes('استوك')) {
-      const bType = brand ? 'وان براند' : 'ميكس براند';
-      const bStr = brand ? ` - ${brand}` : '';
-      return `استوك - ${segment} - ${season} - ${bType}${bStr}`;
+    if (kind.includes('استوك') || cat.includes('استوك')) {
+      const b = (brd && brd !== 'بدون براند') ? brd : (cat || 'نايك');
+      return 'استوك - ' + seg + ' - ' + sea + ' - ' + b;
     }
-    if (kind.includes('شراء مباشر')) {
-      const cStr = category ? ` - ${category}` : '';
-      const bStr = brand ? ` - ${brand}` : '';
-      return `شراء مباشر - ${segment} - ${season}${cStr}${bStr}`;
+    if (kind.includes('شراء مباشر') || cat.includes('شراء مباشر')) {
+      const c = cat || 'احذية';
+      return 'شراء مباشر - ' + seg + ' - ' + sea + ' - ' + c;
     }
-    // بالة
-    const gStr = grade ? ` - ${grade}` : ' - سوبر كريم';
-    const cStr = category ? ` - ${category}` : ' - بلوزة';
-    return `بالة - ${segment} - ${season}${gStr}${cStr}`;
+
+    const c = cat || 'بلوزة';
+    const g = grd || 'سوبر كريم';
+    return 'بالة - ' + seg + ' - ' + sea + ' - ' + g + ' - ' + c;
   };
 
   const formatWeight = (val) => {
