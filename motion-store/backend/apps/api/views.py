@@ -651,6 +651,102 @@ class RawLotViewSet(BaseTenantViewSet):
     model = RawLot
     serializer_class = RawLotSerializer
 
+    def get_queryset(self):  # PENDING_MEANS_WAITING
+        qs = super().get_queryset()
+        st = self.request.query_params.get('status')
+        if st == 'PENDING':
+            qs = qs.filter(status__in=['RECEIVED', 'SORTING_IN_PROGRESS'])
+        elif st:
+            qs = qs.filter(status=st)
+        return qs
+
+    @action(detail=True, methods=['post'])
+    def sort_and_transfer(self, request, pk=None):
+        """ SORT_AND_TRANSFER: one click = sorting order + lines + costing + inventory + bands """
+        import uuid
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        from apps.sorting.models import SortingOrder, SortingOutputLine, SortingWasteLine
+        from apps.products.models import Product, Category
+        from apps.costing.services import calculate_sorting_costs
+        from apps.inventory.services import post_sorting_to_inventory
+        from apps.inventory.models import InventoryTransaction
+        lot = self.get_object(); t = lot.tenant
+        if lot.status not in ('RECEIVED', 'SORTING_IN_PROGRESS'):
+            return Response({'detail': 'البالة دي اتفرزت قبل كده أو ملغية'}, status=400)
+        li = getattr(lot, 'purchase_line_item', None)
+        kind = getattr(li, 'purchase_kind', None)
+        GMAP = {'HIGH': 'NEW_COLLECTION', 'MID': 'MIDDLE', 'LIQUIDATION': 'CLEARANCE', 'WASTE': 'WASTE'}
+        GNAME = {'NEW_COLLECTION': 'عالي', 'MIDDLE': 'وسط', 'CLEARANCE': 'تصفيات'}
+        goods, wastes = [], []
+        for n, l in enumerate(request.data.get('lines') or [], start=1):
+            g = GMAP.get(l.get('grade'))
+            if not g:
+                return Response({'detail': f'السطر {n}: الدرجة غلط'}, status=400)
+            try:
+                w = Decimal(str(l.get('weight_kg') or 0)); q = int(l.get('quantity_pieces') or 0)
+            except Exception:
+                return Response({'detail': f'السطر {n}: الوزن أو العدد مش أرقام'}, status=400)
+            if w < 0 or q < 0:
+                return Response({'detail': f'السطر {n}: مينفعش أرقام بالسالب'}, status=400)
+            if w == 0 and q == 0:
+                continue
+            if g == 'WASTE':
+                wastes.append((w, q)); continue
+            if w <= 0 or q <= 0:
+                return Response({'detail': f'السطر {n} ({GNAME[g]}): لازم وزن وعدد'}, status=400)
+            if kind == 'BALE':
+                item = (getattr(li, 'item_name', '') or '').strip(); brand = ''
+            else:
+                item = (l.get('category_name') or '').strip()
+                if not item:
+                    return Response({'detail': f'السطر {n} ({GNAME[g]}): اكتب الصنف'}, status=400)
+                b = (l.get('brand') or '').strip()
+                b = '' if b == 'بدون براند' else b
+                if kind == 'STOCK' and getattr(li, 'stock_type', '') == 'ONE_BRAND':
+                    b = li.brand or ''
+                brand = b or (getattr(li, 'brand', '') or '')
+            goods.append((g, w, q, item, brand))
+        if not goods:
+            return Response({'detail': 'لازم درجة واحدة على الأقل (عالي أو وسط أو تصفيات) بوزن وعدد'}, status=400)
+        # WEIGHT_MUST_MATCH: sorted total (goods + waste) must equal the bale weight
+        _total = sum((x[1] for x in goods), Decimal('0')) + sum((x[0] for x in wastes), Decimal('0'))
+        _lotw = Decimal(str(getattr(lot, 'original_weight_kg', 0) or 0))
+        if _lotw > 0 and abs(_total - _lotw) > Decimal('0.01'):
+            _diff = (_lotw - _total).quantize(Decimal('0.001'))
+            return Response({'detail': f'مجموع وزن الفرز {_total} كجم لازم يساوي وزن البالة {_lotw} كجم. الفرق {_diff} كجم: كمّل الفرز أو حط الفرق في الهالك'}, status=400)
+        KIND = {'BALE': 'بالة', 'STOCK': 'استوك', 'DIRECT': 'شراء مباشر'}
+        base = [KIND.get(kind, 'فرز'), getattr(li, 'segment', '') or '', getattr(li, 'season', '') or '', getattr(li, 'grade', '') or '']
+        try:
+            with dbt.atomic():
+                order = SortingOrder.objects.filter(tenant=t, raw_lot=lot).first()
+                if order and InventoryTransaction.objects.filter(source_document_type='SortingOrder', source_document_id=str(order.id)).exists():
+                    return Response({'detail': 'البالة دي اترحّلت للمخزون قبل كده'}, status=400)
+                if not order:
+                    order = SortingOrder.objects.create(tenant=t, raw_lot=lot, order_code=f"SRT-{uuid.uuid4().hex[:6].upper()}", sorting_date=timezone.now().date(), status='DRAFT', notes='فرز وترحيل')
+                SortingOutputLine.objects.filter(sorting_order=order).delete()
+                SortingWasteLine.objects.filter(sorting_order=order).delete()
+                category, _ = Category.objects.get_or_create(tenant=t, name='أصناف مفروزة عامة')
+                for g, w, q, item, brand in goods:
+                    pname = ' - '.join([x for x in base + [GNAME[g], item, brand] if x])
+                    prod = Product.objects.filter(tenant=t, category=category, name=pname).first()
+                    if not prod:
+                        nums = [int(x) for x in Product.objects.filter(tenant=t).values_list('code', flat=True) if x and str(x).isdigit()]
+                        prod = Product.objects.create(tenant=t, category=category, name=pname, code=str(max(nums + [1000]) + 1))
+                    SortingOutputLine.objects.create(tenant=t, sorting_order=order, product=prod, warehouse=lot.warehouse, grade=g, weight_kg=w, quantity_pieces=q, brand=brand[:100], item_name=item[:150])
+                for w, q in wastes:
+                    SortingWasteLine.objects.create(tenant=t, sorting_order=order, weight_kg=w, quantity_pieces=q, classification='NORMAL', reason='هالك فرز')
+                order.reconcile()
+                record = calculate_sorting_costs(order.id)
+                post_sorting_to_inventory(order.id)
+                lot.status = 'SORTED'
+                lot.save(update_fields=['status'])
+                _rebuild_store_items(t)
+        except Exception as ex:
+            msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
+            return Response({'detail': f'الترحيل ماتمش: {msg[:200]}'}, status=400)
+        return Response({'ok': True, 'order_code': order.order_code, 'waste_loss': str(getattr(record, 'waste_loss_amount', '0'))})
+
 
 
 
@@ -2829,7 +2925,7 @@ class StoreItemViewSet(viewsets.ModelViewSet):
             from apps.sorting.models import SortingOutputLine
             from apps.warehouses.models import Warehouse
             wh = Warehouse.objects.filter(tenant=tenant).first() if tenant else Warehouse.objects.first()
-            outputs = SortingOutputLine.objects.filter(tenant=tenant) if tenant else SortingOutputLine.objects.all()
+            _rebuild_store_items(tenant); outputs = []
             for out in outputs:
                 cat_str = str(out.product.name) if out.product else "صنف فرز"
                 grd_str = str(out.get_grade_display()) if hasattr(out, 'get_grade_display') else str(out.grade)
@@ -2990,7 +3086,7 @@ class StoreItemViewSet(viewsets.ModelViewSet):
             from apps.sorting.models import SortingOutputLine
             from apps.warehouses.models import Warehouse
             wh = Warehouse.objects.filter(tenant=tenant).first() if tenant else Warehouse.objects.first()
-            outputs = SortingOutputLine.objects.filter(tenant=tenant) if tenant else SortingOutputLine.objects.all()
+            _rebuild_store_items(tenant); outputs = []
             for out in outputs:
                 cat_str = str(out.product.name) if out.product else "صنف فرز"
                 grd_str = str(out.get_grade_display()) if hasattr(out, 'get_grade_display') else str(out.grade)
@@ -3148,3 +3244,48 @@ class WeightPriceViewSet(viewsets.ModelViewSet):
         )
         serializer = self.get_serializer(obj)
         return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+def _rebuild_store_items(tenant):
+    """ STORE_BANDS_V2: bands built from the REAL stock (full identity, per warehouse, real qty/weight/cost) """
+    if tenant is None:
+        return
+    from django.apps import apps as _a
+    from django.utils import timezone
+    SI = _a.get_model('inventory', 'StockItem'); ST = _a.get_model('pricing', 'StoreItem'); OL = _a.get_model('sorting', 'SortingOutputLine')
+    KIND = {'BALE': 'بالة', 'STOCK': 'استوك', 'DIRECT': 'شراء مباشر'}
+    GR = {'NEW_COLLECTION': 'عالي', 'MIDDLE': 'وسط', 'CLEARANCE': 'تصفيات'}
+    agg = {}
+    for si in SI.objects.filter(tenant=tenant).select_related('warehouse', 'source_lot__purchase_line_item', 'product'):
+        lot = si.source_lot
+        li = getattr(lot, 'purchase_line_item', None) if lot else None
+        if not li or li.purchase_kind not in KIND:
+            continue
+        ol = OL.objects.filter(sorting_order__raw_lot=lot, product=si.product, grade=si.grade).first()
+        if li.purchase_kind == 'BALE':
+            item, brand = (li.item_name or ''), ''
+        else:
+            item = (getattr(ol, 'item_name', '') or '') or (li.direct_category or '')
+            brand = (getattr(ol, 'brand', '') or '') or (li.brand or '')
+        key = (si.warehouse_id, KIND[li.purchase_kind], li.segment or '', li.season or '', li.grade or '', GR.get(si.grade, si.grade or ''), item, brand)
+        a = agg.setdefault(key, {'q': 0, 'w': Decimal('0'), 'c': Decimal('0'), 'wh': si.warehouse})
+        a['q'] += int(si.total_quantity_pieces or 0)
+        a['w'] += Decimal(str(si.total_weight_kg or 0))
+        a['c'] += Decimal(str(si.current_total_value or 0))
+    seen = set()
+    for key, a in agg.items():
+        wh_id, kind, seg, sea, pg, sg, item, brand = key
+        obj = ST.objects.filter(tenant=tenant, warehouse_id=wh_id, source_kind=kind, segment=seg, season=sea, purchase_grade=pg, sort_grade=sg, category_name=item, brand=brand).first()
+        if not obj:
+            obj = ST(tenant=tenant, warehouse_id=wh_id, source_kind=kind, segment=seg, season=sea, purchase_grade=pg, sort_grade=sg, category_name=item, brand=brand, sorted_at=timezone.now())
+        obj.branch_id = getattr(a['wh'], 'branch_id', None)
+        obj.quantity_pieces = a['q']; obj.weight_kg = a['w']; obj.total_allocated_cost = a['c']
+        obj.save()
+        seen.add(obj.pk)
+    for obj in ST.objects.filter(tenant=tenant).exclude(pk__in=seen):
+        if obj.coding_item_id:
+            if obj.quantity_pieces or obj.weight_kg:
+                obj.quantity_pieces = 0; obj.weight_kg = 0
+                obj.save(update_fields=['quantity_pieces', 'weight_kg'])
+        else:
+            obj.delete()

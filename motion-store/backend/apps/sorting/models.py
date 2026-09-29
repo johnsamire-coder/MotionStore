@@ -109,6 +109,8 @@ class SortingOrder(TenantAwareModel):
 
 
 class SortingOutputLine(TenantAwareModel):
+    brand = models.CharField(max_length=100, blank=True, default='')
+    item_name = models.CharField(max_length=150, blank=True, default='')
     sorting_order = models.ForeignKey(
         SortingOrder,
         on_delete=models.CASCADE,

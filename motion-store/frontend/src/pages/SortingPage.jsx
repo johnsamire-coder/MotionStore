@@ -28,31 +28,19 @@ export default function SortingPage() {
     }
   };
 
-  const getDisplayName = (lot) => {
-    let kind = (lot.source_kind || 'بالة').trim();
+  const getDisplayName = (lot) => { // REAL_NAME_241: only real data, no invented defaults
+    const li = lot.line_info || {};
+    let kind = String(lot.source_kind || li.kind || '').trim();
     if (kind === 'RAW_BALE' || kind === 'BALE') kind = 'بالة';
     if (kind === 'STOCK') kind = 'استوك';
-    if (kind === 'DIRECT_PURCHASE') kind = 'شراء مباشر';
-
-    const segment = (lot.segment || 'حريمي').trim();
-    const season = (lot.season || 'صيفي').trim();
-    const grade = (lot.purchase_grade || 'سوبر كريم').trim();
-    const category = (lot.category_name && lot.category_name !== 'صنف غير محدد') ? lot.category_name.trim() : 'بلوزة';
-    const brand = (lot.brand && lot.brand !== 'بدون براند') ? lot.brand.trim() : '';
-
-    if (kind.includes('استوك')) {
-      const bStr = brand ? ` - ${brand}` : ' - وان براند';
-      return `استوك - ${segment} - ${season}${bStr}`;
-    }
-    if (kind.includes('شراء مباشر')) {
-      const cStr = category ? ` - ${category}` : '';
-      const bStr = brand ? ` - ${brand}` : '';
-      return `شراء مباشر - ${segment} - ${season}${cStr}${bStr}`;
-    }
-    // بالة
-    const gStr = grade ? ` - ${grade}` : ' - سوبر كريم';
-    const cStr = category ? ` - ${category}` : ' - بلوزة';
-    return `بالة - ${segment} - ${season}${gStr}${cStr}`;
+    if (kind === 'DIRECT' || kind === 'DIRECT_PURCHASE') kind = 'شراء مباشر';
+    const clean = (v) => { const s = String(v || '').trim(); return (s && s !== 'صنف غير محدد' && s !== 'بدون براند') ? s : ''; };
+    const parts = [kind, clean(lot.segment || li.segment), clean(lot.season)];
+    if (kind === 'بالة') { parts.push(clean(lot.purchase_grade || li.grade), clean(lot.category_name || li.item_name)); }
+    else if (kind === 'استوك') { parts.push(clean(lot.brand || li.brand) || (li.stock_type === 'MIX_BRAND' ? 'ميكس' : '')); }
+    else { parts.push(clean(lot.category_name), clean(lot.brand || li.brand)); }
+    const name = parts.filter(Boolean).join(' - ');
+    return name || lot.lot_code || '';
   };
 
   const formatWeight = (val) => {
@@ -114,7 +102,7 @@ export default function SortingPage() {
 
     try {
       const allLines = [];
-      const defaultCat = selectedLot?.category_name || 'بلوزة';
+      const defaultCat = ''; // SORT_SCREEN_236
 
       Object.entries(sortingData).forEach(([grade, rows]) => {
         rows.forEach(row => {
@@ -146,7 +134,7 @@ export default function SortingPage() {
         fetchRawLots();
       }, 2000);
     } catch (err) {
-      setMsg({ type: 'error', text: '❌ حدث خطأ أثناء الترحيل. تأكد من البيانات.' });
+      setMsg({ type: 'error', text: '❌ ' + (err.response?.data?.detail || 'حدث خطأ أثناء الترحيل') });
     } finally {
       setSaving(false);
     }
@@ -165,7 +153,7 @@ export default function SortingPage() {
     return grades.map(g => (
       <div key={g.key} className={`bg-${g.color}-50 border border-${g.color}-200 p-4 rounded-xl space-y-3`}>
         <div className={`font-bold text-${g.color}-800 flex justify-between items-center`}>
-          <span>{g.label}</span>
+          <span>{g.label}{g.key !== 'WASTE' && selectedLot?.line_info?.item_name ? ' - ' + selectedLot.line_info.item_name : ''}</span>
           {(kind === 'استوك' || kind === 'شراء مباشر') && g.key !== 'WASTE' && (
             <button type="button" onClick={() => addRow(g.key)} className={`text-xs bg-${g.color}-200 text-${g.color}-900 font-extrabold px-2.5 py-1 rounded-lg hover:bg-${g.color}-300 transition-colors`}>+ إضافة صنف</button>
           )}
