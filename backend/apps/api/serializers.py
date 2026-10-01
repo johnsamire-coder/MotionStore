@@ -589,3 +589,78 @@ class PieceItemSerializer(serializers.ModelSerializer):
         if qs.exists():
             raise serializers.ValidationError(f"❌ الكود [{value}] مستخدم بالفعل في الشركة! كود البيع يجب أن يكون فريداً.")
         return value
+
+
+from apps.costing.models import CostingConfiguration, CostingMethod
+from apps.pricing.models import StoreItem, PieceItem, PriceChangeLog
+
+class CostingConfigurationSerializer(serializers.ModelSerializer):
+    method_display = serializers.CharField(source='get_method_display', read_only=True)
+
+    class Meta:
+        model = CostingConfiguration
+        fields = [
+            'id', 'name', 'method', 'method_display', 'waste_treatment',
+            'high_grade_pct', 'mid_grade_pct', 'liquidation_grade_pct', 'waste_grade_pct',
+            'normal_waste_percentage', 'is_active'
+        ]
+
+    def validate(self, data):
+        from decimal import Decimal
+        method = data.get('method', getattr(self.instance, 'method', None))
+        if method == CostingMethod.PERCENTAGE:
+            high = data.get('high_grade_pct', getattr(self.instance, 'high_grade_pct', 0)) or 0
+            mid = data.get('mid_grade_pct', getattr(self.instance, 'mid_grade_pct', 0)) or 0
+            liq = data.get('liquidation_grade_pct', getattr(self.instance, 'liquidation_grade_pct', 0)) or 0
+            waste = data.get('waste_grade_pct', getattr(self.instance, 'waste_grade_pct', 0)) or 0
+            total = Decimal(str(high)) + Decimal(str(mid)) + Decimal(str(liq)) + Decimal(str(waste))
+            if total != Decimal('100.00'):
+                raise serializers.ValidationError({'non_field_errors': [f'مجموع نسب الدرجات يجب أن يساوي 100% تماماً (المجموع الحالي: {total}%)']})
+        return data
+
+
+class StoreItemSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(read_only=True)
+    coding_code = serializers.CharField(source='coding_item.code', read_only=True, allow_null=True)
+
+    class Meta:
+        model = StoreItem
+        fields = '__all__'
+        read_only_fields = ['tenant']
+
+
+class PieceItemSerializer(serializers.ModelSerializer):
+    linked_items_count = serializers.IntegerField(source='linked_store_items.count', read_only=True)
+    total_available_pieces = serializers.SerializerMethodField()
+    total_available_weight_kg = serializers.SerializerMethodField()
+
+    source_kind = serializers.CharField(required=False, default="بالة", allow_blank=True, allow_null=True)
+    segment = serializers.CharField(required=False, default="حريمي", allow_blank=True, allow_null=True)
+    season = serializers.CharField(required=False, default="صيفي", allow_blank=True, allow_null=True)
+    purchase_grade = serializers.CharField(required=False, default="سوبر كريم", allow_blank=True, allow_null=True)
+    brand = serializers.CharField(required=False, default="بدون براند", allow_blank=True, allow_null=True)
+    price_per_piece = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0.00)
+    price_per_kg = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, default=0.00)
+
+    class Meta:
+        model = PieceItem
+        fields = '__all__'
+        read_only_fields = ['tenant']
+
+    def get_total_available_pieces(self, obj):
+        return sum((item.quantity_pieces or 0) for item in obj.linked_store_items.all())
+
+    def get_total_available_weight_kg(self, obj):
+        return float(sum((item.weight_kg or 0) for item in obj.linked_store_items.all()))
+
+    def validate_code(self, value):
+        request = self.context.get('request')
+        tenant = getattr(request.user, 'tenant', None) if request else None
+        qs = PieceItem.objects.filter(code=value)
+        if tenant:
+            qs = qs.filter(tenant=tenant)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(f"❌ الكود [{value}] مستخدم بالفعل في الشركة! كود البيع يجب أن يكون فريداً.")
+        return value
