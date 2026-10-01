@@ -1282,6 +1282,56 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
                     return Response({'ok': True, 'manager': m.username})
         return Response({'ok': False, 'detail': 'الباسورد غلط أو صاحبه مش مدير'}, status=403)
 
+    @action(detail=True, methods=['post'], url_path='delete_sale')
+    def delete_sale(self, request, pk=None):
+        """ SALE_DELETE: reverse every effect of the invoice, then delete it (manager password) """
+        from decimal import Decimal as D
+        from django.apps import apps as _a
+        from django.db import transaction as dbt
+        G = _a.get_model
+        inv = self.get_object(); t = inv.tenant
+        if not _verify_manager(t, request.data.get('manager_password')):
+            return Response({'detail': 'حذف الفاتورة محتاج باسورد المدير'}, status=403)
+        SR = G('returns', 'SalesReturn')
+        fk = [f.name for f in SR._meta.concrete_fields if getattr(f, 'related_model', None) is G('sales', 'SaleInvoice')]
+        if fk and SR.objects.filter(**{fk[0]: inv}).exists():
+            return Response({'detail': 'الفاتورة دي ليها مرتجع - مينفعش تتحذف'}, status=400)
+        SP = G('sales', 'SalePayment')
+        spfk = [f.name for f in SP._meta.concrete_fields if getattr(f, 'related_model', None) is G('sales', 'SaleInvoice')][0]
+        pays = list(SP.objects.filter(**{spfk: inv}).select_related('payment_method'))
+        if any(getattr(x.payment_method, 'method_type', '') == 'CREDIT' for x in pays):
+            return Response({'detail': 'الفاتورة دي فيها آجل - اعملها مرتجع بدل الحذف'}, status=400)
+        cash = sum((D(str(x.amount)) for x in pays if getattr(x.payment_method, 'method_type', '') == 'CASH'), D('0'))
+        num = inv.invoice_number
+        try:
+            with dbt.atomic():
+                IT = G('inventory', 'InventoryTransaction'); TT = G('treasury', 'TreasuryTransaction')
+                for x in IT.objects.filter(source_document_type='SaleInvoice', source_document_id=num).select_related('stock_item'):
+                    si = x.stock_item
+                    si.total_weight_kg = D(str(si.total_weight_kg)) - D(str(x.weight_change_kg or 0))
+                    si.total_quantity_pieces = int(si.total_quantity_pieces) - int(x.quantity_change_pieces or 0)
+                    si.current_total_value = D(str(si.current_total_value)) - D(str(x.total_cost_change or 0))
+                    if si.total_weight_kg > 0:
+                        si.avg_cost_per_kg = (si.current_total_value / si.total_weight_kg).quantize(D('0.0001'))
+                    si.save(update_fields=['total_weight_kg', 'total_quantity_pieces', 'current_total_value', 'avg_cost_per_kg'])
+                    x.delete()
+                for x in TT.objects.filter(source_document_type='SaleInvoice', source_document_id=num).select_related('treasury'):
+                    tr = x.treasury; tr.refresh_from_db()
+                    tr.current_balance = D(str(tr.current_balance)) + (-D(str(x.amount)) if x.transaction_type == 'DEPOSIT' else D(str(x.amount)))
+                    tr.save(update_fields=['current_balance']); x.delete()
+                G('accounting', 'JournalEntry').objects.filter(source_document_type='SaleInvoice', source_document_id=str(inv.id)).delete()
+                sh = inv.shift
+                if sh is not None and D(str(sh.cash_sales_total or 0)) >= cash > 0:
+                    sh.cash_sales_total = D(str(sh.cash_sales_total)) - cash; sh.save(update_fields=['cash_sales_total'])
+                inv.delete()
+                try:
+                    _rebuild_store_items(t)
+                except Exception:
+                    pass
+        except Exception as ex:
+            return Response({'detail': f'الحذف ماتمش: {str(ex)[:200]}'}, status=400)
+        return Response({'ok': True, 'deleted': num})
+
     @action(detail=True, methods=['post'], url_path='replace')
     def replace_sale(self, request, pk=None):
         """ SALE_EDIT: same invoice number/date, old effects reversed, new one saved through the normal checkout """

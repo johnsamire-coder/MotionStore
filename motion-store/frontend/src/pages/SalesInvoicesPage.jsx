@@ -102,6 +102,14 @@ export default function SalesInvoicesPage() {
     } catch (e) { alert('ماتمش التعديل: ' + (e.response?.data?.detail || e.message)); }
   };
 
+  const deleteInvoice = async (r) => {
+    if (!window.confirm('متأكد إنك عايز تحذف الفاتورة ' + r.invoice_number + '؟\nالبضاعة هترجع المحل، والفلوس هتتشال من الدرج.')) return;
+    const pw = window.prompt('اكتب باسورد المدير لحذف الفاتورة ' + r.invoice_number + ':');
+    if (!pw) return;
+    try { await axiosClient.post('/sales/' + r.id + '/delete_sale/', { manager_password: pw }); alert('تم حذف الفاتورة ' + r.invoice_number); window.location.reload(); }
+    catch (e) { alert('ماتحذفتش: ' + (e.response?.data?.detail || e.message)); }
+  };
+
   const reprint = async (r) => {
     const co = await getCompanyInfo();
     const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
@@ -216,7 +224,7 @@ export default function SalesInvoicesPage() {
                         {(r.payments_info || []).map((p, i) => <div key={i} className="flex justify-between"><span>{p.method}</span><span className="font-bold">{money(p.amount)}</span></div>)}
                         {r.coupon_code && <div>{T.coupon}: <span className="font-mono font-bold">{r.coupon_code}</span></div>}
                         {r.notes && <div className="text-slate-600">{T.notes}: {r.notes}</div>}
-                        <button type="button" onClick={() => reprint(r)} className="w-full h-9 mt-2 rounded-lg bg-slate-900 text-white font-bold flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> {T.reprint}</button><button type="button" onClick={() => editInvoice(r)} className="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">✏️ تعديل</button>
+                        <button type="button" onClick={() => reprint(r)} className="w-full h-9 mt-2 rounded-lg bg-slate-900 text-white font-bold flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> {T.reprint}</button><button type="button" onClick={() => editInvoice(r)} className="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">✏️ تعديل</button><button type="button" onClick={() => deleteInvoice(r)} className="h-8 px-3 rounded-lg border border-rose-300 bg-rose-50 text-rose-700 text-xs cursor-pointer">🗑️ حذف</button>
                       </div>
                     </div>
                   </td></tr>
