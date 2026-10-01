@@ -336,6 +336,44 @@ export default function POSPage() {
       setTimeout(() => codeRef.current && codeRef.current.focus(), 50);
     }
   };
+  const setTotalFor = (l, v) => {
+    const tot = num(v); const pr = num(l.price);
+    if (tot <= 0 || pr <= 0) return;
+    if (l.mode === 'PIECE') {
+      const q = tot / pr;
+      if (Math.abs(q - Math.round(q)) > 0.001 || Math.round(q) < 1) { showErr('المبلغ ' + money(tot) + ' مش مظبوط على سعر القطعة (' + money(pr) + ')'); return; }
+      updLine(l.key, 'qty', String(Math.round(q)));
+    } else {
+      updLine(l.key, 'kg', (tot / pr).toFixed(3));
+    }
+  };
+  const [editInv, setEditInv] = useState(null);
+  useEffect(() => {
+    if (!shift) return;
+    let ed = null; try { ed = JSON.parse(localStorage.getItem('ms_edit_invoice') || sessionStorage.getItem('ms_edit_invoice') || 'null'); } catch (x) { ed = null; }
+    if (!ed) return;
+    localStorage.removeItem('ms_edit_invoice'); sessionStorage.removeItem('ms_edit_invoice');
+    (async () => {
+      let lines = ed.lines || []; let inv = null;
+      try { const rr = await axiosClient.get('/sales/' + ed.id + '/'); inv = rr.data || null; const L = inv && (inv.lines || inv.items || inv.line_items); if (L && L.length) lines = L; } catch (x) { inv = null; }
+      const nm = (v) => parseFloat(v || 0) || 0;
+      const cartLines = (lines || []).map((l, i) => {
+        const q = parseInt(l.quantity_pieces || 0, 10) || 0; const w = nm(l.weight_kg); const up = nm(l.unit_price);
+        const byPiece = q > 0 && Math.abs(up * q - nm(l.subtotal || l.total_price)) < 0.05;
+        if (l.piece_item) return { key: `ed-${i}-${Date.now()}`, type: 'PIECE', piece_item_id: l.piece_item, code: '', name: l.display_name || l.product_name || '', offer: l.offer_label || null, mode: byPiece ? 'PIECE' : 'KG', qty: String(q || 1), kg: w ? String(w) : '', price: String(up), bundle: l.bundle_label || '' };
+        return { key: `ed-${i}-${Date.now()}`, type: 'WEIGHT', stock_item_id: l.stock_item, code: '', name: l.display_name || l.product_name || '', mode: 'KG', qty: 0, kg: String(w), price: String(up), bundle: l.bundle_label || '' };
+      });
+      const ph = ed.custPhone || (inv && inv.customer_phone) || ''; const cn = ed.custName || (inv && inv.customer_name) || '';
+      setTimeout(() => {
+        setCart(cartLines);
+        if (ph) setCustQ(ph);
+        if (cn) setCustNameIn(cn);
+        setEditInv({ id: ed.id, number: ed.number, pw: ed.pw });
+        alert('بتعدّل فاتورة ' + ed.number + ' - الأصناف: ' + cartLines.length + '\nعدّل الأصناف، وبعدين ادفع واحفظ، وهتتحفظ بنفس الرقم.' + (Number(ed.discount || 0) > 0 ? '\nملحوظة: الفاتورة القديمة كان فيها خصم ' + ed.discount + ' - اكتبه تاني لو لسه مطلوب.' : ''));
+      }, 1200);
+    })();
+  }, [shift]);
+
   const updLine = (key, field, val) => setCart((c) => c.map((l) => (l.key === key ? { ...l, [field]: val } : l)));
   const delLine = (key) => setCart((c) => c.filter((l) => l.key !== key));
   const openScale = () => { const n = bundleCount + 1; setBundleCount(n); setBundle(`${T.scale} ${n}`); };
@@ -417,7 +455,7 @@ export default function POSPage() {
     };
     if (cust) body.customer_id = cust.id; else if (phoneDigits) { body.customer_phone = phoneDigits; body.customer_name = custNameIn; }
     try {
-      const r = await axiosClient.post('/sales/checkout/', body); let rc = cust; if (!rc && phoneDigits) { try { const lr = await axiosClient.get(`/customers/lookup/?q=${phoneDigits}`); rc = lr.data; } catch (e2) { rc = null; } }
+      const r = await axiosClient.post(editInv ? '/sales/' + editInv.id + '/replace/' : '/sales/checkout/', editInv ? { ...body, manager_password: editInv.pw } : body); if (editInv) setEditInv(null); let rc = cust; if (!rc && phoneDigits) { try { const lr = await axiosClient.get(`/customers/lookup/?q=${phoneDigits}`); rc = lr.data; } catch (e2) { rc = null; } }
       const nextReceipt = { number: r.data.invoice_number, lines: cart, subtotal, offers: applied.map((x) => ({ name: x.o.name, d: x.d })), discount: num(discount), delivery: num(delivery), prev: num(prevBal), required,
         pays: payRows.filter((x) => num(x.amount) > 0).map((x) => ({ name: payMethods.find((m) => m.id === x.id)?.name || '', amount: num(x.amount) })), cashGiven: num(cashGiven), change: changeDue,
         customer: cust ? `${cust.code || ''} ${cust.name}` : '', custName: rc ? rc.name : custNameIn, custPhone: rc ? rc.phone : phoneDigits, custCode: rc ? (rc.code || '') : '', at: new Date().toLocaleString('en-GB') };
@@ -624,8 +662,8 @@ export default function POSPage() {
                   <div className="col-span-4 font-bold">{l.name}{l.offer && <span className="text-violet-700"> ({T.offerLine}: {l.offer})</span>}<div className="text-[10px] text-slate-500 font-normal">{l.mode === 'PIECE' ? T.perPiece : T.perKg}</div></div>
                   <input type="number" min="1" disabled={l.type === 'WEIGHT'} value={l.type === 'WEIGHT' ? '' : l.qty} onChange={(e) => updLine(l.key, 'qty', e.target.value)} className={input + ' col-span-2 h-8 text-xs disabled:bg-slate-50'} placeholder={T.pcs} />
                   <input type="number" min="0" step="0.001" value={l.kg || ''} onChange={(e) => updLine(l.key, 'kg', e.target.value)} className={input + ' col-span-2 h-8 text-xs'} placeholder={T.kg} />
-                  <input type="number" min="0" step="0.01" value={l.price} disabled={!approvedBy} onChange={(e) => updLine(l.key, 'price', e.target.value)} className={input + ' col-span-2 h-8 text-xs disabled:bg-slate-100 disabled:text-slate-700'} />
-                  <div className="col-span-1 font-bold text-emerald-800 text-center">{money(lineTotal(l))}</div>
+                  <input type="number" min="0" step="0.01" value={l.price} disabled={!approvedBy} onChange={(e) => updLine(l.key, 'price', e.target.value)} readOnly={!approvedPwd} title={approvedPwd ? '' : 'السعر مقفول - تعديل السعر (مدير)'} className={input + ' col-span-2 h-8 text-xs disabled:bg-slate-100 disabled:text-slate-700'} />
+                  <div className="col-span-1 font-bold text-emerald-800 text-center"><input type="number" min="0" step="0.01" key={'tot-' + l.key + '-' + lineTotal(l).toFixed(2)} defaultValue={lineTotal(l).toFixed(2)} onBlur={(e) => setTotalFor(l, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} title="اكتب الإجمالي والوزن أو العدد يتحسب لوحده" className="w-20 min-w-0 shrink h-8 px-0.5 me-2 border border-emerald-300 rounded text-center text-xs font-bold bg-emerald-50" /></div>
                   <button type="button" onClick={() => delLine(l.key)} aria-label="delete" className="col-span-1 h-8 w-8 rounded-lg border border-red-200 bg-red-50 text-red-700 flex items-center justify-center cursor-pointer"><Trash2 size={13} /></button>
                 </div>
               ))}

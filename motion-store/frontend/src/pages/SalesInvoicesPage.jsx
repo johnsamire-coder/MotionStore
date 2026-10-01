@@ -74,32 +74,14 @@ export default function SalesInvoicesPage() {
   totals: { disc: sumDisc, total: sumTotal } });
 
   const editInvoice = async (r) => {
-    const pw = window.prompt('تعديل الفاتورة ' + r.invoice_number + ': هيتعمل مرتجع كامل ليها، وبعدين تعمل الفاتورة الصح من شاشة البيع.\nاكتب باسورد المدير:');
+    const pw = window.prompt('تعديل الفاتورة ' + r.invoice_number + '\nاكتب باسورد المدير:');
     if (!pw) return;
     try {
       const v = await axiosClient.post('/sales/verify_manager/', { password: pw });
       if (v.data && (v.data.valid === false || v.data.ok === false || v.data.approved === false)) { alert('باسورد المدير غلط'); return; }
-      const lk = await axiosClient.get('/returns/invoice_lookup/?q=' + encodeURIComponent(r.invoice_number));
-      const inv = listOf(lk.data).find((x) => x.invoice_number === r.invoice_number);
-      if (!inv) { alert('مش لاقي الفاتورة'); return; }
-      let shiftRow = null;
-      try { const s1 = await axiosClient.get('/shifts/?status=OPEN' + (r.terminal ? '&terminal=' + r.terminal : '')); shiftRow = listOf(s1.data)[0] || null; } catch (x) { shiftRow = null; }
-      if (!shiftRow) { try { const s2 = await axiosClient.get('/shifts/?status=OPEN'); shiftRow = listOf(s2.data)[0] || null; } catch (x) { shiftRow = null; } }
-      if (!shiftRow) { alert('لازم تكون فيه وردية مفتوحة على الكاشير الأول'); return; }
-      const items = (inv.lines || []).map((l) => (l.piece_mode
-        ? (num(l.quantity_pieces) - num(l.returned_pieces) > 0 ? { sale_line_id: l.id, quantity_pieces: num(l.quantity_pieces) - num(l.returned_pieces) } : null)
-        : (num(l.weight_kg) - num(l.returned_weight) > 0 ? { sale_line_id: l.id, weight_kg: (num(l.weight_kg) - num(l.returned_weight)).toFixed(3) } : null))).filter(Boolean);
-      if (!items.length) { alert('الفاتورة دي اترجعت بالكامل قبل كده'); return; }
-      const pays = (r.payments_info || []).slice().sort((a, b) => num(b.amount) - num(a.amount));
-      const mp = pays[0] ? methods.find((x) => x.name === pays[0].method) : null;
-      const toCredit = !!(mp && mp.method_type === 'CREDIT');
-      const cashM = methods.find((x) => x.method_type === 'CASH');
-      const body = { invoice_id: inv.id, shift_id: shiftRow.id, items, reason: 'تعديل فاتورة ' + r.invoice_number, refund_to_credit: toCredit, refund_method_id: toCredit ? null : ((mp || cashM || {}).id || null) };
-      const rr = await axiosClient.post('/returns/', body);
-      const list = (r.lines || []).map((l) => '- ' + (l.display_name || l.product_name || '') + ' | ' + (num(l.quantity_pieces) > 0 ? l.quantity_pieces + ' قطعة ' : '') + (num(l.weight_kg) > 0 ? kgf(l.weight_kg) + ' كجم ' : '') + '| ' + money(l.unit_price)).join('\n');
-      alert('تم عمل مرتجع ' + rr.data.return_number + ' للفاتورة ' + r.invoice_number + '\nاعمل الفاتورة الصح من شاشة البيع.\n\nالأصناف القديمة:\n' + list + (r.customer_phone ? '\n\nالعميل: ' + (r.customer_name || '') + ' - ' + r.customer_phone : ''));
-      window.location.href = '/pos';
-    } catch (e) { alert('ماتمش التعديل: ' + (e.response?.data?.detail || e.message)); }
+    } catch (e) { alert('باسورد المدير غلط'); return; }
+    localStorage.setItem('ms_edit_invoice', JSON.stringify({ id: r.id, number: r.invoice_number, pw, custName: r.customer_name || '', custPhone: r.customer_phone || '', discount: r.discount_amount || 0, lines: r.lines || [] }));
+    window.location.href = '/pos';
   };
 
   const deleteInvoice = async (r) => {

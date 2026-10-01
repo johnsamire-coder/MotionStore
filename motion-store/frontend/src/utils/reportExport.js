@@ -257,7 +257,7 @@ export function saleReceiptHtml(co, d) {
   </style></head><body>
   <div class="hd">${co.logo ? `<img src="${co.logo}">` : ''}<div><div class="nm">${e(co.name)}</div>${slogan ? `<div class="sl">${e(slogan)}</div>` : ''}</div></div><hr>
   ${d.title ? `<div class="tt">${e(d.title)}</div>` : ''}
-  <div class="g"><div>الكاشير: ${e(d.cashier || '')}</div><div>فاتورة: ${d.copy ? 'C.' : ''}${e(d.number)}</div>
+  <div class="g"><div>الكاشير: ${e(d.cashier || '')}</div><div>${e(d.numberLabel || 'فاتورة')}: ${d.copy ? 'C.' : ''}${e(d.number)}</div>
   <div>العميل: ${e(d.custName || 'نقدي')}</div><div>ت: ${e(d.custPhone || '')}</div>
   <div>التاريخ: ${e(d.date || '')}</div><div><span dir="ltr">${e(d.time || '')}</span></div><div style="grid-column:1/-1">الدفع: ${e(d.pays || '')}</div></div>
   <table class="it"><tr><th>م</th><th>الصنف</th><th>كمية</th><th>سعر</th><th>إجمالي</th></tr>${items}</table>

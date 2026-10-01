@@ -16,7 +16,7 @@ const lineName = (l) => {
   return ['شراء مباشر', l.segment, l.season, l.direct_category, l.brand || (l.brands.length ? `ميكس (${l.brands.join('، ')})` : ''), l.grade].filter(Boolean).join(' - ');
 };
 
-const fromSaved = (l) => { const x = { purchase_kind: l.purchase_kind, segment: l.segment || "", season: l.season || "", grade: l.grade || "", item_name: l.item_name || "", ton_type: l.ton_type || "", ton_group: l.ton_group || "", stock_type: l.stock_type || "", brand: l.brand || "", brands: l.brands || [], direct_category: l.direct_category || "", quantity: l.quantity_pieces || 0, weight_kg: num(l.weight_kg), unit_price: num(l.unit_cost), total: num(l.total_cost), key: String(l.id || Math.random()) }; x.description = lineName(x); return x; };
+const fromSaved = (l) => { const x = { purchase_kind: l.purchase_kind, segment: l.segment || "", season: l.season || "", grade: l.grade || "", item_name: l.item_name || "", ton_type: l.ton_type || "", ton_group: l.ton_group || "", stock_type: l.stock_type || "", brand: l.brand || "", brands: l.brands || [], direct_category: l.direct_category || "", quantity: l.quantity_pieces || 0, weight_kg: num(l.weight_kg), unit_price: num(l.unit_cost), total: num(l.total_cost), key: String(l.id || Math.random()) }; if (l.purchase_kind === 'DIRECT' && num(l.total_cost) > 0 && Math.abs(num(l.quantity_pieces) * num(l.unit_cost) - num(l.total_cost)) < 0.01 && Math.abs(num(l.weight_kg) * num(l.unit_cost) - num(l.total_cost)) >= 0.01) { x.buy_by = 'PIECE'; x.total = num(l.quantity_pieces) * num(l.unit_cost); } x.description = lineName(x) + (x.buy_by === 'PIECE' ? ' (بالعدد)' : ''); return x; };
 export default function PurchaseInvoiceForm({ suppliers = [], warehouses = [], onClose, onSaved, editInvoice = null, managerPassword = "" }) {
   const { isRTL } = useLanguage();
   const [localSup, setLocalSup] = useState([]);
@@ -29,7 +29,7 @@ export default function PurchaseInvoiceForm({ suppliers = [], warehouses = [], o
   const [opts, setOpts] = useState({ ITEM: [], BRAND: [], CATEGORY: [] });
   const [adding, setAdding] = useState(null);
   const [addText, setAddText] = useState('');
-  const [f, setF] = useState({ ton_type: 'NORMAL', segment: 'حريمي', season: 'صيفي', grade: GRADES[0], item_name: '', bales: '', stock_type: 'ONE_BRAND', brand: '', brands: [], direct_category: '', dBrandMode: 'NONE', dGrade: '', weight: '', price: '' });
+  const [f, setF] = useState({ ton_type: 'NORMAL', segment: 'حريمي', season: 'صيفي', grade: GRADES[0], item_name: '', bales: '', stock_type: 'ONE_BRAND', brand: '', brands: [], direct_category: '', dBrandMode: 'NONE', dGrade: '', buyBy: 'WEIGHT', qty: '', weight: '', price: '' });
   const [tonGroup, setTonGroup] = useState(`T${Date.now()}`);
   const [lines, setLines] = useState(editInvoice ? (editInvoice.items || editInvoice.line_items || []).map(fromSaved) : []);
   const [err, setErr] = useState('');
@@ -57,7 +57,8 @@ export default function PurchaseInvoiceForm({ suppliers = [], warehouses = [], o
   const addLine = () => {
     setErr('');
     const w = num(f.weight); const p = num(f.price);
-    if (w <= 0 || p <= 0) { setErr('اكتب الوزن وسعر الكيلو (أكبر من صفر)'); return; }
+    const byPiece = kind === 'DIRECT' && f.buyBy === 'PIECE'; const qn = parseInt(f.qty || '0', 10) || 0;
+    if (byPiece ? (qn <= 0 || p <= 0) : (w <= 0 || p <= 0)) { setErr(byPiece ? 'اكتب العدد وسعر القطعة (أكبر من صفر)' : 'اكتب الوزن وسعر الكيلو (أكبر من صفر)'); return; }
     let l = { purchase_kind: kind, segment: f.segment, season: f.season, weight_kg: w, unit_price: p, brands: [], brand: '', grade: '', item_name: '', direct_category: '', stock_type: '', ton_type: '', ton_group: '', quantity: 0 };
     if (kind === 'BALE') {
       if (!f.item_name) { setErr('اختار صنف البالة'); return; }
@@ -71,8 +72,9 @@ export default function PurchaseInvoiceForm({ suppliers = [], warehouses = [], o
       if (f.dBrandMode === 'ONE' && !f.brand) { setErr('اختار البراند أو خليه "بدون براند"'); return; }
       l = { ...l, direct_category: f.direct_category, grade: f.dGrade, stock_type: f.dBrandMode === 'NONE' ? '' : (f.dBrandMode === 'ONE' ? 'ONE_BRAND' : 'MIX_BRAND'), brand: f.dBrandMode === 'ONE' ? f.brand : '', brands: f.dBrandMode === 'MIX' ? f.brands : [] };
     }
-    l.total = w * p; l.key = `${Date.now()}-${Math.random()}`; l.description = lineName(l);
-    setLines((prev) => [...prev, l]); set('weight', ''); set('price', ''); set('bales', '');
+    if (byPiece) { l.buy_by = 'PIECE'; l.quantity = qn; }
+    l.total = byPiece ? qn * p : w * p; l.key = `${Date.now()}-${Math.random()}`; l.description = lineName(l) + (byPiece ? ' (بالعدد)' : '');
+    setLines((prev) => [...prev, l]); set('weight', ''); set('price', ''); set('bales', ''); set('qty', '');
   };
   const subtotal = lines.reduce((a, l) => a + l.total, 0);
   const handleSave = async () => {
@@ -84,7 +86,7 @@ export default function PurchaseInvoiceForm({ suppliers = [], warehouses = [], o
     try {
       await axiosClient.post(editInvoice ? "/purchases/" + editInvoice.id + "/replace/" : "/purchases/", {
         supplier_id: supplierId, warehouse_id: warehouseId, freight_cost: num(freight).toFixed(2), manager_password: managerPassword || undefined,
-        items: lines.map((l) => ({ product_id: null, category_id: null, quantity: l.quantity, purchase_kind: l.purchase_kind, segment: l.segment, season: l.season, grade: l.grade || null,
+        items: lines.map((l) => ({ product_id: null, category_id: null, quantity: l.quantity, buy_by: l.buy_by || '', purchase_kind: l.purchase_kind, segment: l.segment, season: l.season, grade: l.grade || null,
           item_name: l.item_name || null, ton_type: l.ton_type || '', ton_group: l.ton_group || '', stock_type: l.stock_type || null, brand: l.brand || null, brands: l.brands, direct_category: l.direct_category || '',
           description: l.description, weight_kg: l.weight_kg.toFixed(3), unit_price: l.unit_price.toFixed(2) })),
       });
@@ -150,11 +152,13 @@ export default function PurchaseInvoiceForm({ suppliers = [], warehouses = [], o
             {f.dBrandMode === 'ONE' && <Pick type="BRAND" value={f.brand} onPick={(x) => set('brand', x)} label="البراند" />}
             {f.dBrandMode === 'MIX' && <MultiBrands />}
             <div className="space-y-1"><div className="font-bold text-slate-600">الدرجة (اختياري)</div><Chips list={['بدون درجة', ...GRADES]} value={f.dGrade || 'بدون درجة'} onPick={(x) => set('dGrade', x === 'بدون درجة' ? '' : x)} /></div>
+            <div className="space-y-1"><div className="font-bold text-slate-600">الشراء بـ</div><Chips list={['الوزن', 'العدد']} value={f.buyBy === 'PIECE' ? 'العدد' : 'الوزن'} onPick={(x) => set('buyBy', x === 'العدد' ? 'PIECE' : 'WEIGHT')} /></div>
+            {f.buyBy === 'PIECE' && <label className="font-bold text-slate-600 space-y-1 block">العدد (قطعة) *<input type="number" min="1" value={f.qty} onChange={(e) => set('qty', e.target.value)} className={input} /></label>}
           </>)}
           <div className="grid grid-cols-3 gap-3 items-end">
-            <label className="font-bold text-slate-600 space-y-1 block">الوزن (كجم) *<input type="number" min="0" step="0.001" value={f.weight} onChange={(e) => set('weight', e.target.value)} className={input} /></label>
-            <label className="font-bold text-slate-600 space-y-1 block">سعر الكيلو *<input type="number" min="0" step="0.01" value={f.price} onChange={(e) => set('price', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addLine(); }} className={input} /></label>
-            <div className="space-y-1"><div className="font-bold text-slate-600">الإجمالي: {money(num(f.weight) * num(f.price))}</div><button type="button" onClick={addLine} className="w-full h-10 rounded-lg bg-emerald-600 text-white font-bold flex items-center justify-center gap-1 cursor-pointer"><Plus size={14} /> ضيف السطر</button></div>
+            <label className="font-bold text-slate-600 space-y-1 block">{kind === 'DIRECT' && f.buyBy === 'PIECE' ? 'الوزن (اختياري)' : 'الوزن (كجم) *'}<input type="number" min="0" step="0.001" value={f.weight} onChange={(e) => set('weight', e.target.value)} className={input} /></label>
+            <label className="font-bold text-slate-600 space-y-1 block">{kind === 'DIRECT' && f.buyBy === 'PIECE' ? 'سعر القطعة *' : 'سعر الكيلو *'}<input type="number" min="0" step="0.01" value={f.price} onChange={(e) => set('price', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') addLine(); }} className={input} /></label>
+            <div className="space-y-1"><div className="font-bold text-slate-600">الإجمالي: {money(kind === 'DIRECT' && f.buyBy === 'PIECE' ? (parseInt(f.qty || '0', 10) || 0) * num(f.price) : num(f.weight) * num(f.price))}</div><button type="button" onClick={addLine} className="w-full h-10 rounded-lg bg-emerald-600 text-white font-bold flex items-center justify-center gap-1 cursor-pointer"><Plus size={14} /> ضيف السطر</button></div>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -165,7 +169,7 @@ export default function PurchaseInvoiceForm({ suppliers = [], warehouses = [], o
               {lines.map((l, i) => (
                 <tr key={l.key} className="border-b border-slate-100">
                   <td className="p-2">{i + 1}</td><td className="p-2 font-bold">{l.description}{l.ton_type === 'ASSORTED' ? <span className="text-[10px] text-violet-700"> (طن تشكيل {l.ton_group.slice(-4)})</span> : null}</td>
-                  <td className="p-2 text-center">{l.purchase_kind === 'BALE' ? l.quantity : '—'}</td><td className="p-2 text-center">{l.weight_kg}</td><td className="p-2 text-center">{money(l.unit_price)}</td><td className="p-2 text-center font-bold">{money(l.total)}</td>
+                  <td className="p-2 text-center">{l.purchase_kind === 'BALE' || l.buy_by === 'PIECE' ? l.quantity : '—'}</td><td className="p-2 text-center">{l.weight_kg}</td><td className="p-2 text-center">{money(l.unit_price)}</td><td className="p-2 text-center font-bold">{money(l.total)}</td>
                   <td className="p-2"><button type="button" onClick={() => setLines((p) => p.filter((x) => x.key !== l.key))} className="h-8 w-8 rounded-lg border border-red-200 bg-red-50 text-red-700 flex items-center justify-center cursor-pointer"><Trash2 size={13} /></button></td>
                 </tr>
               ))}

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
 import ExportButtons from '../components/ExportButtons';
-import { getCompanyInfo } from '../utils/reportExport';
+import { getCompanyInfo, saleReceiptHtml } from '../utils/reportExport';
 import { Search, Printer, RotateCcw } from 'lucide-react';
 
 const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
@@ -86,13 +86,18 @@ export default function ReturnsPage() {
     const co = await getCompanyInfo();
     const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
     const rows = (r.lines || []).map((l) => `<tr><td>${esc(l.display_name || l.product_name)}<br><small>${num(l.quantity_pieces) > 0 ? `${l.quantity_pieces} ${T.pcs} · ` : ''}${kgf(l.weight_kg)} ${T.kg}</small></td><td style="text-align:left">${money(l.refund_total_price)}</td></tr>`).join('');
-    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(r.return_number)}</title><style>@page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0;vertical-align:top} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b td{font-weight:700}</style></head><body>
-      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}
-      <div style="font-weight:700;margin-top:4px">${T.receipt}</div><div>${esc(r.return_number)}</div><div>${T.invNo}: ${esc(r.original_invoice_number)}</div><div>${dt(r.return_date_time)}</div>
-      ${r.customer_name || r.customer_phone ? `<div>${T.customer}: ${esc([r.customer_name, r.customer_code].filter(Boolean).join(' - '))}</div><div>${esc(r.customer_phone || '')}</div>` : ''}</div><hr>
-      <table>${rows}</table><hr><table class="b"><tr><td>${T.totalRefund}</td><td style="text-align:left">${money(r.total_refund_amount)} ${T.cur}</td></tr>
-      <tr><td>${T.method}</td><td style="text-align:left">${r.refund_to_credit ? T.toAccount : esc(r.refund_method_name || '')}</td></tr></table>${r.reason ? `<div>${T.reason}: ${esc(r.reason)}</div>` : ''}<hr>
-      <div class="c">${T.thanks}</div>${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
+    const html = saleReceiptHtml(co, {
+      title: 'إيصال مرتجع - فاتورة ' + (r.original_invoice_number || ''),
+      numberLabel: 'مرتجع', number: r.return_number,
+      cashier: r.cashier_full_name || r.cashier_username || r.created_by_username || (() => { try { const s = JSON.parse(localStorage.getItem('user') || 'null'); if (s) return s.full_name || s.first_name || s.username || ''; } catch (x) {} try { const tk = localStorage.getItem('access_token'); if (tk) { const pl = JSON.parse(decodeURIComponent(escape(atob(tk.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))); return pl.full_name || pl.name || pl.username || ''; } } catch (x) {} return ''; })(),
+      date: new Date(r.return_date_time || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: new Date(r.return_date_time || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      custName: r.customer_name || '', custPhone: r.customer_phone || '',
+      pays: r.refund_to_credit ? 'على حساب العميل' : ('رد ' + (r.refund_method_name || 'نقدي')),
+      items: (r.lines || []).map((l) => { const amt = num(l.refund_amount || l.total_refund || l.line_refund || l.refund || l.amount || l.total_price); const q = num(l.quantity_pieces); return { name: l.display_name || l.product_name || '', qty: q > 0 ? String(q) : `${kgf(l.weight_kg)}ك`, price: q > 0 ? amt / q : amt, total: amt }; }),
+      pcs: (r.lines || []).reduce((a, l) => a + (num(l.quantity_pieces) || 0), 0),
+      totalLabel: 'إجمالي المرتجع', total: num(r.total_refund_amount),
+    });
     const w = window.open('', '_blank', 'width=380,height=600'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 

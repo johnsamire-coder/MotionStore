@@ -493,7 +493,15 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
                 _w = Decimal(str(_it.get('weight_kg') or '0')); _p = Decimal(str(_it.get('unit_price') or '0'))
             except Exception:
                 return _bad('الوزن أو سعر الكيلو مش أرقام')
-            if _w <= 0:
+            _bp = (_k == 'DIRECT' and _it.get('buy_by') == 'PIECE')
+            if _bp:
+                try:
+                    _qn = int(_it.get('quantity') or 0)
+                except Exception:
+                    _qn = 0
+                if _qn <= 0:
+                    return _bad('اكتب العدد (أكبر من صفر)')
+            elif _w <= 0:
                 return _bad('لازم الوزن يبقى أكبر من صفر')
             if _p <= 0:
                 return _bad('لازم سعر الكيلو يبقى أكبر من صفر')
@@ -543,7 +551,7 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
             _w = Decimal(str(it.get('weight_kg', '0.000')))
             _q = Decimal(str(int(it.get('quantity', 1))))
             _u = Decimal(str(it.get('unit_price', '0.00')))
-            return (_w * _u) if _w > 0 else (_q * _u)
+            return (_q * _u) if it.get('buy_by') == 'PIECE' else ((_w * _u) if _w > 0 else (_q * _u))
         _values = [_line_value(it) for it in items_data]
         _pre_subtotal = sum(_values, Decimal('0.00'))
         _freight_shares = []
@@ -586,7 +594,7 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
             weight_kg = Decimal(str(item.get('weight_kg', '0.000')))
             unit_cost = Decimal(str(item.get('unit_price', '0.00')))
 
-            line_total = (weight_kg * unit_cost) if weight_kg > 0 else (Decimal(str(qty_pcs)) * unit_cost)
+            line_total = (Decimal(str(qty_pcs)) * unit_cost) if item.get('buy_by') == 'PIECE' else ((weight_kg * unit_cost) if weight_kg > 0 else (Decimal(str(qty_pcs)) * unit_cost))
             subtotal += line_total
 
             item_type = PurchaseItemType.FINISHED_GOODS if prod_id else PurchaseItemType.RAW_BALE
