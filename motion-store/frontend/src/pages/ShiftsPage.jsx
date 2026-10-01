@@ -81,7 +81,7 @@ export default function ShiftsPage() {
       <div class="b">${T.moves}</div><table>${(s.moves || []).map((m) => row(esc(m.label), money(m.amount))).join('')}</table><hr>
       <table class="b">${row(T.expected, money(sh.expected_cash ?? s.expected))}${sh.actual_cash != null ? row(T.actual, money(sh.actual_cash)) + row(T.diff, money(sh.difference)) : ''}${num(sh.handover_total) ? row(T.handed, money(sh.handover_total)) : ''}${s.remaining_in_drawer != null ? row(T.remain, money(s.remaining_in_drawer)) : ''}</table><hr>
       <div style="margin-top:14px">${T.cashier}: ${esc(sh.cashier_username || sh.cashier || '')} ..............</div>
-      ${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+      ${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=640'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 

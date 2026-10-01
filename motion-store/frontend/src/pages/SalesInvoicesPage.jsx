@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
 import ExportButtons from '../components/ExportButtons';
-import { getCompanyInfo } from '../utils/reportExport';
+import { getCompanyInfo, saleReceiptHtml } from '../utils/reportExport';
 import { Search, Printer } from 'lucide-react';
 
 const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
@@ -73,6 +73,35 @@ export default function SalesInvoicesPage() {
   ], rows: rows.map((r) => ({ no: r.invoice_number, date: dt(r.invoice_date_time), cashier: r.cashier_username || '', term: r.terminal_code || '', cust: custText(r), phone: r.customer_phone || '', pays: paysText(r), disc: num(r.discount_amount), total: num(r.total_amount) })),
   totals: { disc: sumDisc, total: sumTotal } });
 
+  const editInvoice = async (r) => {
+    const pw = window.prompt('تعديل الفاتورة ' + r.invoice_number + ': هيتعمل مرتجع كامل ليها، وبعدين تعمل الفاتورة الصح من شاشة البيع.\nاكتب باسورد المدير:');
+    if (!pw) return;
+    try {
+      const v = await axiosClient.post('/sales/verify_manager/', { password: pw });
+      if (v.data && (v.data.valid === false || v.data.ok === false || v.data.approved === false)) { alert('باسورد المدير غلط'); return; }
+      const lk = await axiosClient.get('/returns/invoice_lookup/?q=' + encodeURIComponent(r.invoice_number));
+      const inv = listOf(lk.data).find((x) => x.invoice_number === r.invoice_number);
+      if (!inv) { alert('مش لاقي الفاتورة'); return; }
+      let shiftRow = null;
+      try { const s1 = await axiosClient.get('/shifts/?status=OPEN' + (r.terminal ? '&terminal=' + r.terminal : '')); shiftRow = listOf(s1.data)[0] || null; } catch (x) { shiftRow = null; }
+      if (!shiftRow) { try { const s2 = await axiosClient.get('/shifts/?status=OPEN'); shiftRow = listOf(s2.data)[0] || null; } catch (x) { shiftRow = null; } }
+      if (!shiftRow) { alert('لازم تكون فيه وردية مفتوحة على الكاشير الأول'); return; }
+      const items = (inv.lines || []).map((l) => (l.piece_mode
+        ? (num(l.quantity_pieces) - num(l.returned_pieces) > 0 ? { sale_line_id: l.id, quantity_pieces: num(l.quantity_pieces) - num(l.returned_pieces) } : null)
+        : (num(l.weight_kg) - num(l.returned_weight) > 0 ? { sale_line_id: l.id, weight_kg: (num(l.weight_kg) - num(l.returned_weight)).toFixed(3) } : null))).filter(Boolean);
+      if (!items.length) { alert('الفاتورة دي اترجعت بالكامل قبل كده'); return; }
+      const pays = (r.payments_info || []).slice().sort((a, b) => num(b.amount) - num(a.amount));
+      const mp = pays[0] ? methods.find((x) => x.name === pays[0].method) : null;
+      const toCredit = !!(mp && mp.method_type === 'CREDIT');
+      const cashM = methods.find((x) => x.method_type === 'CASH');
+      const body = { invoice_id: inv.id, shift_id: shiftRow.id, items, reason: 'تعديل فاتورة ' + r.invoice_number, refund_to_credit: toCredit, refund_method_id: toCredit ? null : ((mp || cashM || {}).id || null) };
+      const rr = await axiosClient.post('/returns/', body);
+      const list = (r.lines || []).map((l) => '- ' + (l.display_name || l.product_name || '') + ' | ' + (num(l.quantity_pieces) > 0 ? l.quantity_pieces + ' قطعة ' : '') + (num(l.weight_kg) > 0 ? kgf(l.weight_kg) + ' كجم ' : '') + '| ' + money(l.unit_price)).join('\n');
+      alert('تم عمل مرتجع ' + rr.data.return_number + ' للفاتورة ' + r.invoice_number + '\nاعمل الفاتورة الصح من شاشة البيع.\n\nالأصناف القديمة:\n' + list + (r.customer_phone ? '\n\nالعميل: ' + (r.customer_name || '') + ' - ' + r.customer_phone : ''));
+      window.location.href = '/pos';
+    } catch (e) { alert('ماتمش التعديل: ' + (e.response?.data?.detail || e.message)); }
+  };
+
   const reprint = async (r) => {
     const co = await getCompanyInfo();
     const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
@@ -80,15 +109,13 @@ export default function SalesInvoicesPage() {
     const groups = []; (r.lines || []).forEach((l) => { const g = l.bundle_label || ''; let grp = groups.find((x) => x.name === g); if (!grp) { grp = { name: g, lines: [] }; groups.push(grp); } grp.lines.push(l); });
     const lineHtml = (l, padR) => `<tr><td style="${padR ? 'padding-right:8px' : ''}">${esc(l.display_name || l.product_name)}${l.offer_label ? ` <b>(${T.offer}: ${esc(l.offer_label)})</b>` : ''}<br><small>${lineQty(l)} × ${money(l.unit_price)}</small></td><td style="text-align:left">${money(l.total_price)}</td></tr>`;
     const body = groups.map((g) => (g.name ? `<tr><td colspan="2" style="font-weight:700">${esc(g.name)}</td></tr>` + g.lines.map((l) => lineHtml(l, true)).join('') : g.lines.map((l) => lineHtml(l, false)).join(''))).join('');
-    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(r.invoice_number)}</title><style>@page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0;vertical-align:top} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .t td{font-weight:700}</style></head><body>
-      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}
-      <div>${esc(r.terminal_name || '')}</div><div>${esc(r.invoice_number)} (${T.copy})</div><div>${dt(r.invoice_date_time)}</div>
-      ${r.customer_name || r.customer_phone ? `<div>${T.customer}: ${esc([r.customer_name, r.customer_code].filter(Boolean).join(' - '))}</div><div>${esc(r.customer_phone || '')}</div>` : ''}</div><hr>
-      <table>${body}</table><hr><table class="t">${row(T.subtotal, money(r.subtotal))}
-      ${(r.applied_offers || []).map((o) => row(`${T.offer}: ${esc(o.name || '')}`, '-' + money(o.discount))).join('')}
-      ${num(r.discount_amount) ? row(T.discount, '-' + money(r.discount_amount)) : ''}${num(r.delivery_fee) ? row(T.delivery, money(r.delivery_fee)) : ''}
-      ${row(T.required, money(r.total_amount) + ' ' + T.cur)}${(r.payments_info || []).map((p) => row(esc(p.method), money(p.amount))).join('')}</table><hr>
-      <div class="c">${T.thanks}</div>${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+    const html = saleReceiptHtml(co, {
+      number: r.invoice_number, copy: true, cashier: r.cashier_full_name || r.cashier_username || '', date: new Date(r.invoice_date_time).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }), time: new Date(r.invoice_date_time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      custName: r.customer_name || '', custPhone: r.customer_phone || '',
+      pays: (r.payments_info || []).map((x) => x.method).join(' + '),
+      items: (r.lines || []).map((l) => ({ name: (l.display_name || l.product_name || '') + (l.offer_label ? ` (${l.offer_label})` : ''), qty: num(l.quantity_pieces) > 0 ? String(l.quantity_pieces) : `${kgf(l.weight_kg)}ك`, price: num(l.unit_price) || (num(l.total_price) / (num(l.quantity_pieces) || num(l.weight_kg) || 1)), total: num(l.total_price) })),
+      pcs: (r.lines || []).reduce((a, l) => a + (num(l.quantity_pieces) || 0), 0), disc: num(r.discount_amount), delivery: num(r.delivery_fee), total: num(r.total_amount),
+    });
     const w = window.open('', '_blank', 'width=380,height=600'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 
@@ -189,7 +216,7 @@ export default function SalesInvoicesPage() {
                         {(r.payments_info || []).map((p, i) => <div key={i} className="flex justify-between"><span>{p.method}</span><span className="font-bold">{money(p.amount)}</span></div>)}
                         {r.coupon_code && <div>{T.coupon}: <span className="font-mono font-bold">{r.coupon_code}</span></div>}
                         {r.notes && <div className="text-slate-600">{T.notes}: {r.notes}</div>}
-                        <button type="button" onClick={() => reprint(r)} className="w-full h-9 mt-2 rounded-lg bg-slate-900 text-white font-bold flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> {T.reprint}</button>
+                        <button type="button" onClick={() => reprint(r)} className="w-full h-9 mt-2 rounded-lg bg-slate-900 text-white font-bold flex items-center justify-center gap-1 cursor-pointer"><Printer size={14} /> {T.reprint}</button><button type="button" onClick={() => editInvoice(r)} className="h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">✏️ تعديل</button>
                       </div>
                     </div>
                   </td></tr>

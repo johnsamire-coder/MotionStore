@@ -1282,6 +1282,81 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
                     return Response({'ok': True, 'manager': m.username})
         return Response({'ok': False, 'detail': 'الباسورد غلط أو صاحبه مش مدير'}, status=403)
 
+    @action(detail=True, methods=['post'], url_path='replace')
+    def replace_sale(self, request, pk=None):
+        """ SALE_EDIT: same invoice number/date, old effects reversed, new one saved through the normal checkout """
+        from decimal import Decimal as D
+        from django.apps import apps as _a
+        from django.db import transaction as dbt
+        from django.utils import timezone
+        G = _a.get_model
+        old = self.get_object(); t = old.tenant
+        if not _verify_manager(t, request.data.get('manager_password')):
+            return Response({'detail': 'تعديل الفاتورة محتاج باسورد المدير'}, status=403)
+        SR = G('returns', 'SalesReturn')
+        fk = [f.name for f in SR._meta.concrete_fields if getattr(f, 'related_model', None) is G('sales', 'SaleInvoice')]
+        if fk and SR.objects.filter(**{fk[0]: old}).exists():
+            return Response({'detail': 'الفاتورة دي ليها مرتجع - مينفعش تتعدّل'}, status=400)
+        SP = G('sales', 'SalePayment')
+        spfk = [f.name for f in SP._meta.concrete_fields if getattr(f, 'related_model', None) is G('sales', 'SaleInvoice')][0]
+        pays = list(SP.objects.filter(**{spfk: old}).select_related('payment_method'))
+        if any(getattr(x.payment_method, 'method_type', '') == 'CREDIT' for x in pays):
+            return Response({'detail': 'الفاتورة دي فيها آجل - عدّلها بمرتجع'}, status=400)
+        old_cash = sum((D(str(x.amount)) for x in pays if getattr(x.payment_method, 'method_type', '') == 'CASH'), D('0'))
+        num, when = old.invoice_number, old.invoice_date_time
+        Shift = G('shifts', 'Shift')
+        class _Stop(Exception):
+            pass
+        box = {}
+        try:
+            with dbt.atomic():
+                IT = G('inventory', 'InventoryTransaction'); TT = G('treasury', 'TreasuryTransaction')
+                for x in IT.objects.filter(source_document_type='SaleInvoice', source_document_id=num).select_related('stock_item'):
+                    si = x.stock_item
+                    si.total_weight_kg = D(str(si.total_weight_kg)) - D(str(x.weight_change_kg or 0))
+                    si.total_quantity_pieces = int(si.total_quantity_pieces) - int(x.quantity_change_pieces or 0)
+                    si.current_total_value = D(str(si.current_total_value)) - D(str(x.total_cost_change or 0))
+                    if si.total_weight_kg > 0:
+                        si.avg_cost_per_kg = (si.current_total_value / si.total_weight_kg).quantize(D('0.0001'))
+                    si.save(update_fields=['total_weight_kg', 'total_quantity_pieces', 'current_total_value', 'avg_cost_per_kg'])
+                    x.delete()
+                for x in TT.objects.filter(source_document_type='SaleInvoice', source_document_id=num).select_related('treasury'):
+                    tr = x.treasury; tr.refresh_from_db()
+                    tr.current_balance = D(str(tr.current_balance)) + (-D(str(x.amount)) if x.transaction_type == 'DEPOSIT' else D(str(x.amount)))
+                    tr.save(update_fields=['current_balance']); x.delete()
+                G('accounting', 'JournalEntry').objects.filter(source_document_type='SaleInvoice', source_document_id=str(old.id)).delete()
+                sh = Shift.objects.filter(pk=request.data.get('shift_id')).first()
+                s0 = D(str(sh.cash_sales_total or 0)) if sh else None
+                old.delete()
+                resp = self.checkout(request)
+                if resp.status_code not in (200, 201):
+                    box['r'] = resp; raise _Stop()
+                new = G('sales', 'SaleInvoice').objects.get(invoice_number=resp.data.get('invoice_number'))
+                nn = new.invoice_number
+                new.invoice_number = num; new.invoice_date_time = when
+                new.notes = ((new.notes or '') + f" | اتعدّلت بواسطة {request.user.username} في {timezone.localtime().strftime('%Y-%m-%d %H:%M')}").strip(' |')
+                new.save(update_fields=['invoice_number', 'invoice_date_time', 'notes'])
+                IT.objects.filter(source_document_type='SaleInvoice', source_document_id=nn).update(source_document_id=num)
+                TT.objects.filter(source_document_type='SaleInvoice', source_document_id=nn).update(source_document_id=num)
+                if sh is not None:
+                    sh.refresh_from_db()
+                    s1 = D(str(sh.cash_sales_total or 0))
+                    if s1 != s0:
+                        sh.cash_sales_total = s1 - old_cash; sh.save(update_fields=['cash_sales_total'])
+                NS = G('sales', 'NumberSequence'); seq = NS.objects.filter(tenant=t, key='SALE').first()
+                digits = ''.join(ch for ch in nn if ch.isdigit())
+                if seq and digits and int(digits) == seq.next_value - 1:
+                    seq.next_value -= 1; seq.save(update_fields=['next_value'])
+                try:
+                    _rebuild_store_items(t)
+                except Exception:
+                    pass
+        except _Stop:
+            return box['r']
+        except Exception as ex:
+            return Response({'detail': f'التعديل ماتمش: {str(ex)[:200]}'}, status=400)
+        return Response({'ok': True, 'invoice_number': num, 'id': str(new.id)}, status=201)
+
     @action(detail=False, methods=['post'])
     def checkout(self, request):
         # Resolve customer if sent

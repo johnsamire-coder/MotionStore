@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
-import { getCompanyInfo } from '../utils/reportExport';
+import { getCompanyInfo, saleReceiptHtml } from '../utils/reportExport';
 import { Search, Trash2, X, Scale, Printer, PauseCircle, Tag, Plus } from 'lucide-react';
 
 const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
@@ -161,7 +161,7 @@ export default function POSPage() {
       <tr><td>${isRTL ? 'الباقي عند البيع' : 'Due on sale'}</td><td style="text-align:left">${money(rest)}</td></tr>
       <tr><td>${isRTL ? 'آخر ميعاد للرجوع' : 'Return by'}</td><td style="text-align:left">${esc(ds.due_date)}</td></tr></table><hr>
       <div style="margin-top:18px">${isRTL ? 'توقيع العميل' : 'Customer signature'}: ....................</div>
-      ${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+      ${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=600'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
   const submitDef = async () => {
@@ -441,19 +441,18 @@ export default function POSPage() {
     const lineHtml = (l, pad) => `<tr><td style="${pad ? 'padding-right:8px' : ''}">${esc(l.name)}${l.offer ? ` <b>(${esc(T.offerLine)}: ${esc(l.offer)})</b>` : ''}<br><small>${l.mode === 'PIECE' ? `${esc(l.qty)} ${T.pcs}` : `${kgf(l.kg)} ${T.kg} (${esc(l.qty || 1)} ق)`} × ${money(l.price)}</small></td><td style="text-align:left">${money(lineTotal(l))}</td></tr>`;
     const body = groups.map((g) => (g.name ? `<tr><td colspan="2" style="font-weight:700;padding-top:4px">${esc(g.name)} — ${money(g.lines.reduce((a, l) => a + lineTotal(l), 0))}</td></tr>` + g.lines.map((l) => lineHtml(l, true)).join('') : g.lines.map((l) => lineHtml(l, false)).join(''))).join('');
     const row = (a, b) => `<tr><td>${a}</td><td style="text-align:left">${b}</td></tr>`;
-    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(R.number)}</title><style>
-      @page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px;color:#000}
-      table{width:100%;border-collapse:collapse} td{padding:2px 0;vertical-align:top} small{color:#333} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .t td{font-weight:700}</style></head><body>
-      <div class="c">${co.logo ? `<img src="${co.logo}" style="width:48px;height:48px;object-fit:contain">` : ''}<div style="font-weight:700;font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}
-      <div>${esc(terminal?.name || '')}</div><div>${T.invNo}: ${esc(R.number)}</div><div>${new Date().toLocaleString('en-GB')}</div>${(R.custName || R.custPhone) ? `<div>${T.customer}: ${esc([R.custName, R.custCode].filter(Boolean).join(' - '))}</div>${R.custPhone ? `<div>${esc(R.custPhone)}</div>` : ''}` : ''}</div><hr>
-      <table>${body}</table><hr><table class="t">
-      ${row(T.subtotal, money(R.subtotal))}
-      ${R.offers.map((o) => row(`${T.offerLine}: ${esc(o.name)}`, '-' + money(o.d))).join('')}
-      ${R.discount ? row(T.discount, '-' + money(R.discount)) : ''}${R.delivery ? row(T.delivery, money(R.delivery)) : ''}${R.prev ? row(T.prev, money(R.prev)) : ''}
-      ${row(T.required, money(R.required) + ' ' + T.cur)}
-      ${R.pays.map((p) => row(esc(p.name), money(p.amount))).join('')}
-      ${R.cashGiven ? row(T.cashGiven, money(R.cashGiven)) : ''}${R.change > 0 ? row(T.changeDue, money(R.change)) : ''}</table><hr>
-      <div class="c">${T.thanks}</div>${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+    const html = saleReceiptHtml(co, {
+      number: R.number,
+      cashier: (() => { try { const s = JSON.parse(localStorage.getItem('user') || 'null'); if (s && (s.full_name || s.first_name || s.username)) return s.full_name || s.first_name || s.username; } catch (x) {} try { const tk = localStorage.getItem('access_token'); if (tk) { const pl = JSON.parse(decodeURIComponent(escape(atob(tk.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))); if (pl.full_name || pl.name || pl.username) return pl.full_name || pl.name || pl.username; } } catch (x) {} return localStorage.getItem('username') || ''; })(),
+      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      custName: R.custName || '', custPhone: R.custPhone || '',
+      pays: (R.pays || []).map((x) => x.name).join(' + '),
+      items: R.lines.map((l) => ({ name: l.name + (l.offer ? ` (${l.offer})` : ''), qty: l.mode === 'PIECE' ? String(l.qty) : `${kgf(l.kg)}ك`, price: l.price, total: lineTotal(l) })),
+      pcs: R.lines.reduce((a, l) => a + (parseInt(l.qty || '1', 10) || 1), 0),
+      disc: (R.offers || []).reduce((a, o) => a + Number(o.d || 0), 0) + Number(R.discount || 0),
+      delivery: Number(R.delivery || 0), total: R.required, change: R.change,
+    });
     const w = window.open('', '_blank', 'width=380,height=600'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 

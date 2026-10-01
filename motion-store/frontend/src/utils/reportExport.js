@@ -237,3 +237,32 @@ export async function exportCouponsPDF({ offerName, summary, validTo, codes, isR
     pagebreak: { mode: ['css', 'legacy'], avoid: 'div' }
   }).from(html, 'string').save();
 }
+
+// RECEIPT_LAYOUT_V3: one layout for all sale receipts (drawing agreed with the client)
+export function saleReceiptHtml(co, d) {
+  const e = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const m = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const shw = (k) => co[k] !== false;
+  const slogan = co.header_text || co.receipt_header || '';
+  const thanks = co.footer_text || co.receipt_footer || '';
+  const cr = co.registration_number || ''; const tax = co.tax_number || '';
+  const items = (d.items || []).map((l, i) => `<tr><td>${i + 1}</td><td class="n">${e(l.name)}</td><td>${e(l.qty)}</td><td>${m(l.price)}</td><td>${m(l.total)}</td></tr>`).join('');
+  return `<html dir="rtl"><head><meta charset="utf-8"><title>${e(d.number)}</title><style>
+  @page{size:${co.paperMm || 80}mm auto;margin:2mm} body{font-family:Tahoma,Arial,sans-serif;width:${co.bodyMm || 74}mm;max-width:68mm;margin:0;padding:0 1mm;font-size:11.5px;line-height:1.6;color:#000}
+  .hd{display:flex;align-items:center;justify-content:center;gap:6px}.hd img{width:100px;height:100px;object-fit:contain}.nm{font-size:19px;text-align:center}.sl{font-size:12px;text-align:center;margin-top:2px}
+  .g{display:grid;grid-template-columns:1fr 1fr;gap:4px 6px;margin:6px 0} hr{border:0;border-top:1px dashed #000;margin:4px 0}
+  table.it{width:100%;border-collapse:collapse;font-size:11px} table.it th,table.it td{border:1px solid #000;padding:4px 2px;text-align:center} table.it td.n{text-align:right} b,strong,th{font-weight:normal}
+  .tot{display:flex;justify-content:space-between;align-items:center;margin-top:4px}.box{border:1.5px solid #000;padding:2px 8px;text-align:center}.box b{font-size:13px;display:block;font-weight:normal}
+  .ft{font-size:10.5px;text-align:center;line-height:1.5}.thanks{text-align:center;margin-top:3px}.tt{text-align:center;margin:2px 0}
+  </style></head><body>
+  <div class="hd">${co.logo ? `<img src="${co.logo}">` : ''}<div><div class="nm">${e(co.name)}</div>${slogan ? `<div class="sl">${e(slogan)}</div>` : ''}</div></div><hr>
+  ${d.title ? `<div class="tt">${e(d.title)}</div>` : ''}
+  <div class="g"><div>الكاشير: ${e(d.cashier || '')}</div><div>فاتورة: ${d.copy ? 'C.' : ''}${e(d.number)}</div>
+  <div>العميل: ${e(d.custName || 'نقدي')}</div><div>ت: ${e(d.custPhone || '')}</div>
+  <div>التاريخ: ${e(d.date || '')}</div><div><span dir="ltr">${e(d.time || '')}</span></div><div style="grid-column:1/-1">الدفع: ${e(d.pays || '')}</div></div>
+  <table class="it"><tr><th>م</th><th>الصنف</th><th>كمية</th><th>سعر</th><th>إجمالي</th></tr>${items}</table>
+  <div class="tot"><div>عدد القطع: ${d.pcs || 0}${d.disc ? `<br>الخصم: ${m(d.disc)}` : ''}${d.delivery ? `<br>توصيل: ${m(d.delivery)}` : ''}${d.change > 0 ? `<br>الباقي: ${m(d.change)}` : ''}</div><div class="box">${e(d.totalLabel || 'الإجمالي')}<b>${m(d.total)}</b></div></div><hr>
+  <div class="ft">${shw('show_tax') && (cr || tax) ? `${cr ? 'س.ت: ' + e(cr) : ''}${cr && tax ? ' &nbsp;&nbsp; ' : ''}${tax ? 'ب.ض: ' + e(tax) : ''}<br>` : ''}${shw('show_address') && co.address ? 'العنوان: ' + e(co.address) + '<br>' : ''}${shw('show_phone') && co.phone ? 'للتواصل: ' + e(co.phone) : ''}</div>
+  ${thanks ? `<div class="thanks">${e(thanks)}</div>` : ''}
+  <script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
+}

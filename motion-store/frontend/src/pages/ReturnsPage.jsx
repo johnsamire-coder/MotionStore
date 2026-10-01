@@ -92,7 +92,7 @@ export default function ReturnsPage() {
       ${r.customer_name || r.customer_phone ? `<div>${T.customer}: ${esc([r.customer_name, r.customer_code].filter(Boolean).join(' - '))}</div><div>${esc(r.customer_phone || '')}</div>` : ''}</div><hr>
       <table>${rows}</table><hr><table class="b"><tr><td>${T.totalRefund}</td><td style="text-align:left">${money(r.total_refund_amount)} ${T.cur}</td></tr>
       <tr><td>${T.method}</td><td style="text-align:left">${r.refund_to_credit ? T.toAccount : esc(r.refund_method_name || '')}</td></tr></table>${r.reason ? `<div>${T.reason}: ${esc(r.reason)}</div>` : ''}<hr>
-      <div class="c">${T.thanks}</div>${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onload=function(){window.print();setTimeout(function(){window.close()},300)}<\/script></body></html>`;
+      <div class="c">${T.thanks}</div>${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=600'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 
