@@ -1,3 +1,4 @@
+import PromoPricesSettings from './PromoPricesSettings';
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import { useLanguage } from '../context/LanguageContext';
@@ -137,7 +138,7 @@ export default function OffersV2() {
   ], rows: offers.map((o) => ({ name: o.name, sum: sumOf(o), target: targetText(o) || T.all, mode: T.modes[o.apply_mode] || o.apply_mode, status: o.is_active ? T.active : T.stopped, used: Number(o.usage_count || 0), sales: Number(o.total_sales || 0), disc: Number(o.total_discount || 0) })) });
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4" dir={isRTL ? 'rtl' : 'ltr'}>
+    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4" dir={isRTL ? 'rtl' : 'ltr'}><PromoPricesSettings />
       <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 xl:col-span-1">
         <div className="flex items-center justify-between"><div className="text-sm font-bold">{T.list}</div><ExportButtons getReport={report} /></div>
         {offers.length === 0 && <div className="text-xs text-slate-500">{T.none}</div>}

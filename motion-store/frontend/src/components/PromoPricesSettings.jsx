@@ -11,7 +11,7 @@ export default function PromoPricesSettings() {
     catch (e) { setMsg('❌ ' + (e.response?.data?.detail || e.message)); }
   };
   return (
-    <div className="mt-6 bg-white rounded-2xl border border-slate-200 p-5 space-y-3" dir="rtl">
+    <div className="xl:col-span-3 bg-white rounded-2xl border border-slate-200 p-5 space-y-3" dir="rtl">
       <div className="text-base font-black">🏷️ أسعار العروض الجاهزة</div>
       <div className="text-xs text-slate-500">الكاشير يقدر يختار السعر ده للقطعة من غير باسورد (وأي سعر تاني محتاج المدير). اكتب الأسعار وبينهم فاصلة، مثلاً: 100, 50</div>
       <div className="flex gap-2">
