@@ -1115,6 +1115,50 @@ class ShiftViewSet(BaseTenantViewSet):
         return Response(self._summary(self.get_object()))
 
     @action(detail=True, methods=['post'])
+    def handover_now(self, request, pk=None):
+        """ MID_SHIFT_HANDOVER: take cash out of the drawer to the owner or a treasury without closing the shift """
+        from django.db import transaction as dbt
+        from apps.treasury.models import Treasury, TreasuryTransactionType
+        from apps.treasury.services import record_treasury_transaction, transfer_between_treasuries
+        from apps.shifts.models import ShiftHandover
+        sh = self.get_object()
+        if sh.status != 'OPEN':
+            return Response({'detail': 'الوردية دي مقفولة'}, status=400)
+        t = sh.tenant; d = request.data
+        if not _verify_manager(t, d.get('manager_password')):
+            return Response({'detail': 'الترحيل محتاج باسورد المدير'}, status=403)
+        try:
+            amt = Decimal(str(d.get('amount') or '0'))
+        except Exception:
+            amt = Decimal('0')
+        if amt <= 0:
+            return Response({'detail': 'اكتب المبلغ'}, status=400)
+        drawer = sh.terminal.cash_drawer
+        drawer.refresh_from_db()
+        if amt > drawer.current_balance:
+            return Response({'detail': f'المبلغ أكبر من اللي في الدرج ({drawer.current_balance})'}, status=400)
+        notes = (d.get('notes') or '').strip()
+        try:
+            with dbt.atomic():
+                if d.get('destination') == 'OWNER':
+                    record_treasury_transaction(treasury_id=drawer.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, source_document_type='OwnerDrawing',
+                                                source_document_id=sh.shift_code, description=f"ترحيل لصاحب المحل - {notes}".strip(' -'))
+                    ShiftHandover.objects.create(tenant=t, shift=sh, destination='OWNER', amount=amt, notes=notes or None)
+                else:
+                    to = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first()
+                    if not to or to.pk == drawer.pk:
+                        raise ValueError('اختار الخزنة اللي هيترحّل ليها')
+                    transfer_between_treasuries(drawer.id, to.id, amt, f"ترحيل وردية {sh.shift_code}")
+                    ShiftHandover.objects.create(tenant=t, shift=sh, destination='TREASURY', to_treasury=to, amount=amt, notes=notes or None)
+                sh.handover_total = (sh.handover_total or Decimal('0')) + amt
+                sh.save(update_fields=['handover_total'])
+        except Exception as ex:
+            msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
+            return Response({'detail': 'الخزنة مفيهاش فلوس كفاية' if 'Insufficient' in msg else msg}, status=400)
+        drawer.refresh_from_db()
+        return Response({'ok': True, 'drawer': str(drawer.current_balance), 'handover_total': str(sh.handover_total)})
+
+    @action(detail=True, methods=['post'])
     def close_v2(self, request, pk=None):
         from django.db import transaction as dbt
         from django.utils import timezone
@@ -1182,7 +1226,7 @@ class ShiftViewSet(BaseTenantViewSet):
                 sh.actual_cash = actual
                 sh.difference = diff
                 sh.shortage_mode = mode if diff < 0 else ''
-                sh.handover_total = htotal
+                sh.handover_total = (sh.handover_total or Decimal('0')) + htotal
                 sh.status = 'CLOSED'
                 sh.closed_at = timezone.now()
                 sh.closed_by = request.user

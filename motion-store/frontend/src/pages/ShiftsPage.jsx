@@ -1,3 +1,4 @@
+import MidShiftHandover from '../components/MidShiftHandover';
 // RECEIPT_PATCHED
 // SHIFTS_V2
 import React, { useState, useEffect } from 'react';
@@ -150,7 +151,7 @@ export default function ShiftsPage() {
               </div>
             )}
             <div className="flex items-center justify-between"><div className="font-bold">{T.handovers}</div><button type="button" onClick={() => setHand([...hand, { key: Date.now(), dest: 'TREASURY', tid: others[0] ? others[0].id : '', amount: '', notes: '' }])} className="h-8 px-2 rounded-lg border border-dashed border-emerald-600 bg-emerald-50 text-emerald-800 font-bold flex items-center gap-1 cursor-pointer"><Plus size={12} /> {T.addH}</button></div>
-            {hand.map((h) => (
+            <MidShiftHandover shift={shift} trs={trs} />{hand.map((h) => (
               <div key={h.key} className="grid grid-cols-12 gap-1 items-center">
                 <select value={h.dest} onChange={(e) => setHand(hand.map((x) => (x.key === h.key ? { ...x, dest: e.target.value } : x)))} className={input + ' col-span-3 h-9 text-xs'}><option value="TREASURY">{T.toTreasury}</option><option value="OWNER">{T.toOwner}</option></select>
                 {h.dest === 'TREASURY' ? <select value={h.tid} onChange={(e) => setHand(hand.map((x) => (x.key === h.key ? { ...x, tid: e.target.value } : x)))} className={input + ' col-span-4 h-9 text-xs'}>{others.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
