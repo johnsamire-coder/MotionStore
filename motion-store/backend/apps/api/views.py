@@ -1396,6 +1396,7 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
                 new.save(update_fields=['invoice_number', 'invoice_date_time', 'notes'])
                 IT.objects.filter(source_document_type='SaleInvoice', source_document_id=nn).update(source_document_id=num)
                 TT.objects.filter(source_document_type='SaleInvoice', source_document_id=nn).update(source_document_id=num)
+                G('accounting', 'JournalEntry').objects.filter(source_document_type='SaleInvoice', source_document_id=str(new.id)).update(entry_number='JV-SALE-' + num)  # JV_RENAME_ON_EDIT
                 if sh is not None:
                     sh.refresh_from_db()
                     s1 = D(str(sh.cash_sales_total or 0))
