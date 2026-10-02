@@ -136,7 +136,7 @@ export default function POSPage() {
   const [defErr, setDefErr] = useState('');
   const [defBusy, setDefBusy] = useState(false);
   const defItems = () => cart.map((l) => (l.type === 'PIECE'
-    ? { piece_item_id: l.piece_item_id, quantity_pieces: parseInt(l.qty || '1', 10) || 1, weight_kg: l.mode === 'KG' ? num(l.kg).toFixed(6) : '0', unit_price: num(l.price).toFixed(2), price_mode: l.mode, display_name: l.name, bundle_label: l.bundle || null, offer_label: l.offer || null }
+    ? { piece_item_id: l.piece_item_id, promo_price: !!l.promo, quantity_pieces: parseInt(l.qty || '1', 10) || 1, weight_kg: (l.mode === 'KG' || l.promo) ? num(l.kg).toFixed(6) : '0', unit_price: num(l.price).toFixed(2), price_mode: l.mode, display_name: l.name, bundle_label: l.bundle || null, offer_label: l.offer || null }
     : { stock_item_id: l.stock_item_id, weight_kg: num(l.kg).toFixed(6), quantity_pieces: 0, unit_price: num(l.price).toFixed(2), price_mode: 'KG', display_name: l.name, bundle_label: l.bundle || null }));
   const openDefNew = () => {
     if (!shift) { setShowOpenShift(true); showErr(T.needShift); return; }
@@ -336,6 +336,12 @@ export default function POSPage() {
       setTimeout(() => codeRef.current && codeRef.current.focus(), 50);
     }
   };
+  const [promoList, setPromoList] = useState([]);
+  useEffect(() => { axiosClient.get('/promo-prices/').then((r) => setPromoList(r.data.prices || [])).catch(() => {}); }, []);
+  const applyPromo = (l, v) => {
+    const pv = parseFloat(v || 0); if (!pv) return;
+    setCart((c) => c.map((x) => (x.key === l.key ? { ...x, mode: 'PIECE', price: String(pv), promo: true, offer: 'سعر عرض ' + pv, qty: x.qty && parseInt(x.qty, 10) > 0 ? x.qty : '1' } : x)));
+  };
   const setTotalFor = (l, v) => {
     const tot = num(String(v || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, (d) => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/٫/g, '.').replace(/[,٬]/g, '')); const pr = num(l.price);
     if (tot <= 0 || pr <= 0) return;
@@ -446,7 +452,7 @@ export default function POSPage() {
     }
     setBusy(true);
     const items = cart.map((l) => (l.type === 'PIECE'
-      ? { piece_item_id: l.piece_item_id, quantity_pieces: parseInt(l.qty || '1', 10) || 1, weight_kg: l.mode === 'KG' ? num(l.kg).toFixed(6) : '0', unit_price: num(l.price).toFixed(2), price_mode: l.mode, display_name: l.name, bundle_label: l.bundle || null, offer_label: l.offer || null }
+      ? { piece_item_id: l.piece_item_id, promo_price: !!l.promo, quantity_pieces: parseInt(l.qty || '1', 10) || 1, weight_kg: (l.mode === 'KG' || l.promo) ? num(l.kg).toFixed(6) : '0', unit_price: num(l.price).toFixed(2), price_mode: l.mode, display_name: l.name, bundle_label: l.bundle || null, offer_label: l.offer || null }
       : { stock_item_id: l.stock_item_id, weight_kg: num(l.kg).toFixed(6), quantity_pieces: 0, unit_price: num(l.price).toFixed(2), price_mode: 'KG', display_name: l.name, bundle_label: l.bundle || null }));
     const body = {
       shift_id: shift.id, items, payments: payRows.filter((r) => num(r.amount) > 0).map((r) => ({ payment_method_id: r.id, amount: num(r.amount).toFixed(2) })),
@@ -663,7 +669,7 @@ export default function POSPage() {
                   <input type="number" min="1" disabled={l.type === 'WEIGHT'} value={l.type === 'WEIGHT' ? '' : l.qty} onChange={(e) => updLine(l.key, 'qty', e.target.value)} className={input + ' col-span-2 h-8 text-xs disabled:bg-slate-50'} placeholder={T.pcs} />
                   <input type="number" min="0" step="0.001" value={l.kg || ''} onChange={(e) => updLine(l.key, 'kg', e.target.value)} className={input + ' col-span-2 h-8 text-xs'} placeholder={T.kg} />
                   <input type="number" min="0" step="0.01" value={l.price} disabled={!approvedBy} onChange={(e) => updLine(l.key, 'price', e.target.value)} readOnly={!approvedPwd} title={approvedPwd ? '' : 'السعر مقفول - تعديل السعر (مدير)'} className={input + ' col-span-2 h-8 text-xs disabled:bg-slate-100 disabled:text-slate-700'} />
-                  <div className="col-span-1 font-bold text-emerald-800 text-center"><input type="text" inputMode="decimal" key={'tot-' + l.key + '-' + lineTotal(l).toFixed(2)} defaultValue={lineTotal(l).toFixed(2)} onBlur={(e) => setTotalFor(l, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} title="اكتب الإجمالي والوزن أو العدد يتحسب لوحده" className="w-20 min-w-0 shrink h-8 px-0.5 me-2 border border-emerald-300 rounded text-center text-xs font-bold bg-emerald-50" /></div>
+                  <div className="col-span-1 font-bold text-emerald-800 text-center">{promoList.length > 0 && l.type === 'PIECE' && <select value="" onChange={(e) => applyPromo(l, e.target.value)} title="سعر عرض" className="h-8 w-20 me-1 border border-violet-300 rounded text-xs bg-violet-50 text-violet-800"><option value="">{l.promo ? '🏷️ ' + l.price : 'سعر عرض'}</option>{promoList.map((pv) => <option key={pv} value={pv}>{pv}</option>)}</select>}<input type="text" inputMode="decimal" key={'tot-' + l.key + '-' + lineTotal(l).toFixed(2)} defaultValue={lineTotal(l).toFixed(2)} onBlur={(e) => setTotalFor(l, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} title="اكتب الإجمالي والوزن أو العدد يتحسب لوحده" className="w-20 min-w-0 shrink h-8 px-0.5 me-2 border border-emerald-300 rounded text-center text-xs font-bold bg-emerald-50" /></div>
                   <button type="button" onClick={() => delLine(l.key)} aria-label="delete" className="col-span-1 h-8 w-8 rounded-lg border border-red-200 bg-red-50 text-red-700 flex items-center justify-center cursor-pointer"><Trash2 size={13} /></button>
                 </div>
               ))}

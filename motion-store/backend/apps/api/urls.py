@@ -52,3 +52,7 @@ router.register(r"returns", SalesReturnViewSet, basename="returns")
 urlpatterns = [
     path("", include(router.urls)),
 ]
+
+from django.urls import path as _promo_path
+from apps.api.views import promo_prices_view as _promo_view
+urlpatterns += [_promo_path('promo-prices/', _promo_view)]

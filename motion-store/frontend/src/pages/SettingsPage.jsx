@@ -1,3 +1,4 @@
+import PromoPricesSettings from '../components/PromoPricesSettings';
 import CostingSettings from '../components/CostingSettings';
 import ReceiptSettings from '../components/ReceiptSettings';
 import OperationsSettings from '../components/OperationsSettings';
@@ -783,7 +784,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-    <div className="mt-6"><CostingSettings /></div>
+    <PromoPricesSettings /><div className="mt-6"><CostingSettings /></div>
       </div>
   );
 }

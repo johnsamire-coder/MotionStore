@@ -2860,7 +2860,7 @@ def _verify_checkout(tenant, data, terminal):
             li = gv_li = getattr(si.source_lot, 'purchase_line_item', None) if si.source_lot_id else None
             lines.append({'mode': 'KG', 'qty': qty, 'kg': kg, 'price': price, 'code': si.product.code or '', 'bundle': it.get('bundle_label'), 'kind': getattr(li, 'purchase_kind', None) or 'BALE',
                           'segment': getattr(li, 'segment', None), 'brand': getattr(li, 'brand', None), 'grade': si.grade, 'season': None})
-        if abs(price - official) > 0.005:
+        if abs(price - official) > 0.005 and not (it.get('promo_price') and mode == 'PIECE' and _promo_ok(tenant, price)):
             price_changed = True
     if price_changed and not mgr:
         return 'فيه سعر اتغيّر عن التسعير الرسمي: محتاج باسورد مدير صح'
@@ -3569,3 +3569,43 @@ class PurchaseOptionViewSet(BaseTenantViewSet):
         if ot:
             qs = qs.filter(option_type=ot)
         return qs
+
+
+def _promo_list(tenant):
+    """ PROMO_PRICES: manager-defined fixed promo prices (no password needed at the cashier) """
+    from apps.companies.models import Company
+    co = Company.objects.filter(tenant=tenant).first()
+    raw = str(getattr(co, 'promo_prices', '') or '')
+    raw = ''.join('0123456789'['٠١٢٣٤٥٦٧٨٩'.index(ch)] if ch in '٠١٢٣٤٥٦٧٨٩' else ch for ch in raw).replace('،', ',')
+    out = []
+    for x in raw.split(','):
+        try:
+            v = round(float(x.strip()), 2)
+            if v > 0 and v not in out:
+                out.append(v)
+        except Exception:
+            pass
+    return out
+
+
+def _promo_ok(tenant, price):
+    return any(abs(float(price) - p) < 0.005 for p in _promo_list(tenant))
+
+
+from rest_framework.decorators import api_view as _promo_api, permission_classes as _promo_pc
+from rest_framework.permissions import IsAuthenticated as _PromoAuth
+
+
+@_promo_api(['GET', 'POST'])
+@_promo_pc([_PromoAuth])
+def promo_prices_view(request):
+    t = getattr(request.user, 'tenant', None)
+    if request.method == 'POST':
+        if not (request.user.is_superuser or getattr(request.user, 'role', '') in ('ADMIN', 'MANAGER')):
+            return Response({'detail': 'المدير بس اللي يحدد أسعار العروض'}, status=403)
+        from apps.companies.models import Company
+        co = Company.objects.filter(tenant=t).first()
+        co.promo_prices = str(request.data.get('prices') or '')[:200]
+        co.save(update_fields=['promo_prices'])
+    return Response({'prices': _promo_list(t)})
+
