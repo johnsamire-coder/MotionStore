@@ -79,6 +79,18 @@ export default function ReturnsPage() {
     const frac = l.piece_mode ? v / num(l.quantity_pieces) : v / (num(l.weight_kg) || 1);
     return Math.round(num(l.total_price) * frac * ratio * 100) / 100;
   };
+  const setAmountFor = (l, v) => {
+    const a = num(String(v || '').replace(/[٠-٩]/g, (d) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/٫/g, '.').replace(/[,٬]/g, ''));
+    if (a <= 0) { setQty((s) => ({ ...s, [l.id]: '' })); return; }
+    const base = num(l.total_price) * ratio; if (base <= 0) return;
+    if (l.piece_mode) {
+      const q = (a / base) * num(l.quantity_pieces);
+      if (Math.abs(q - Math.round(q)) > 0.01 || Math.round(q) < 1) { setErr('المبلغ ' + money(a) + ' مش مظبوط على سعر القطعة'); return; }
+      setQty((s) => ({ ...s, [l.id]: String(Math.round(q)) }));
+    } else {
+      setQty((s) => ({ ...s, [l.id]: ((a / base) * (num(l.weight_kg) || 1)).toFixed(6) }));
+    }
+  };
   const totalRefund = inv ? (inv.lines || []).reduce((a, l) => a + lineRefund(l), 0) : 0;
   const overLimit = inv ? (inv.lines || []).some((l) => num(qty[l.id]) > lineLeft(l) + 0.0005) : false;
 
@@ -103,7 +115,7 @@ export default function ReturnsPage() {
 
   const submit = async () => {
     setBusy(true); setErr('');
-    const items = (inv.lines || []).filter((l) => num(qty[l.id]) > 0).map((l) => (l.piece_mode ? { sale_line_id: l.id, quantity_pieces: parseInt(qty[l.id], 10) } : { sale_line_id: l.id, weight_kg: num(qty[l.id]).toFixed(3) }));
+    const items = (inv.lines || []).filter((l) => num(qty[l.id]) > 0).map((l) => (l.piece_mode ? { sale_line_id: l.id, quantity_pieces: parseInt(qty[l.id], 10) } : { sale_line_id: l.id, weight_kg: num(qty[l.id]).toFixed(6) }));
     const body = { invoice_id: inv.id, shift_id: shift.id, items, reason, refund_to_credit: refundBy === 'ACCOUNT', refund_method_id: refundBy === 'ACCOUNT' ? null : refundBy };
     try {
       const r = await axiosClient.post('/returns/', body);
@@ -180,7 +192,7 @@ export default function ReturnsPage() {
                         <td className="p-2 text-center text-slate-500">{l.piece_mode ? `${l.returned_pieces} ${T.pcs}` : `${kgf(l.returned_weight)} ${T.kg}`}</td>
                         <td className="p-2 text-center font-bold">{l.piece_mode ? left : kgf(left)} {unit}</td>
                         <td className="p-2 text-center"><input type="number" min="0" step={l.piece_mode ? '1' : '0.001'} max={left} disabled={left <= 0} value={qty[l.id] || ''} onChange={(e) => setQty({ ...qty, [l.id]: e.target.value })} className={input + ` w-24 h-8 text-center ${over ? 'border-rose-500 bg-rose-50' : ''}`} /></td>
-                        <td className="p-2 text-center font-bold text-rose-700">{money(lineRefund(l))}</td>
+                        <td className="p-2 text-center font-bold text-rose-700"><input type="text" inputMode="decimal" key={'amt-' + l.id + '-' + lineRefund(l).toFixed(2)} defaultValue={lineRefund(l) > 0 ? lineRefund(l).toFixed(2) : ''} placeholder="المبلغ" onBlur={(e) => setAmountFor(l, e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }} title="اكتب المبلغ والوزن أو العدد يتحسب لوحده" className="w-24 h-8 px-1 border border-rose-300 rounded text-center font-bold bg-rose-50" /></td>
                       </tr>
                     );
                   })}</tbody>
