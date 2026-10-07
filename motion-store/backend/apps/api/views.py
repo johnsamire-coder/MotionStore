@@ -1105,7 +1105,17 @@ class ShiftViewSet(BaseTenantViewSet):
         invs = SaleInvoice.objects.filter(shift=sh)
         for p in SalePayment.objects.filter(sale_invoice__in=invs).select_related('payment_method'):
             by_method[p.payment_method.name] = by_method.get(p.payment_method.name, Decimal('0')) + p.amount
-        return {'shift': ShiftSerializer(sh).data, 'drawer': drawer.name, 'opening': str(sh.opening_cash), 'expected': str(drawer.current_balance),
+        from django.apps import apps as _ap
+        rets = {}
+        for _r in _ap.get_model('returns', 'SalesReturn').objects.filter(shift=sh).select_related('refund_method'):
+            _k = 'على حساب العميل' if _r.refund_to_credit else (_r.refund_method.name if _r.refund_method_id else 'نقدي')
+            rets[_k] = rets.get(_k, Decimal('0')) + (_r.total_refund_amount or Decimal('0'))
+        _net = dict(by_method)
+        for _k, _v in rets.items():
+            if _k != 'على حساب العميل':
+                _net[_k] = _net.get(_k, Decimal('0')) - _v
+        _extra = {'returns_by_method': [{'method': k, 'amount': str(v)} for k, v in rets.items()], 'net_by_method': [{'method': k, 'amount': str(v)} for k, v in _net.items()]}
+        return {**_extra, 'shift': ShiftSerializer(sh).data, 'drawer': drawer.name, 'opening': str(sh.opening_cash), 'expected': str(drawer.current_balance),
                 'invoices': invs.count(), 'sales_total': str(invs.aggregate(s=Sum('total_amount'))['s'] or 0),
                 'by_method': [{'method': k, 'amount': str(v)} for k, v in by_method.items()],
                 'moves': [{'key': k, 'label': LABELS.get(k, k), 'amount': str(v)} for k, v in moves.items()]}

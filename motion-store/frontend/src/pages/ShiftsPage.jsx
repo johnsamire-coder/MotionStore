@@ -1,3 +1,4 @@
+import ShiftReturnsBox from '../components/ShiftReturnsBox';
 import MidShiftHandover from '../components/MidShiftHandover';
 // RECEIPT_PATCHED
 // SHIFTS_V2
@@ -78,7 +79,7 @@ export default function ShiftsPage() {
     const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(sh.shift_code)}</title><style>body{max-width:64mm !important;padding:0 1mm !important;font-size:10.5px !important;box-sizing:border-box} table{width:100% !important;table-layout:fixed} td{overflow-wrap:anywhere} td:last-child{text-align:left;white-space:nowrap} @page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b{font-weight:700}</style></head><body>
       <div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}<div class="b">${T.report}</div><div>${esc(sh.shift_code)}</div><div>${esc(s.drawer)}</div></div><hr>
       <table>${row(T.openedAt, dt(sh.opened_at))}${row(T.closedAt, dt(sh.closed_at))}${row(T.opening, money(s.opening))}${row(T.sales, `${money(s.sales_total)} (${s.invoices})`)}</table><hr>
-      <div class="b">${T.byMethod}</div><table>${(s.by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table><hr>
+      <div class="b">${T.byMethod}</div><table>${(s.by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>${(s.returns_by_method || []).length ? `<hr><div style="font-weight:700">مرتجعات حسب طريقة الرد</div><table>${s.returns_by_method.map((m) => row(m.method, money(m.amount))).join('')}</table><hr><div style="font-weight:700">الصافي حسب طريقة الدفع</div><table>${(s.net_by_method || []).map((m) => row(m.method, money(m.amount))).join('')}</table>` : ''}<hr>
       <div class="b">${T.moves}</div><table>${(s.moves || []).map((m) => row(esc(m.label), money(m.amount))).join('')}</table><hr>
       <table class="b">${row(T.expected, money(sh.expected_cash ?? s.expected))}${sh.actual_cash != null ? row(T.actual, money(sh.actual_cash)) + row(T.diff, money(sh.difference)) : ''}${num(sh.handover_total) ? row(T.handed, money(sh.handover_total)) : ''}${s.remaining_in_drawer != null ? row(T.remain, money(s.remaining_in_drawer)) : ''}</table><hr>
       <div style="margin-top:14px">${T.cashier}: ${esc(sh.cashier_username || sh.cashier || '')} ..............</div>
@@ -151,7 +152,7 @@ export default function ShiftsPage() {
               </div>
             )}
             <div className="flex items-center justify-between"><div className="font-bold">{T.handovers}</div><button type="button" onClick={() => setHand([...hand, { key: Date.now(), dest: 'TREASURY', tid: others[0] ? others[0].id : '', amount: '', notes: '' }])} className="h-8 px-2 rounded-lg border border-dashed border-emerald-600 bg-emerald-50 text-emerald-800 font-bold flex items-center gap-1 cursor-pointer"><Plus size={12} /> {T.addH}</button></div>
-            <MidShiftHandover shift={shift} trs={trs} />{hand.map((h) => (
+            <ShiftReturnsBox sum={sum} /><MidShiftHandover shift={shift} trs={trs} />{hand.map((h) => (
               <div key={h.key} className="grid grid-cols-12 gap-1 items-center">
                 <select value={h.dest} onChange={(e) => setHand(hand.map((x) => (x.key === h.key ? { ...x, dest: e.target.value } : x)))} className={input + ' col-span-3 h-9 text-xs'}><option value="TREASURY">{T.toTreasury}</option><option value="OWNER">{T.toOwner}</option></select>
                 {h.dest === 'TREASURY' ? <select value={h.tid} onChange={(e) => setHand(hand.map((x) => (x.key === h.key ? { ...x, tid: e.target.value } : x)))} className={input + ' col-span-4 h-9 text-xs'}>{others.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
