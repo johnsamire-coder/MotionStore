@@ -1,3 +1,4 @@
+import OnlineBox from '../components/OnlineBox';
 // RECEIPT_PATCHED
 // POS_V2
 import React, { useState, useEffect, useRef } from 'react';
@@ -400,7 +401,7 @@ export default function POSPage() {
     } catch (e) { apiErr(e); setCoupon(null); }
   };
 
-  const resetSale = () => { setApprovedBy(null); setApprovedPwd(''); setCart([]); setBundle(null); setBundleCount(0); setDiscount(''); setDelivery(''); setPrevBal(''); setNotes(''); setCustQ(''); setCust(null); setCustNew(false); setCustNameIn(''); setPicked([]); setCoupon(null); setCouponIn(''); setPayRows([]); setCashGiven(''); };
+  const resetSale = () => { setOnline(false); setOnl({ name: '', phone: '', address: '', courier: '' }); setApprovedBy(null); setApprovedPwd(''); setCart([]); setBundle(null); setBundleCount(0); setDiscount(''); setDelivery(''); setPrevBal(''); setNotes(''); setCustQ(''); setCust(null); setCustNew(false); setCustNameIn(''); setPicked([]); setCoupon(null); setCouponIn(''); setPayRows([]); setCashGiven(''); };
 
   const holdSale = () => {
     if (!cart.length) return;
@@ -422,6 +423,8 @@ export default function POSPage() {
     setPayRows([{ key: 'r0', id: cashM ? cashM.id : '', amount: required.toFixed(2) }]); setCashGiven(required.toFixed(2)); setShowPay(true);
   };
   const addPayRow = () => { const used = payRows.map((r) => r.id); const m = payMethods.find((x) => !used.includes(x.id)); if (!m) return; setPayRows([...payRows, { key: `r${Date.now()}`, id: m.id, amount: Math.max(0, remaining).toFixed(2) }]); };
+  const [online, setOnline] = useState(false);
+  const [onl, setOnl] = useState({ name: '', phone: '', address: '', courier: '' });
   const isVoucherPm = (id) => ((payMethods.find((m) => m.id === id) || {}).name === 'قسيمة رصيد');
   const checkVoucher = async (r, code) => {
     const c = String(code || '').trim().toUpperCase(); if (!c) return;
@@ -477,7 +480,7 @@ export default function POSPage() {
       ? { piece_item_id: l.piece_item_id, promo_price: !!l.promo, quantity_pieces: parseInt(l.qty || '1', 10) || 1, weight_kg: (l.mode === 'KG' || l.promo) ? num(l.kg).toFixed(6) : '0', unit_price: num(l.price).toFixed(2), price_mode: l.mode, display_name: l.name, bundle_label: l.bundle || null, offer_label: l.offer || null }
       : { stock_item_id: l.stock_item_id, weight_kg: num(l.kg).toFixed(6), quantity_pieces: 0, unit_price: num(l.price).toFixed(2), price_mode: 'KG', display_name: l.name, bundle_label: l.bundle || null }));
     const body = {
-      shift_id: shift.id, items, payments: payRows.filter((r) => num(r.amount) > 0).map((r) => ({ payment_method_id: r.id, amount: num(r.amount).toFixed(2), voucher_code: r.code || undefined, reference_number: r.code || undefined })),
+      online: online ? onl : undefined, shift_id: shift.id, items, payments: payRows.filter((r) => num(r.amount) > 0).map((r) => ({ payment_method_id: r.id, amount: num(r.amount).toFixed(2), voucher_code: r.code || undefined, reference_number: r.code || undefined })),
       discount_amount: r2(offersDisc + num(discount)).toFixed(2), delivery_fee: num(delivery).toFixed(2), previous_balance: num(prevBal).toFixed(2), notes: approvedBy ? `${notes} [موافقة المدير على تعديل السعر/الخصم: ${approvedBy}]`.trim() : notes,
       coupon_code: coupon ? coupon.code : '', manager_password: approvedPwd || undefined, applied_offers: applied.map((x) => ({ id: x.o.id, name: x.o.name, discount: x.d.toFixed(2), coupon: x.coupon }))
     };
@@ -880,7 +883,7 @@ export default function POSPage() {
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-4">
             <div className="flex items-center justify-between"><div className="text-base font-bold">{T.payTitle}</div><button type="button" onClick={() => setShowPay(false)} aria-label="close" className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><X size={16} /></button></div>
             <div className="text-center text-3xl font-black text-emerald-800">{money(required)} <span className="text-sm">{T.cur}</span></div>{err && <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2 rounded-lg text-xs font-bold">{err}</div>}
-            <button type="button" onClick={oldPaper} className="mb-2 h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">📝 رصيد قديم (ورقة)</button>{payRows.map((r) => (
+            <OnlineBox online={online} setOnline={setOnline} onl={onl} setOnl={setOnl} /><button type="button" onClick={oldPaper} className="mb-2 h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">📝 رصيد قديم (ورقة)</button>{payRows.map((r) => (
               <div key={r.key} className="flex gap-2 items-center">
                 <select value={r.id} onChange={(e) => updPay(r.key, 'id', e.target.value)} className={input + ' flex-1'}>{payMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>{isVoucherPm(r.id) && <input value={r.code || ''} onChange={(e) => updPay(r.key, 'code', e.target.value.toUpperCase())} onBlur={(e) => checkVoucher(r, e.target.value)} placeholder="رقم القسيمة" title={r.bal ? 'رصيد القسيمة ' + r.bal : ''} className={input + ' w-28 text-center'} />}
                 <input type="number" min="0" step="0.01" value={r.amount} onChange={(e) => updPay(r.key, 'amount', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSale(true); } }} className={input + ' w-32 text-center font-bold'} />

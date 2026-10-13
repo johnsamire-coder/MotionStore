@@ -10,6 +10,9 @@ class SaleStatus(models.TextChoices):
 
 
 class SaleInvoice(TenantAwareModel):
+    channel = models.CharField(max_length=10, default='STORE', db_index=True)  # ONLINE_SALES
+    online_info = models.JSONField(default=dict, blank=True)
+    order_status = models.CharField(max_length=20, blank=True, default='')
     invoice_number = models.CharField(max_length=100, db_index=True, verbose_name="Sale Invoice #")
     branch = models.ForeignKey(
         'branches.Branch',

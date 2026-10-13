@@ -1115,7 +1115,8 @@ class ShiftViewSet(BaseTenantViewSet):
             key = tx.source_document_type or 'Other'
             moves[key] = moves.get(key, Decimal('0')) + (tx.amount if tx.amount < 0 else sign * tx.amount)
         by_method = {}
-        invs = SaleInvoice.objects.filter(shift=sh)
+        invs = SaleInvoice.objects.filter(shift=sh).exclude(channel='ONLINE')
+        _onl = SaleInvoice.objects.filter(shift=sh, channel='ONLINE')
         for p in SalePayment.objects.filter(sale_invoice__in=invs).select_related('payment_method'):
             by_method[p.payment_method.name] = by_method.get(p.payment_method.name, Decimal('0')) + p.amount
         from django.apps import apps as _ap
@@ -1128,6 +1129,10 @@ class ShiftViewSet(BaseTenantViewSet):
             if _k != 'على حساب العميل':
                 _net[_k] = _net.get(_k, Decimal('0')) - _v
         _extra = {'returns_by_method': [{'method': k, 'amount': str(v)} for k, v in rets.items()], 'net_by_method': [{'method': k, 'amount': str(v)} for k, v in _net.items()]}
+        _om = {}
+        for _p in SalePayment.objects.filter(sale_invoice__in=_onl).select_related('payment_method'):
+            _om[_p.payment_method.name] = _om.get(_p.payment_method.name, Decimal('0')) + _p.amount
+        _extra.update({'online_count': _onl.count(), 'online_total': str(_onl.aggregate(s=Sum('total_amount'))['s'] or 0), 'online_by_method': [{'method': k, 'amount': str(v)} for k, v in _om.items()]})
         return {**_extra, 'shift': ShiftSerializer(sh).data, 'drawer': drawer.name, 'opening': str(sh.opening_cash), 'expected': str(drawer.current_balance),
                 'invoices': invs.count(), 'sales_total': str(invs.aggregate(s=Sum('total_amount'))['s'] or 0),
                 'by_method': [{'method': k, 'amount': str(v)} for k, v in by_method.items()],
@@ -1528,6 +1533,7 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
                 previous_balance=Decimal(str(request.data.get('previous_balance', '0.00'))),
                 customer=customer_obj,
                 notes=request.data.get('notes'),
+                online=(request.data.get('online') or None),
                 coupon_code=(request.data.get('coupon_code') or '').strip() or None,
                 applied_offers=request.data.get('applied_offers') or []
             )
@@ -3436,4 +3442,17 @@ def store_credit_old_paper(request):
         record_treasury_transaction(treasury_id=tr.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, payment_method=None, source_document_type='OldPaperCredit',
                                     source_document_id=code, description=f'رصيد قديم (ورقة) {d.get("paper_ref") or ""}'.strip(), allow_negative=True)
     return Response({'code': code, 'balance': str(amt)}, status=201)
+
+
+def _online_ensure(tenant):
+    """ ONLINE_SALES: cash-on-delivery accounts (separate from the drawer) """
+    from apps.treasury.models import Treasury as _Tr
+    from apps.payments.models import PaymentMethod as _PM
+    ref = _Tr.objects.filter(tenant=tenant).exclude(branch=None).first()
+    out = []
+    for tname, pname in (('فلوس مع المندوبين', 'عند الاستلام - مندوب'), ('فلوس عند شركات الشحن', 'عند الاستلام - شركة شحن')):
+        tr = _Tr.objects.filter(tenant=tenant, name=tname).first() or _Tr.objects.create(tenant=tenant, name=tname, treasury_type='BANK', branch=ref.branch if ref else None, current_balance=0, is_active=True)
+        pm = _PM.objects.filter(tenant=tenant, name=pname).first() or _PM.objects.create(tenant=tenant, name=pname, method_type='ELECTRONIC', treasury=tr, is_active=True)
+        out.append(pm)
+    return out
 

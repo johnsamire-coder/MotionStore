@@ -47,8 +47,7 @@ def process_pos_sale(
     notes: str = None,
     coupon_code: str = None,
     applied_offers: list = None,
-    allowed_warehouse_id=None
-) -> SaleInvoice:
+    allowed_warehouse_id=None, online=None) -> SaleInvoice:
     """
     Central POS Sale Engine:
     Decrements stock, calculates COGS & Margins, collects cash into Treasury drawer, updates Shift, and posts Double-Entry Journal Entry.
@@ -219,6 +218,13 @@ def process_pos_sale(
             _v.balance -= p_amount
             _v.notes = (_v.notes + f' | اتصرف {p_amount} في {invoice.invoice_number}').strip(' |')
             _v.save(update_fields=['balance', 'notes'])
+        _cod = pm.treasury_id and pm.treasury.name in ('فلوس مع المندوبين', 'فلوس عند شركات الشحن')  # ONLINE_SALES
+        if online and pm.method_type == 'CASH':
+            from django.core.exceptions import ValidationError as _VE2
+            raise _VE2('الأوردر الأونلاين مايتدفعش نقدي من الدرج - اختار إنستاباي أو محفظة أو فيزا أو عند الاستلام')
+        if _cod and not online:
+            from django.core.exceptions import ValidationError as _VE2
+            raise _VE2('"عند الاستلام" للأوردرات الأونلاين بس')
         # Deposit to target treasury (drawer or bank)
         target_treasury = pm.treasury or terminal.cash_drawer
         record_treasury_transaction(
@@ -263,6 +269,12 @@ def process_pos_sale(
         notes=f"POS Sale Invoice #{invoice_number}",
         lines_data=jv_lines
     )
+
+    if online:  # ONLINE_SALES
+        invoice.channel = 'ONLINE'
+        invoice.online_info = {k: str((online or {}).get(k) or '')[:200] for k in ('name', 'phone', 'address', 'courier')}
+        invoice.order_status = 'NEW'
+        invoice.save(update_fields=['channel', 'online_info', 'order_status'])
 
     # 8. Offers usage counters & coupon redemption
     if applied_offers:
