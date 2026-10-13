@@ -207,6 +207,18 @@ def process_pos_sale(
             reference_number=p_data.get('reference_number')
         )
 
+        if pm.treasury_id and pm.treasury.name == 'قسائم الرصيد':  # STORE_CREDIT_VOUCHER
+            from django.core.exceptions import ValidationError as _VE
+            from apps.customers.models import StoreCreditVoucher as _V
+            _code = str(p_data.get('voucher_code') or p_data.get('reference_number') or '').strip().upper()
+            _v = _V.objects.select_for_update().filter(tenant=tenant, code=_code).first() if _code else None
+            if not _v:
+                raise _VE('اكتب رقم القسيمة صح')
+            if _v.balance < p_amount:
+                raise _VE(f'رصيد القسيمة {_code} = {_v.balance} بس')
+            _v.balance -= p_amount
+            _v.notes = (_v.notes + f' | اتصرف {p_amount} في {invoice.invoice_number}').strip(' |')
+            _v.save(update_fields=['balance', 'notes'])
         # Deposit to target treasury (drawer or bank)
         target_treasury = pm.treasury or terminal.cash_drawer
         record_treasury_transaction(

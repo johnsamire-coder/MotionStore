@@ -105,7 +105,7 @@ export default function ReturnsPage() {
       date: new Date(r.return_date_time || Date.now()).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
       time: new Date(r.return_date_time || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       custName: r.customer_name || '', custPhone: r.customer_phone || '',
-      pays: r.refund_to_credit ? 'على حساب العميل' : ('رد ' + (r.refund_method_name || 'نقدي')),
+      pays: r.voucher_code ? ('قسيمة رصيد رقم: ' + r.voucher_code) : (r.refund_to_credit ? 'على حساب العميل' : ('رد ' + (r.refund_method_name || 'نقدي'))),
       items: (r.lines || []).map((l) => { const amt = num(l.refund_amount || l.total_refund || l.line_refund || l.refund || l.amount || l.total_price); const q = num(l.quantity_pieces); return { name: l.display_name || l.product_name || '', qty: q > 0 ? String(q) : `${kgf(l.weight_kg)}ك`, price: q > 0 ? amt / q : amt, total: amt }; }),
       pcs: (r.lines || []).reduce((a, l) => a + (num(l.quantity_pieces) || 0), 0),
       totalLabel: 'إجمالي المرتجع', total: num(r.total_refund_amount),
@@ -118,7 +118,7 @@ export default function ReturnsPage() {
     const items = (inv.lines || []).filter((l) => num(qty[l.id]) > 0).map((l) => (l.piece_mode ? { sale_line_id: l.id, quantity_pieces: parseInt(qty[l.id], 10) } : { sale_line_id: l.id, weight_kg: num(qty[l.id]).toFixed(6) }));
     const body = { invoice_id: inv.id, shift_id: shift.id, items, reason, refund_to_credit: refundBy === 'ACCOUNT', refund_method_id: refundBy === 'ACCOUNT' ? null : refundBy };
     try {
-      const r = await axiosClient.post('/returns/', body);
+      const r = await axiosClient.post('/returns/', body); try { if ((methods.find((m) => m.id === refundBy) || {}).name === 'قسيمة رصيد') { const vv = await axiosClient.get('/store-credits/?ref=' + encodeURIComponent(r.data.return_number)); const v0 = (vv.data || [])[0]; if (v0) { r.data.voucher_code = v0.code; alert('اتعملت قسيمة رصيد رقم ' + v0.code + ' بمبلغ ' + v0.balance + '\nالرقم مطبوع في الإيصال، وأي حد معاه الإيصال يقدر يشتري بيه'); } } } catch (x) { /* ignore */ }
       setMsg(`${T.done}: ${r.data.return_number} — ${money(r.data.total_refund_amount)} ${T.cur}`);
       await printReturn(r.data); setInv(null); setFound([]); setQ(''); setQty({}); loadLog();
     } catch (e) { setErr(T.failed + (e.response?.data?.detail || e.message)); } finally { setBusy(false); }

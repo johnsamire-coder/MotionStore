@@ -141,7 +141,7 @@ class SupplierViewSet(BaseTenantViewSet):
             ev.append({'kind': 'INVOICE', 'id': str(pi.id), 'date': str(pi.invoice_date), 'at': pi.created_at, 'ref': pi.invoice_number, 'amount': pi.total_cost, 'lines': lines, 'notes': pi.notes})
         for p in SupplierPayment.objects.filter(tenant=sp.tenant, supplier=sp).select_related('payment_method', 'paid_by', 'purchase_invoice'):
             ev.append({'kind': 'PAYMENT', 'id': str(p.id), 'date': str(p.created_at.date()), 'at': p.created_at, 'ref': p.purchase_invoice.invoice_number if p.purchase_invoice_id else '', 'amount': p.amount,
-                       'method': p.payment_method.name if p.payment_method_id else '', 'by': p.paid_by.username if p.paid_by_id else '', 'notes': p.notes})
+                       'method': p.payment_method.name if p.payment_method_id else 'صاحب المحل (من فلوسه)', 'by': p.paid_by.username if p.paid_by_id else '', 'notes': p.notes})
         ev.sort(key=lambda e: (e['date'], e['at']))
         bal = Decimal('0')
         for e in ev:
@@ -161,16 +161,29 @@ class SupplierViewSet(BaseTenantViewSet):
         amt = Decimal(str(request.data.get('amount') or '0'))
         if amt <= 0:
             return Response({'detail': 'اكتب المبلغ'}, status=400)
-        pm = PaymentMethod.objects.filter(tenant=sp.tenant, pk=request.data.get('payment_method_id')).first()
-        if not pm or pm.method_type == 'CREDIT' or not pm.treasury_id:
-            return Response({'detail': 'اختار طريقة دفع ليها خزنة'}, status=400)
+        owner_tr = None
+        if str(request.data.get('payment_method_id')) == 'OWNER':  # OWNER_ACCOUNT_PAY: paid from the owner's own money
+            from apps.treasury.models import Treasury as _Tr
+            owner_tr = _Tr.objects.filter(tenant=sp.tenant, name='جاري صاحب المحل').first()
+            if owner_tr is None:
+                _ref = _Tr.objects.filter(tenant=sp.tenant).exclude(branch=None).first()
+                owner_tr = _Tr.objects.create(tenant=sp.tenant, name='جاري صاحب المحل', treasury_type='BANK', branch=_ref.branch if _ref else None, current_balance=0, is_active=True)
+            pm = None
+        else:
+            pm = PaymentMethod.objects.filter(tenant=sp.tenant, pk=request.data.get('payment_method_id')).first()
+            if not pm or pm.method_type == 'CREDIT' or not pm.treasury_id:
+                return Response({'detail': 'اختار طريقة دفع ليها خزنة'}, status=400)
         pi = PurchaseInvoice.objects.filter(tenant=sp.tenant, supplier=sp, pk=request.data.get('purchase_invoice_id')).first() if request.data.get('purchase_invoice_id') else None
         try:
             with dbt.atomic():
                 p = SupplierPayment.objects.create(tenant=sp.tenant, supplier=sp, amount=amt, payment_method=pm, purchase_invoice=pi,
                                                    paid_by=request.user if request.user.is_authenticated else None, notes=request.data.get('notes'))
-                record_treasury_transaction(treasury_id=pm.treasury_id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, payment_method=pm,
-                                            source_document_type='SupplierPayment', source_document_id=str(p.id), description=f"دفع للمورد {sp.name}")
+                if owner_tr is not None:
+                    record_treasury_transaction(treasury_id=owner_tr.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, payment_method=None,
+                                                source_document_type='SupplierPayment', source_document_id=str(p.id), description=f"دفع للمورد {sp.name} من فلوس صاحب المحل", allow_negative=True)
+                else:
+                    record_treasury_transaction(treasury_id=pm.treasury_id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, payment_method=pm,
+                                                source_document_type='SupplierPayment', source_document_id=str(p.id), description=f"دفع للمورد {sp.name}")
                 if pi:
                     pi.paid_amount = (pi.paid_amount or Decimal('0')) + amt
                     pi.save(update_fields=['paid_amount'])
@@ -1361,7 +1374,7 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         SP = G('sales', 'SalePayment')
         spfk = [f.name for f in SP._meta.concrete_fields if getattr(f, 'related_model', None) is G('sales', 'SaleInvoice')][0]
         pays = list(SP.objects.filter(**{spfk: inv}).select_related('payment_method'))
-        if any(getattr(x.payment_method, 'method_type', '') == 'CREDIT' for x in pays):
+        if any(getattr(x.payment_method, 'method_type', '') == 'CREDIT' or getattr(getattr(x.payment_method, 'treasury', None), 'name', '') == 'قسائم الرصيد' for x in pays):
             return Response({'detail': 'الفاتورة دي فيها آجل - اعملها مرتجع بدل الحذف'}, status=400)
         cash = sum((D(str(x.amount)) for x in pays if getattr(x.payment_method, 'method_type', '') == 'CASH'), D('0'))
         num = inv.invoice_number
@@ -1412,7 +1425,7 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         SP = G('sales', 'SalePayment')
         spfk = [f.name for f in SP._meta.concrete_fields if getattr(f, 'related_model', None) is G('sales', 'SaleInvoice')][0]
         pays = list(SP.objects.filter(**{spfk: old}).select_related('payment_method'))
-        if any(getattr(x.payment_method, 'method_type', '') == 'CREDIT' for x in pays):
+        if any(getattr(x.payment_method, 'method_type', '') == 'CREDIT' or getattr(getattr(x.payment_method, 'treasury', None), 'name', '') == 'قسائم الرصيد' for x in pays):
             return Response({'detail': 'الفاتورة دي فيها آجل - عدّلها بمرتجع'}, status=400)
         old_cash = sum((D(str(x.amount)) for x in pays if getattr(x.payment_method, 'method_type', '') == 'CASH'), D('0'))
         num, when = old.invoice_number, old.invoice_date_time
@@ -3356,4 +3369,71 @@ def promo_prices_view(request):
         co.promo_prices = str(request.data.get('prices') or '')[:200]
         co.save(update_fields=['promo_prices'])
     return Response({'prices': _promo_list(t)})
+
+
+def _vc_ensure(tenant):
+    """ STORE_CREDIT_VOUCHER helpers """
+    from apps.treasury.models import Treasury as _Tr
+    from apps.payments.models import PaymentMethod as _PM
+    tr = _Tr.objects.filter(tenant=tenant, name='قسائم الرصيد').first()
+    if tr is None:
+        ref = _Tr.objects.filter(tenant=tenant).exclude(branch=None).first()
+        tr = _Tr.objects.create(tenant=tenant, name='قسائم الرصيد', treasury_type='BANK', branch=ref.branch if ref else None, current_balance=0, is_active=True)
+    pm = _PM.objects.filter(tenant=tenant, name='قسيمة رصيد').first() or _PM.objects.create(tenant=tenant, name='قسيمة رصيد', method_type='ELECTRONIC', treasury=tr, is_active=True)
+    return tr, pm
+
+
+def _vc_next_code(tenant):
+    from apps.customers.models import StoreCreditVoucher as _V
+    n = _V.objects.filter(tenant=tenant).count() + 1
+    while _V.objects.filter(tenant=tenant, code=f'CR-{n:05d}').exists():
+        n += 1
+    return f'CR-{n:05d}'
+
+
+@_promo_api(['GET'])
+@_promo_pc([_PromoAuth])
+def store_credit_lookup(request):
+    from apps.customers.models import StoreCreditVoucher as _V
+    c = str(request.query_params.get('code') or '').strip().upper()
+    v = _V.objects.filter(tenant=request.user.tenant, code=c).first() if c else None
+    if not v:
+        return Response({'detail': 'رقم القسيمة مش موجود'}, status=404)
+    return Response({'code': v.code, 'balance': str(v.balance), 'original': str(v.original_amount), 'source': v.source, 'ref': v.source_ref})
+
+
+@_promo_api(['GET'])
+@_promo_pc([_PromoAuth])
+def store_credit_list(request):
+    from apps.customers.models import StoreCreditVoucher as _V
+    qs = _V.objects.filter(tenant=request.user.tenant).order_by('-created_at')
+    if request.query_params.get('ref'):
+        qs = qs.filter(source_ref=request.query_params.get('ref'))
+    return Response([{'code': v.code, 'original': str(v.original_amount), 'balance': str(v.balance), 'source': v.source, 'ref': v.source_ref, 'notes': v.notes, 'created': v.created_at.isoformat()} for v in qs[:500]])
+
+
+@_promo_api(['POST'])
+@_promo_pc([_PromoAuth])
+def store_credit_old_paper(request):
+    from django.db import transaction as _dbt
+    from apps.customers.models import StoreCreditVoucher as _V
+    from apps.treasury.services import record_treasury_transaction
+    from apps.treasury.models import TreasuryTransactionType
+    t = request.user.tenant; d = request.data
+    if not _verify_manager(t, d.get('manager_password')):
+        return Response({'detail': 'الرصيد القديم محتاج باسورد المدير'}, status=403)
+    raw = ''.join('0123456789'['٠١٢٣٤٥٦٧٨٩'.index(ch)] if ch in '٠١٢٣٤٥٦٧٨٩' else ch for ch in str(d.get('amount') or '')).replace('٫', '.').replace(',', '')
+    try:
+        amt = Decimal(raw).quantize(Decimal('0.01'))
+    except Exception:
+        amt = Decimal('0')
+    if amt <= 0:
+        return Response({'detail': 'اكتب مبلغ الورقة'}, status=400)
+    with _dbt.atomic():
+        tr, _pm = _vc_ensure(t)
+        code = _vc_next_code(t)
+        _V.objects.create(tenant=t, code=code, original_amount=amt, balance=amt, source='OLD_PAPER', source_ref=str(d.get('paper_ref') or '')[:100], notes=f'ورقة قديمة - وافق {request.user.username}')
+        record_treasury_transaction(treasury_id=tr.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amt, payment_method=None, source_document_type='OldPaperCredit',
+                                    source_document_id=code, description=f'رصيد قديم (ورقة) {d.get("paper_ref") or ""}'.strip(), allow_negative=True)
+    return Response({'code': code, 'balance': str(amt)}, status=201)
 

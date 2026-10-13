@@ -216,10 +216,14 @@ def process_sales_return_v2(invoice_id, shift_id, cashier, items: list, refund_m
             raise ValidationError('اختار طريقة رد الفلوس')
         target_t = pm.treasury or terminal.cash_drawer
         record_treasury_transaction(treasury_id=target_t.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=total_refund, payment_method=pm,
-                                    source_document_type='SalesReturn', source_document_id=return_number, description=f"رد فلوس مرتجع {return_number}")
+                                    source_document_type='SalesReturn', source_document_id=return_number, description=f"رد فلوس مرتجع {return_number}", allow_negative=(target_t.name == 'قسائم الرصيد'))
     sr = SalesReturn.objects.create(tenant=tenant, return_number=return_number, original_sale_invoice=invoice, shift=shift, cashier=cashier, return_date_time=now,
                                     total_refund_amount=total_refund, total_cogs_reversed=total_cogs, status=ReturnStatus.COMPLETED, reason=reason,
                                     refund_method=pm, refund_to_credit=refund_to_credit, customer=customer)
+    if pm is not None and pm.treasury_id and pm.treasury.name == 'قسائم الرصيد':  # STORE_CREDIT_VOUCHER
+        from apps.customers.models import StoreCreditVoucher as _V
+        from apps.api.views import _vc_next_code
+        _V.objects.create(tenant=tenant, code=_vc_next_code(tenant), original_amount=total_refund, balance=total_refund, source='RETURN', source_ref=return_number)
     for l in lines:
         SalesReturnLineItem.objects.create(tenant=tenant, sales_return=sr, **l)
     jv = [

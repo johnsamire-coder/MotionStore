@@ -56,3 +56,7 @@ urlpatterns = [
 from django.urls import path as _promo_path
 from apps.api.views import promo_prices_view as _promo_view
 urlpatterns += [_promo_path('promo-prices/', _promo_view)]
+
+from django.urls import path as _vc_path
+from apps.api.views import store_credit_lookup as _vc1, store_credit_list as _vc2, store_credit_old_paper as _vc3
+urlpatterns += [_vc_path('store-credits/lookup/', _vc1), _vc_path('store-credits/old-paper/', _vc3), _vc_path('store-credits/', _vc2)]

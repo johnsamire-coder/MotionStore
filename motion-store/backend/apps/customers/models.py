@@ -29,3 +29,20 @@ class Customer(TenantAwareModel):
 
     def __str__(self):
         return f"{self.name} ({self.phone or 'No phone'})"
+
+
+class StoreCreditVoucher(TenantAwareModel):
+    """ STORE_CREDIT_VOUCHER: bearer credit note (whoever has the paper can use it) """
+    code = models.CharField(max_length=20)
+    original_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    source = models.CharField(max_length=20, default='RETURN')
+    source_ref = models.CharField(max_length=100, blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+
+    class Meta:
+        unique_together = [('tenant', 'code')]
+
+    def __str__(self):
+        return f"{self.code} ({self.balance})"
+
