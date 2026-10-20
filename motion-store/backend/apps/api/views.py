@@ -3258,7 +3258,7 @@ def _band_stock_for_piece(piece, warehouse):
         return []
     keys = {(b.source_kind or '', b.segment or '', b.season or '', b.purchase_grade or '', b.sort_grade or '', b.category_name or '', b.brand or '') for b in bands}
     found = []
-    for si in SI.objects.filter(tenant=piece.tenant, warehouse=warehouse, total_quantity_pieces__gt=0).select_related('source_lot__purchase_line_item'):
+    for si in SI.objects.filter(tenant=piece.tenant, warehouse=warehouse).filter(models.Q(total_quantity_pieces__gt=0) | models.Q(total_weight_kg__gt=0)).select_related('source_lot__purchase_line_item'):
         lot = si.source_lot
         li = getattr(lot, 'purchase_line_item', None) if lot else None
         if not li or li.purchase_kind not in KIND:
@@ -3276,7 +3276,8 @@ def _band_stock_for_piece(piece, warehouse):
     found.sort(key=lambda x: (x[0], x[1]))
     return [x[2] for x in found]
 def _expand_piece_items(tenant, data):
-    """ split each code line over the oldest shipments of its bands; None = nothing to change, str = error """
+    """ SPLIT_BY_WEIGHT: split each code line over the oldest shipments of its bands
+        (weight sales split by weight, piece sales by pieces; no shipment gets more than it has) """
     from django.apps import apps as _a
     from apps.shifts.models import Shift
     sh = Shift.objects.filter(pk=data.get('shift_id')).select_related('terminal__default_warehouse').first()
@@ -3291,19 +3292,45 @@ def _expand_piece_items(tenant, data):
         piece = PI.objects.filter(tenant=tenant, pk=it['piece_item_id']).first()
         stocks = _band_stock_for_piece(piece, wh) if piece else []
         need = int(it.get('quantity_pieces') or 0)
-        if not stocks or need <= 0:
+        kg = Decimal(str(it.get('weight_kg') or 0))
+        if not stocks or (need <= 0 and kg <= 0):
             out.append(it); continue
-        avail = sum(int(s.total_quantity_pieces or 0) for s in stocks)
-        if need > avail:
-            return f'الكود {piece.code} ({piece.name}): المتاح في المحل {avail} قطعة بس'
-        kg = Decimal(str(it.get('weight_kg') or 0)); left_q = need; left_w = kg
-        for s in stocks:
-            if left_q <= 0:
+        by_kg = (it.get('price_mode') or 'KG') == 'KG'
+        avail_q = sum(int(x.total_quantity_pieces or 0) for x in stocks)
+        avail_w = sum((Decimal(str(x.total_weight_kg or 0)) for x in stocks), Decimal('0'))
+        if not by_kg and need > avail_q:
+            return f'الكود {piece.code} ({piece.name}): المتاح في المحل {avail_q} قطعة بس'
+        if kg > avail_w + Decimal('0.0005'):
+            return f'الكود {piece.code} ({piece.name}): المتاح في المحل {avail_w} كيلو بس'
+        left_q = need; left_w = kg; parts = []
+        for x in stocks:
+            if left_q <= 0 and left_w <= 0:
                 break
-            take = min(left_q, int(s.total_quantity_pieces or 0))
-            w = left_w if take == left_q else (kg * take / need).quantize(Decimal('0.001'))
-            out.append({**it, 'stock_item_id': str(s.pk), 'quantity_pieces': take, 'weight_kg': str(w)})
-            left_q -= take; left_w -= w
+            hq = int(x.total_quantity_pieces or 0); hw = Decimal(str(x.total_weight_kg or 0))
+            if by_kg:
+                tw = min(left_w, hw)
+                if tw <= 0:
+                    continue
+                tq = min(left_q, hq)
+            else:
+                tq = min(left_q, hq)
+                if tq <= 0:
+                    continue
+                share = left_w if tq == left_q else (kg * tq / need).quantize(Decimal('0.000001'))
+                tw = min(share, hw, left_w)
+            parts.append([x, tq, tw]); left_q -= tq; left_w -= tw
+        if left_w > Decimal('0.0005') and parts:
+            for pt in parts:
+                room = Decimal(str(pt[0].total_weight_kg or 0)) - pt[2]
+                add = min(room, left_w)
+                if add > 0:
+                    pt[2] += add; left_w -= add
+        if left_q > 0 and parts:
+            parts[0][1] += left_q; left_q = 0
+        if not parts:
+            out.append(it); continue
+        for x, tq, tw in parts:
+            out.append({**it, 'stock_item_id': str(x.pk), 'quantity_pieces': tq, 'weight_kg': str(tw)})
         changed = True
     return out if changed else None
 
@@ -3456,3 +3483,4 @@ def _online_ensure(tenant):
         out.append(pm)
     return out
 
+from django.db import models  # SEARCH_FIX: store items search used models.Q without this
