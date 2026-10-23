@@ -3,6 +3,7 @@ import OnlineBox from '../components/OnlineBox';
 // POS_V2
 import React, { useState, useEffect, useRef } from 'react';
 import axiosClient from '../api/axiosClient';
+import { fetchAllPages } from '../api/fetchAllPages';
 import { useLanguage } from '../context/LanguageContext';
 import { getCompanyInfo, saleReceiptHtml } from '../utils/reportExport';
 import { Search, Trash2, X, Scale, Printer, PauseCircle, Tag, Plus } from 'lucide-react';
@@ -205,17 +206,17 @@ export default function POSPage() {
     if (!term) return;
     try {
       const wh = term.default_warehouse ? `&warehouse=${term.default_warehouse}` : '';
-      const [shRes, stRes, piRes, pmRes, ofRes] = await Promise.all([
+      const [shRes, stRes, piItems, pmRes, ofRes] = await Promise.all([
         axiosClient.get(`/shifts/?terminal=${term.id}&status=OPEN`),
         axiosClient.get(`/stock-items/?all=1&only_positive=1${wh}`),
-        axiosClient.get(`/piece-items/?all=1${term.default_warehouse ? `&warehouse=${term.default_warehouse}` : ''}`),
+        fetchAllPages('/piece-items/', term.default_warehouse ? { warehouse: term.default_warehouse } : {}),
         axiosClient.get('/payments/?is_active=true'),
         axiosClient.get(`/offers/active_now/?${term.default_warehouse ? `warehouse=${term.default_warehouse}` : ''}`)
       ]);
       const sh = listOf(shRes.data).find((x) => (String(x.terminal) === String(term.id) || String(x.terminal_id) === String(term.id)) && x.status === 'OPEN') || null;
       setShift(sh); if (!sh) { setShowOpenShift(true); try { const trr = await axiosClient.get('/treasuries/'); const dd = listOf(trr.data).find((x) => String(x.id) === String(term.cash_drawer)); if (dd) setOpeningCash(String(dd.current_balance)); } catch (e2) { /* ignore */ } }
       setStock(listOf(stRes.data));
-      setPieceItems(listOf(piRes.data));
+      setPieceItems(piItems);
       setPayMethods(listOf(pmRes.data));
       setActiveOffers(listOf(ofRes.data));
       try { const allH = JSON.parse(localStorage.getItem(HOLD_KEY(term.id)) || '[]'); const keepH = allH.filter((h) => sh && h.shiftId === sh.id); setHeld(keepH); localStorage.setItem(HOLD_KEY(term.id), JSON.stringify(keepH)); } catch (e) { setHeld([]); }
@@ -561,7 +562,7 @@ export default function POSPage() {
       {err && <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2.5 rounded-lg text-sm font-bold">{err}</div>}
 
       {/* Mode Selection Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div onClick={() => setSellMode('WEIGHT')} className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${sellMode === 'WEIGHT' ? 'border-emerald-600 bg-emerald-50 shadow-md' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="flex items-center gap-2">
             <Scale className={sellMode === 'WEIGHT' ? 'text-emerald-700' : 'text-slate-500'} size={20} />
@@ -591,6 +592,9 @@ export default function POSPage() {
             </div>
           </div>
           <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-mono font-black text-xs">/</span>
+        </div><div onClick={() => setOnline(!online)} data-x="ONLINE_CARD" className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${online ? 'border-sky-600 bg-sky-50 shadow-md' : 'border-slate-200 bg-white hover:border-sky-300'}`}>
+          <div className="flex items-center gap-2"><span className="text-2xl">🛒</span><div><div className="font-bold text-sm">بيع أونلاين</div><div className="text-[11px] text-slate-500">{online ? 'الفاتورة دي أونلاين - فلوسها مش في الدرج' : 'أوردر شحن أو توصيل'}</div></div></div>
+          {online && <span className="h-7 px-2 rounded-md bg-sky-600 text-white text-xs font-bold flex items-center">✓</span>}
         </div>
       </div>
       {/* Inputs Bar */}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
+import { fetchAllPages } from '../api/fetchAllPages';
 
 export default function PricingV2() {
   const [activeSubTab, setActiveTab] = useState('UNCODED'); // UNCODED | BALE_WEIGHT | STOCK_WEIGHT | CODED_LIST | PRICE_LOG
@@ -49,8 +50,8 @@ export default function PricingV2() {
 
   const fetchPieceItems = async () => {
     try {
-      const res = await axiosClient.get('/piece-items/');
-      setPieceItems(res.data.results || res.data || []);
+      const items = await fetchAllPages('/piece-items/');
+      setPieceItems(items);
     } catch (e) { console.error(e); }
   };
 
@@ -119,8 +120,8 @@ export default function PricingV2() {
 
       if (!codeId) {
         // REUSE_EXISTING_CODE: if this code number already exists, use it (no second create)
-        const _lr = await axiosClient.get('/piece-items/?page_size=1000').catch(() => ({ data: [] }));
-        const _ex = (_lr.data.results || _lr.data || []).find((p) => String(p.code).trim() === String(codeForm.code).trim());
+        const existingItems = await fetchAllPages('/piece-items/');
+        const _ex = existingItems.find((p) => String(p.code).trim() === String(codeForm.code).trim());
         if (_ex) {
           if (!forceTransfer && !window.confirm('الكود ' + _ex.code + ' موجود بالفعل باسم ' + _ex.name + ' - تربط البنود المحددة بيه وتحدث اسمه وسعره للي كتبته؟')) { setSaving(false); return; }
           await axiosClient.patch('/piece-items/' + _ex.id + '/', { name: codeForm.name, price_per_piece: codeForm.price_per_piece || '0.00', price_per_kg: codeForm.price_per_kg || '0.00' }).catch(() => {});
