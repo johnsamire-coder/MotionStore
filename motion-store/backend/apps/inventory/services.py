@@ -126,3 +126,18 @@ def post_sorting_to_inventory(sorting_order_id) -> list:
     order.save()
 
     return posted_transactions
+
+
+def refresh_store_item_bands(tenant) -> bool:
+    """
+    StoreItem bands are a display cache of StockItem balances, rebuilt by _rebuild_store_items.
+    Runs in its own savepoint: if the cache fails, its partial writes roll back and the sale
+    that triggered it still commits.
+    """
+    from apps.api.views import _rebuild_store_items
+    try:
+        with transaction.atomic():
+            _rebuild_store_items(tenant)
+        return True
+    except Exception:
+        return False

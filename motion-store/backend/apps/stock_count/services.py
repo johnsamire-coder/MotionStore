@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from apps.stock_count.models import StockCountSession, StockCountLineItem, StockCountStatus
 from apps.inventory.models import StockItem, TransactionType
-from apps.inventory.services import record_inventory_transaction
+from apps.inventory.services import record_inventory_transaction, refresh_store_item_bands
 from apps.accounting.services import create_balanced_journal_entry
 
 @transaction.atomic
@@ -122,4 +122,5 @@ def apply_approved_stock_adjustment(session_id) -> StockCountSession:
 
     session.status = StockCountStatus.APPLIED
     session.save()
+    refresh_store_item_bands(tenant)
     return session

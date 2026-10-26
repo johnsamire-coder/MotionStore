@@ -6,7 +6,7 @@ from apps.returns.models import SalesReturn, SalesReturnLineItem, ReturnStatus
 from apps.sales.models import SaleInvoice
 from apps.shifts.models import Shift, ShiftStatus
 from apps.inventory.models import TransactionType
-from apps.inventory.services import record_inventory_transaction
+from apps.inventory.services import record_inventory_transaction, refresh_store_item_bands
 from apps.treasury.models import TreasuryTransactionType
 from apps.treasury.services import record_treasury_transaction
 from apps.accounting.services import create_balanced_journal_entry
@@ -132,6 +132,7 @@ def process_sales_return(
         lines_data=jv_lines
     )
 
+    refresh_store_item_bands(tenant)
     return sales_return
 
 @transaction.atomic
@@ -236,4 +237,5 @@ def process_sales_return_v2(invoice_id, shift_id, cashier, items: list, refund_m
     if total_refund > 0:
         create_balanced_journal_entry(tenant=tenant, entry_number=f"JV-RET-{return_number}", entry_date=now.date(), source_document_type='SalesReturn',
                                       source_document_id=str(sr.id), notes=f"Sales Return #{return_number}", lines_data=jv)
+    refresh_store_item_bands(tenant)
     return sr

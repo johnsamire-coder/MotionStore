@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from apps.sales.models import SaleInvoice, SaleLineItem, SalePayment, SaleStatus
 from apps.shifts.models import Shift, ShiftStatus
 from apps.inventory.models import StockItem, TransactionType
-from apps.inventory.services import record_inventory_transaction
+from apps.inventory.services import record_inventory_transaction, refresh_store_item_bands
 from apps.treasury.models import TreasuryTransactionType
 from apps.treasury.services import record_treasury_transaction
 from apps.accounting.services import create_balanced_journal_entry
@@ -291,6 +291,7 @@ def process_pos_sale(
         coupon_disc = sum((Decimal(str(a.get('discount') or '0')) for a in (applied_offers or []) if a.get('coupon')), Decimal('0.00'))
         redeem_coupon(tenant, coupon_code, invoice_number, cashier, coupon_disc)
 
+    refresh_store_item_bands(tenant)
     return invoice
 
 SEQ_DEFAULTS = {'SALE': 'INV-', 'RETURN': 'RET-'}

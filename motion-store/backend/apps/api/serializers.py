@@ -724,6 +724,21 @@ class PieceItemSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['tenant']
 
+    def get_available_bands(self, obj):
+        """ Bands behind the code, limited to the warehouse the screen asks for """
+        req = self.context.get('request')
+        params = getattr(req, 'query_params', None) or getattr(req, 'GET', None) or {}
+        wh = str(params.get('warehouse') or '').strip()
+        qs = obj.linked_store_items.all()
+        if wh:
+            try:
+                scoped = qs.filter(warehouse_id=wh)
+                scoped.exists()
+                qs = scoped
+            except Exception:
+                pass
+        return qs
+
     def get_linked_items_details(self, obj):
         return [
             {
@@ -733,14 +748,14 @@ class PieceItemSerializer(serializers.ModelSerializer):
                 'weight_kg': float(item.weight_kg or 0),
                 'total_allocated_cost': float(item.total_allocated_cost or 0)
             }
-            for item in obj.linked_store_items.all()
+            for item in self.get_available_bands(obj)
         ]
 
     def get_total_available_pieces(self, obj):
-        return sum((item.quantity_pieces or 0) for item in obj.linked_store_items.all())
+        return sum((item.quantity_pieces or 0) for item in self.get_available_bands(obj))
 
     def get_total_available_weight_kg(self, obj):
-        return float(sum((item.weight_kg or 0) for item in obj.linked_store_items.all()))
+        return float(sum((item.weight_kg or 0) for item in self.get_available_bands(obj)))
 
     def validate_code(self, value):
         request = self.context.get('request')

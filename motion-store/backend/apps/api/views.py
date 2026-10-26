@@ -3207,12 +3207,15 @@ def _rebuild_store_items(tenant):
     KIND = {'BALE': 'بالة', 'STOCK': 'استوك', 'DIRECT': 'شراء مباشر'}
     GR = {'NEW_COLLECTION': 'عالي', 'MIDDLE': 'وسط', 'CLEARANCE': 'تصفيات'}
     agg = {}
+    ol_first = {}
+    for ol in OL.objects.filter(sorting_order__raw_lot__tenant=tenant).select_related('sorting_order').order_by('created_at', 'id'):
+        ol_first.setdefault((ol.sorting_order.raw_lot_id, ol.product_id, ol.grade), ol)
     for si in SI.objects.filter(tenant=tenant).select_related('warehouse', 'source_lot__purchase_line_item', 'product'):
         lot = si.source_lot
         li = getattr(lot, 'purchase_line_item', None) if lot else None
         if not li or li.purchase_kind not in KIND:
             continue
-        ol = OL.objects.filter(sorting_order__raw_lot=lot, product=si.product, grade=si.grade).first()
+        ol = ol_first.get((si.source_lot_id, si.product_id, si.grade))
         if li.purchase_kind == 'BALE':
             item, brand = (li.item_name or ''), ''
         else:
@@ -3223,27 +3226,43 @@ def _rebuild_store_items(tenant):
         a['q'] += int(si.total_quantity_pieces or 0)
         a['w'] += Decimal(str(si.total_weight_kg or 0))
         a['c'] += Decimal(str(si.current_total_value or 0))
-    seen = set()
+    bands = {}
+    siblings = {}
+    for st in ST.objects.filter(tenant=tenant):
+        ident = (st.source_kind or '', st.segment or '', st.season or '', st.purchase_grade or '', st.sort_grade or '', st.category_name or '', st.brand or '')
+        bands.setdefault((st.warehouse_id,) + ident, st)
+        if st.coding_item_id:
+            siblings.setdefault(ident, []).append((st.warehouse_id, st.coding_item_id))
+    now = timezone.now()
+    seen, changed, fresh = set(), [], []
     for key, a in agg.items():
         wh_id, kind, seg, sea, pg, sg, item, brand = key
-        obj = ST.objects.filter(tenant=tenant, warehouse_id=wh_id, source_kind=kind, segment=seg, season=sea, purchase_grade=pg, sort_grade=sg, category_name=item, brand=brand).first()
-        if not obj:
-            obj = ST(tenant=tenant, warehouse_id=wh_id, source_kind=kind, segment=seg, season=sea, purchase_grade=pg, sort_grade=sg, category_name=item, brand=brand, sorted_at=timezone.now())
+        ident = (kind, seg, sea, pg, sg, item, brand)
+        obj = bands.get((wh_id,) + ident)
+        if obj is not None:
+            seen.add(obj.pk)
+            if (obj.branch_id != getattr(a['wh'], 'branch_id', None) or obj.quantity_pieces != a['q']
+                    or obj.weight_kg != a['w'] or obj.total_allocated_cost != a['c']):
+                obj.branch_id = getattr(a['wh'], 'branch_id', None)
+                obj.quantity_pieces = a['q']; obj.weight_kg = a['w']; obj.total_allocated_cost = a['c']
+                obj.updated_at = now
+                changed.append(obj)
+            continue
+        obj = ST(tenant=tenant, warehouse_id=wh_id, source_kind=kind, segment=seg, season=sea, purchase_grade=pg, sort_grade=sg, category_name=item, brand=brand, sorted_at=now)
         obj.branch_id = getattr(a['wh'], 'branch_id', None)
-        if not obj.coding_item_id:
-            _sib = ST.objects.filter(tenant=tenant, source_kind=kind, segment=seg, season=sea, purchase_grade=pg, sort_grade=sg, category_name=item, brand=brand).exclude(coding_item=None).exclude(warehouse_id=wh_id).first()
-            if _sib:
-                obj.coding_item_id = _sib.coding_item_id
+        for wh, code in siblings.get(ident, []):
+            if wh != wh_id:
+                obj.coding_item_id = code
+                break
         obj.quantity_pieces = a['q']; obj.weight_kg = a['w']; obj.total_allocated_cost = a['c']
-        obj.save()
+        fresh.append(obj)
         seen.add(obj.pk)
-    for obj in ST.objects.filter(tenant=tenant).exclude(pk__in=seen):
-        if obj.coding_item_id:
-            if obj.quantity_pieces or obj.weight_kg:
-                obj.quantity_pieces = 0; obj.weight_kg = 0
-                obj.save(update_fields=['quantity_pieces', 'weight_kg'])
-        else:
-            obj.delete()
+    if fresh:
+        ST.objects.bulk_create(fresh)
+    if changed:
+        ST.objects.bulk_update(changed, ['branch_id', 'quantity_pieces', 'weight_kg', 'total_allocated_cost', 'updated_at'])
+    ST.objects.filter(tenant=tenant, coding_item__isnull=False).exclude(pk__in=seen).exclude(quantity_pieces=0, weight_kg=0).update(quantity_pieces=0, weight_kg=0)
+    ST.objects.filter(tenant=tenant, coding_item__isnull=True).exclude(pk__in=seen).delete()
 
 
 def _band_stock_for_piece(piece, warehouse):
