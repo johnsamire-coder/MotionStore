@@ -1370,6 +1370,8 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         from django.db import transaction as dbt
         G = _a.get_model
         inv = self.get_object(); t = inv.tenant
+        if inv.shift_id and inv.shift.status != 'OPEN':  # CLOSED_SHIFT_GUARD
+            return Response({'detail': 'الفاتورة دي من وردية اتقفلت واتعدّت فلوسها - اعملها مرتجع بدل الحذف أو التعديل'}, status=400)
         if not _verify_manager(t, request.data.get('manager_password')):
             return Response({'detail': 'حذف الفاتورة محتاج باسورد المدير'}, status=403)
         SR = G('returns', 'SalesReturn')
@@ -1421,6 +1423,8 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         from django.utils import timezone
         G = _a.get_model
         old = self.get_object(); t = old.tenant
+        if old.shift_id and old.shift.status != 'OPEN':  # CLOSED_SHIFT_GUARD
+            return Response({'detail': 'الفاتورة دي من وردية اتقفلت واتعدّت فلوسها - اعملها مرتجع بدل الحذف أو التعديل'}, status=400)
         if not _verify_manager(t, request.data.get('manager_password')):
             return Response({'detail': 'تعديل الفاتورة محتاج باسورد المدير'}, status=403)
         SR = G('returns', 'SalesReturn')
