@@ -106,7 +106,7 @@ export default function ReturnsPage() {
       time: new Date(r.return_date_time || Date.now()).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       custName: r.customer_name || '', custPhone: r.customer_phone || '',
       pays: r.voucher_code ? ('قسيمة رصيد رقم: ' + r.voucher_code) : (r.refund_to_credit ? 'على حساب العميل' : ('رد ' + (r.refund_method_name || 'نقدي'))),
-      items: (r.lines || []).map((l) => { const amt = num(l.refund_amount || l.total_refund || l.line_refund || l.refund || l.amount || l.total_price); const q = num(l.quantity_pieces); return { name: l.display_name || l.product_name || '', qty: q > 0 ? String(q) : `${kgf(l.weight_kg)}ك`, price: q > 0 ? amt / q : amt, total: amt }; }),
+      items: (r.lines || []).map((l) => { const amt = num(l.refund_total_price || l.refund_amount || l.total_price); const q = num(l.quantity_pieces); const kg = num(l.weight_kg); return { name: l.display_name || l.product_name || '', qty: q > 0 ? String(q) : `${kgf(kg)}ك`, price: q > 0 ? amt / q : (kg > 0 ? amt / kg : amt), total: amt }; }),
       pcs: (r.lines || []).reduce((a, l) => a + (num(l.quantity_pieces) || 0), 0),
       totalLabel: 'إجمالي المرتجع', total: num(r.total_refund_amount),
     });

@@ -328,6 +328,13 @@ class PaymentMethodViewSet(BaseTenantViewSet):
             qs = qs.filter(is_active=True)
         return qs
 
+    def list(self, request, *args, **kwargs):
+        try:  # ONLINE_SALES: make sure the cash-on-delivery methods (separate from the drawer) exist
+            _online_ensure(self.get_tenant())
+        except Exception:
+            pass
+        return super().list(request, *args, **kwargs)
+
     def _validate_treasury(self):
         treasury_id = self.request.data.get('treasury')
         if treasury_id and not Treasury.objects.filter(tenant=self.get_tenant(), pk=treasury_id).exists():
@@ -1106,6 +1113,14 @@ class ShiftViewSet(BaseTenantViewSet):
         drawer.refresh_from_db()
         LABELS = {'SaleInvoice': 'مبيعات كاش', 'SalesReturn': 'مرتجعات', 'Expense': 'مصروفات', 'ExpenseCancel': 'إلغاء مصروفات', 'DeferredSale': 'عربون مؤجلة',
                   'CustomerPayment': 'تحصيل من عملاء', 'SupplierPayment': 'دفع لموردين', 'ShiftOpeningAdjust': 'تظبيط الافتتاح', 'ShiftOpening': 'افتتاح (قديم)', 'OwnerDrawing': 'ترحيل لصاحب المحل', 'ShiftShortage': 'عجز على الكاشير', 'ShiftSurplus': 'زيادة خزينة', 'Other': 'ترحيل لخزنة / تحويلات', 'None': 'ترحيل لخزنة / تحويلات'}
+        LABELS['OnlineInDrawer'] = 'أونلاين نزل في الدرج (طريقة دفع من غير خزنة)'
+        LABELS['OnlineReturn'] = 'مرتجع أونلاين اتصرف من الدرج'
+        invs = SaleInvoice.objects.filter(shift=sh).exclude(channel='ONLINE')
+        _onl = SaleInvoice.objects.filter(shift=sh, channel='ONLINE')
+        from django.apps import apps as _ap
+        _SR = _ap.get_model('returns', 'SalesReturn')
+        _onl_nums = set(_onl.values_list('invoice_number', flat=True))
+        _onl_ret_nums = set(_SR.objects.filter(shift=sh, original_sale_invoice__channel='ONLINE').values_list('return_number', flat=True))
         moves = {}
         qs = TreasuryTransaction.objects.filter(treasury=drawer, created_at__gte=sh.opened_at)
         if sh.closed_at:
@@ -1113,17 +1128,20 @@ class ShiftViewSet(BaseTenantViewSet):
         for tx in qs:
             sign = 1 if tx.transaction_type in ('DEPOSIT', 'TRANSFER_IN') else -1
             key = tx.source_document_type or 'Other'
+            if key == 'SaleInvoice' and tx.source_document_id in _onl_nums:
+                key = 'OnlineInDrawer'
+            elif key == 'SalesReturn' and tx.source_document_id in _onl_ret_nums:
+                key = 'OnlineReturn'
             moves[key] = moves.get(key, Decimal('0')) + (tx.amount if tx.amount < 0 else sign * tx.amount)
         by_method = {}
-        invs = SaleInvoice.objects.filter(shift=sh).exclude(channel='ONLINE')
-        _onl = SaleInvoice.objects.filter(shift=sh, channel='ONLINE')
         for p in SalePayment.objects.filter(sale_invoice__in=invs).select_related('payment_method'):
             by_method[p.payment_method.name] = by_method.get(p.payment_method.name, Decimal('0')) + p.amount
-        from django.apps import apps as _ap
         rets = {}
-        for _r in _ap.get_model('returns', 'SalesReturn').objects.filter(shift=sh).select_related('refund_method'):
+        _orets = {}
+        for _r in _SR.objects.filter(shift=sh).select_related('refund_method', 'original_sale_invoice'):
             _k = 'على حساب العميل' if _r.refund_to_credit else (_r.refund_method.name if _r.refund_method_id else 'نقدي')
-            rets[_k] = rets.get(_k, Decimal('0')) + (_r.total_refund_amount or Decimal('0'))
+            _bucket = _orets if _r.original_sale_invoice.channel == 'ONLINE' else rets  # ONLINE_SALES: online returns stay in the online closing
+            _bucket[_k] = _bucket.get(_k, Decimal('0')) + (_r.total_refund_amount or Decimal('0'))
         _net = dict(by_method)
         for _k, _v in rets.items():
             if _k != 'على حساب العميل':
@@ -1132,7 +1150,12 @@ class ShiftViewSet(BaseTenantViewSet):
         _om = {}
         for _p in SalePayment.objects.filter(sale_invoice__in=_onl).select_related('payment_method'):
             _om[_p.payment_method.name] = _om.get(_p.payment_method.name, Decimal('0')) + _p.amount
-        _extra.update({'online_count': _onl.count(), 'online_total': str(_onl.aggregate(s=Sum('total_amount'))['s'] or 0), 'online_by_method': [{'method': k, 'amount': str(v)} for k, v in _om.items()]})
+        _otot = _onl.aggregate(s=Sum('total_amount'))['s'] or Decimal('0')
+        _oret = sum(_orets.values(), Decimal('0'))
+        _extra.update({'online_count': _onl.count(), 'online_total': str(_otot), 'online_by_method': [{'method': k, 'amount': str(v)} for k, v in _om.items()],
+                       'online_returns_by_method': [{'method': k, 'amount': str(v)} for k, v in _orets.items()], 'online_returns_total': str(_oret), 'online_net_total': str(_otot - _oret),
+                       'online_orders': [{'number': i.invoice_number, 'total': str(i.total_amount), 'name': (i.online_info or {}).get('name') or '', 'courier': (i.online_info or {}).get('courier') or '',
+                                          'methods': ' + '.join(sorted({_p.payment_method.name for _p in i.payments.all()}))} for i in _onl.prefetch_related('payments__payment_method').order_by('created_at')]})
         return {**_extra, 'shift': ShiftSerializer(sh).data, 'drawer': drawer.name, 'opening': str(sh.opening_cash), 'expected': str(drawer.current_balance),
                 'invoices': invs.count(), 'sales_total': str(invs.aggregate(s=Sum('total_amount'))['s'] or 0),
                 'by_method': [{'method': k, 'amount': str(v)} for k, v in by_method.items()],

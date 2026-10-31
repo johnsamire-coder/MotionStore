@@ -227,6 +227,9 @@ def process_pos_sale(
             raise _VE2('"عند الاستلام" للأوردرات الأونلاين بس')
         # Deposit to target treasury (drawer or bank)
         target_treasury = pm.treasury or terminal.cash_drawer
+        if online and target_treasury.pk == terminal.cash_drawer_id:  # ONLINE_SALES: online money never goes into the cashier drawer
+            from django.core.exceptions import ValidationError as _VE3
+            raise _VE3(f'طريقة الدفع "{pm.name}" فلوسها بتنزل في درج الكاشير - الأوردر الأونلاين لازم يتدفع بطريقة ليها خزنة منفصلة (إنستاباي / محفظة / فيزا / عند الاستلام)')
         record_treasury_transaction(
             treasury_id=target_treasury.id,
             transaction_type=TreasuryTransactionType.DEPOSIT,
