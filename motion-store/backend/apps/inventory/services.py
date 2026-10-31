@@ -125,6 +125,10 @@ def post_sorting_to_inventory(sorting_order_id) -> list:
     order.status = SortingStatus.COMPLETED
     order.save()
 
+    # 5. AUTO_JOURNAL: Dr 1020 + Dr 5020 / Cr 1010 (never blocks the sorting)
+    from apps.accounting.auto_journals import post_sorting_journal
+    post_sorting_journal(order)
+
     return posted_transactions
 
 

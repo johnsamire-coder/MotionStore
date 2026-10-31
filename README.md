@@ -2,25 +2,12 @@
 
 > Modular Monolith SaaS for Bale and Thrift Store Management
 
-## Tech Stack
+**The application lives in [`motion-store/`](motion-store/)** (backend: Django, frontend: React).
+The old copy that used to sit at the root (`backend/`, `frontend/`) was removed.
 
-- **Backend:** Django 5.1 + Django REST Framework
-- **Frontend:** React
-- **Database:** PostgreSQL 16
-- **Architecture:** Modular Monolith
-- **Multi-Tenancy:** Row-level (Tenant ID on every model)
-- **Accounting:** Double-Entry Engine
-- **Inventory:** Ledger-based (Source of Truth)
-- **Costing:** Configurable Policy Engine
-
-## Domains (28)
-
-tenants, companies, branches, warehouses, pos, users, products,
-suppliers, purchasing, raw_lots, sorting, inventory, transfers,
-sales, returns, pricing, discounts, shifts, treasury, payments,
-customers, accounting, costing, waste, stock_count, reports,
-audit, printing
-
-## Status
-
-Under Active Development
+| | |
+| --- | --- |
+| Run on the shop PC | `Start-MotionStore.ps1` (starts `motion-store\backend` on 8000 and `motion-store\frontend` on 3001) |
+| Run on any PC | `motion-store\RUN_MOTION_STORE.bat` |
+| Specification | [motion-store/docs/MOTION_STORE_MASTER_SPEC.md](motion-store/docs/MOTION_STORE_MASTER_SPEC.md) |
+| Full handbook (Arabic) | [motion-store/docs/MOTION_STORE_HANDBOOK.md](motion-store/docs/MOTION_STORE_HANDBOOK.md) |

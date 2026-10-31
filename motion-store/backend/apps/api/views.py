@@ -392,6 +392,7 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
         class _Stop(Exception):
             pass
         holder = {}
+        self._in_replace = True
         try:
             with dbt.atomic():
                 RawLot.objects.filter(purchase_invoice=old).delete()
@@ -414,10 +415,14 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
                 old.total_cost = new.total_cost
                 old.save()
                 new.delete()
+                from apps.accounting.auto_journals import sync_purchase_journal
+                sync_purchase_journal(old)  # AUTO_JOURNAL: posts only the difference
         except _Stop:
             return holder['resp']
         except Exception as ex:
             return Response({'detail': f'مينفعش تتعدّل: {str(ex)[:150]}'}, status=400)
+        finally:
+            self._in_replace = False
         return Response({'ok': True, 'id': str(old.id), 'invoice_number': old.invoice_number, 'total_amount': str(old.total_cost)})
     @action(detail=True, methods=['post'], url_path='edit')
     def edit_invoice(self, request, pk=None):
@@ -461,6 +466,8 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
             if 'notes' in d:
                 inv.notes = d.get('notes') or ''
             inv.save()
+            from apps.accounting.auto_journals import sync_purchase_journal
+            sync_purchase_journal(inv)  # AUTO_JOURNAL: posts only the difference
         return Response({'ok': True, 'total_cost': str(inv.total_cost), 'freight': str(freight)})
 
     @action(detail=True, methods=['post'], url_path='cancel')
@@ -483,6 +490,8 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
             inv.status = 'CANCELLED'
             inv.notes = ((inv.notes or '') + f' | ملغية: {reason}').strip(' |')
             inv.save()
+            from apps.accounting.auto_journals import sync_purchase_journal
+            sync_purchase_journal(inv)  # AUTO_JOURNAL: reverses the purchase entry
         return Response({'ok': True})
     def create(self, request, *args, **kwargs):
         tenant = self.get_tenant()
@@ -674,6 +683,9 @@ class PurchaseInvoiceViewSet(BaseTenantViewSet):
         invoice.subtotal = subtotal
         invoice.total_cost = subtotal + freight_cost
         invoice.save()
+        if not getattr(self, '_in_replace', False):  # AUTO_JOURNAL: Dr 1010 / Cr 2010 (never blocks the save)
+            from apps.accounting.auto_journals import sync_purchase_journal
+            sync_purchase_journal(invoice)
 
         return Response({
             'id': str(invoice.id),
