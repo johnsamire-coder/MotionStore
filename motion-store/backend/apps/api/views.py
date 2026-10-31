@@ -1425,8 +1425,9 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         try:
             with dbt.atomic():
                 IT = G('inventory', 'InventoryTransaction'); TT = G('treasury', 'TreasuryTransaction')
-                for x in IT.objects.filter(source_document_type='SaleInvoice', source_document_id=num).select_related('stock_item'):
-                    si = x.stock_item
+                for x in IT.objects.filter(source_document_type='SaleInvoice', source_document_id=num):
+                    # FRESH_ROW: re-read the stock row for every line; two lines of the same item used to overwrite each other
+                    si = StockItem.objects.select_for_update().get(pk=x.stock_item_id)
                     si.total_weight_kg = D(str(si.total_weight_kg)) - D(str(x.weight_change_kg or 0))
                     si.total_quantity_pieces = int(si.total_quantity_pieces) - int(x.quantity_change_pieces or 0)
                     si.current_total_value = D(str(si.current_total_value)) - D(str(x.total_cost_change or 0))
@@ -1482,8 +1483,9 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         try:
             with dbt.atomic():
                 IT = G('inventory', 'InventoryTransaction'); TT = G('treasury', 'TreasuryTransaction')
-                for x in IT.objects.filter(source_document_type='SaleInvoice', source_document_id=num).select_related('stock_item'):
-                    si = x.stock_item
+                for x in IT.objects.filter(source_document_type='SaleInvoice', source_document_id=num):
+                    # FRESH_ROW: re-read the stock row for every line; two lines of the same item used to overwrite each other
+                    si = StockItem.objects.select_for_update().get(pk=x.stock_item_id)
                     si.total_weight_kg = D(str(si.total_weight_kg)) - D(str(x.weight_change_kg or 0))
                     si.total_quantity_pieces = int(si.total_quantity_pieces) - int(x.quantity_change_pieces or 0)
                     si.current_total_value = D(str(si.current_total_value)) - D(str(x.total_cost_change or 0))
