@@ -120,3 +120,40 @@ class PurchaseAndSortingJournalsTest(TestCase):
         self.assertEqual(self._net('1010', 'PurchaseInvoice', inv.id), Decimal('5000.00'))
         call_command('post_missing_journals', '--apply', stdout=StringIO())   # running again changes nothing
         self.assertEqual(JournalEntry.objects.filter(source_document_id=str(inv.id)).count(), 1)
+
+    def _cash(self, balance='10000'):
+        from apps.treasury.models import Treasury, TreasuryType
+        from apps.payments.models import PaymentMethod, PaymentMethodType
+        safe = Treasury.objects.create(tenant=self.tenant, name="Main Safe", treasury_type=TreasuryType.MAIN_SAFE,
+                                       branch=self.wh.branch, current_balance=Decimal(balance))
+        return PaymentMethod.objects.create(tenant=self.tenant, name="Cash", method_type=PaymentMethodType.CASH, treasury=safe)
+
+    def test_supplier_payment_clears_the_supplier(self):
+        inv = self._buy()                                                  # we owe 5000
+        pm = self._cash()
+        r = self.c.post(f'/api/v1/suppliers/{self.sup.id}/pay/', {'amount': '3000', 'payment_method_id': str(pm.id),
+                        'purchase_invoice_id': str(inv.id)}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(self._net('2010'), Decimal('-2000.00'))          # 5000 owed - 3000 paid
+        self.assertEqual(self._net('1030'), Decimal('-3000.00'))
+        r = self.c.post(f'/api/v1/suppliers/{self.sup.id}/pay/', {'amount': '2000', 'payment_method_id': 'OWNER'}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(self._net('2010'), Decimal('0.00'))
+        self.assertEqual(self._net('3010'), Decimal('-2000.00'))          # owner's own money
+        self.assertEqual(self._net('1030'), Decimal('-3000.00'))
+        self._all_balanced()
+
+    def test_supplier_payment_failure_never_blocks_and_backfill_posts_it(self):
+        from unittest import mock
+        pm = self._cash()
+        with mock.patch('apps.accounting.services.create_balanced_journal_entry', side_effect=RuntimeError('boom')):
+            r = self.c.post(f'/api/v1/suppliers/{self.sup.id}/pay/', {'amount': '500', 'payment_method_id': str(pm.id)}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)                      # payment saved, money left the safe
+        pm.treasury.refresh_from_db()
+        self.assertEqual(pm.treasury.current_balance, Decimal('9500.00'))
+        self.assertEqual(self._net('2010'), Decimal('0'))
+        call_command('post_missing_journals', '--apply', stdout=StringIO())
+        call_command('post_missing_journals', '--apply', stdout=StringIO())
+        self.assertEqual(self._net('2010'), Decimal('500.00'))
+        self.assertEqual(self._net('1030'), Decimal('-500.00'))
+        self.assertEqual(JournalEntry.objects.filter(source_document_type='SupplierPayment').count(), 1)

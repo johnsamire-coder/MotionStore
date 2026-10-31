@@ -1,14 +1,15 @@
 """
-Automatic journal entries for purchases and sorting.
+Automatic journal entries for purchases, sorting and supplier payments.
 
     Purchase invoice:  Dr 1010 Raw Bale Inventory  /  Cr 2010 Suppliers        (invoice total incl. freight)
     Sorting a lot:     Dr 1020 Finished Goods      (cost that went into stock)
                        Dr 5020 Sorting Waste Loss  (the rest of the lot cost)
                        /  Cr 1010 Raw Bale Inventory (full lot cost)
+    Supplier payment:  Dr 2010 Suppliers  /  Cr 1030 Cash  (Cr 3010 when the owner paid from his own money)
 
 Safety rules (the shop is live):
   * Every posting runs in its own savepoint and never raises: if it fails, the purchase or
-    sorting that called it is saved exactly as before, and the entry can be posted later
+    sorting that called it is saved exactly as before (same for a supplier payment), and the entry can be posted later
     with `python manage.py post_missing_journals`.
   * Postings are idempotent: the purchase entry is kept equal to the invoice (an edit or a
     cancel posts only the difference as a new adjusting entry, nothing is deleted), and a
@@ -135,4 +136,53 @@ def post_sorting_journal(order, entry_date=None) -> bool:
         return True
     except Exception:
         logger.exception("Sorting journal not posted for order %s", getattr(order, 'order_code', '?'))
+        return False
+
+
+CASH, OWNER_EQUITY = '1030', '3010'
+OWNER_TREASURY_NAME = 'جاري صاحب المحل'
+
+
+def _supplier_payment_credit_account(payment) -> str:
+    """ Owner paid from his own pocket -> 3010 (owner capital). Any treasury -> 1030, like sales and expenses. """
+    from apps.treasury.models import TreasuryTransaction
+    tt = TreasuryTransaction.objects.filter(tenant=payment.tenant, source_document_type='SupplierPayment',
+                                            source_document_id=str(payment.id)).select_related('treasury').first()
+    if tt is not None and getattr(tt.treasury, 'name', '') == OWNER_TREASURY_NAME:
+        return OWNER_EQUITY
+    if tt is None and payment.payment_method_id is None:
+        return OWNER_EQUITY
+    return CASH
+
+
+def post_supplier_payment_journal(payment, entry_date=None) -> bool:
+    """ Dr 2010 Suppliers / Cr 1030 Cash (or 3010 when the owner paid from his own money). Posted once. """
+    from apps.accounting.models import JournalEntry
+    from apps.accounting.services import create_balanced_journal_entry
+    try:
+        with transaction.atomic():
+            tenant = payment.tenant
+            if JournalEntry.objects.filter(tenant=tenant, source_document_type='SupplierPayment',
+                                           source_document_id=str(payment.id)).exists():
+                return True
+            amt = _q(payment.amount)
+            if amt <= ZERO:
+                return True
+            _ensure_accounts(tenant)
+            credit = _supplier_payment_credit_account(payment)
+            name = getattr(payment.supplier, 'name', '')
+            short = str(payment.id).split('-')[0].upper()
+            create_balanced_journal_entry(
+                tenant=tenant,
+                entry_number=_next_number(tenant, f"JV-SPAY-{short}"),
+                entry_date=entry_date or payment.created_at.date(),
+                source_document_type='SupplierPayment',
+                source_document_id=str(payment.id),
+                notes=f"Supplier payment - {name}" + (' (owner money)' if credit == OWNER_EQUITY else ''),
+                lines_data=[_line(SUPPLIERS, amt, f"Paid to supplier {name}"),
+                            _line(credit, -amt, f"Supplier payment {name}")],
+            )
+        return True
+    except Exception:
+        logger.exception("Supplier payment journal not posted for payment %s", getattr(payment, 'id', '?'))
         return False

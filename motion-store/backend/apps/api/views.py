@@ -187,6 +187,8 @@ class SupplierViewSet(BaseTenantViewSet):
                 if pi:
                     pi.paid_amount = (pi.paid_amount or Decimal('0')) + amt
                     pi.save(update_fields=['paid_amount'])
+                from apps.accounting.auto_journals import post_supplier_payment_journal
+                post_supplier_payment_journal(p)  # AUTO_JOURNAL: Dr 2010 / Cr 1030 (never blocks the payment)
         except Exception as e:
             msg = '; '.join(getattr(e, 'messages', []) or [str(e)])
             return Response({'detail': ('الخزنة مفيهاش فلوس كفاية للمبلغ ده' if 'Insufficient' in msg else msg) or 'حصلت مشكلة'}, status=400)
