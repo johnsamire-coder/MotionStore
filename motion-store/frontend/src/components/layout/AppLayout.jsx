@@ -114,6 +114,7 @@ export default function AppLayout() {
     { name: t('nav.shifts'), to: '/shifts', icon: Clock },
     { name: t('nav.treasury'), to: '/treasury', icon: Vault },
     { name: t('nav.reports'), to: '/reports', icon: FileSpreadsheet },
+    { name: 'الحضور والمرتبات', en: 'Attendance & Payroll', to: '/staff', icon: Clock },
     { name: 'إدارة الموظفين', en: 'Employees', to: '/users', icon: Users },
     { name: 'إدارة الصلاحيات', en: 'Permissions', to: '/permissions', icon: ShieldCheck },
     { name: t('nav.settings'), to: '/settings', icon: Settings },

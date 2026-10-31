@@ -21,6 +21,7 @@ import ReportsPage from './pages/ReportsPage';
 import PermissionsPage from './pages/PermissionsPage';
 import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
+import StaffPage from './pages/StaffPage';
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -53,6 +54,7 @@ export default function App() {
               <Route path="users" element={<UsersPage />} />
               <Route path="permissions" element={<PermissionsPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="staff" element={<StaffPage />} />
             </Route>
           </Routes>
         </BrowserRouter>

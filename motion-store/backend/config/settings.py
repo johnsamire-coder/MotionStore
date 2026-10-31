@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.stock_count",
     "apps.reports",
     "apps.printing",
+    "apps.staff",
 ]
 
 AUTH_USER_MODEL = "users.User"

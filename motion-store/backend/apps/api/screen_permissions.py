@@ -2,10 +2,10 @@ import re
 from rest_framework.permissions import BasePermission
 
 DEFAULTS = {
-    'MANAGER': ['/', '/pos', '/invoices', '/customers', '/suppliers', '/expenses', '/coding', '/returns', '/sorting', '/inventory', '/purchasing', '/shifts', '/treasury', '/reports', '/settings'],
+    'MANAGER': ['/', '/pos', '/invoices', '/customers', '/suppliers', '/expenses', '/coding', '/returns', '/sorting', '/inventory', '/purchasing', '/shifts', '/treasury', '/reports', '/settings', '/staff'],
     'CASHIER': ['/pos', '/shifts', '/returns'],
     'WAREHOUSE_KEEPER': ['/inventory', '/sorting', '/purchasing'],
-    'ACCOUNTANT': ['/', '/reports', '/treasury', '/expenses', '/invoices', '/customers', '/suppliers'],
+    'ACCOUNTANT': ['/', '/reports', '/treasury', '/expenses', '/invoices', '/customers', '/suppliers', '/staff'],
     'SORTER': ['/sorting'],
 }
 W = {'POST', 'PUT', 'PATCH', 'DELETE'}
@@ -14,6 +14,7 @@ RULES = [
     (r'^/api/v1/role-permissions/', W, ['__ADMIN__']),
     (r'^/api/v1/tenants/(?!public_info)', W, ['__ADMIN__']),
     (r'^/api/v1/users/', A, ['/users']),
+    (r'^/api/v1/staff/', A, ['/staff']),
     (r'^/api/v1/expense', A, ['/expenses']),
     (r'^/api/v1/treasuries/(transfer|adjust|settle_custody|custodies|[^/]+/statement)', A, ['/treasury']),
     (r'^/api/v1/treasuries/', W, ['/treasury', '/settings']),

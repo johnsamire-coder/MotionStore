@@ -9,7 +9,7 @@ const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
 const ROLES = [{ id: 'CASHIER', n: 'كاشير' }, { id: 'MANAGER', n: 'مدير' }, { id: 'WAREHOUSE_KEEPER', n: 'أمين مخزن' }, { id: 'ACCOUNTANT', n: 'محاسب' }, { id: 'SORTER', n: 'فرّاز' }];
 const SCREENS = [['/pos', 'شاشة المبيعات'], ['/invoices', 'فواتير المبيعات'], ['/returns', 'المرتجعات'], ['/customers', 'العملاء'], ['/shifts', 'الورديات'], ['/treasury', 'الخزينة'],
   ['/expenses', 'المصروفات'], ['/suppliers', 'الموردين'], ['/purchasing', 'المشتريات'], ['/sorting', 'الفرز'], ['/inventory', 'المخزون'], ['/coding', 'التسعير والعروض'],
-  ['/reports', 'التقارير'], ['/users', 'الموظفين'], ['/settings', 'الإعدادات']];
+  ['/reports', 'التقارير'], ['/staff', 'الحضور والمرتبات'], ['/users', 'الموظفين'], ['/settings', 'الإعدادات']];
 const ACTIONS = {
   view_cost_profit: ['يشوف التكلفة والربح', 'تقارير الأرباح، وعمود التكلفة والربح، وقيمة المخزون بالتكلفة'],
   view_others_invoices: ['يشوف فواتير الكاشيرية التانيين', 'مش فواتيره هو بس'],
