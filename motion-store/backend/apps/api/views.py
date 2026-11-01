@@ -1418,6 +1418,8 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         SP = G('sales', 'SalePayment')
         spfk = [f.name for f in SP._meta.concrete_fields if getattr(f, 'related_model', None) is G('sales', 'SaleInvoice')][0]
         pays = list(SP.objects.filter(**{spfk: inv}).select_related('payment_method'))
+        if any(getattr(x.payment_method, 'method_type', '') == 'EMPLOYEE' for x in pays):  # EMPLOYEE_GOODS
+            return Response({'detail': 'الفاتورة دي على حساب موظف - اعملها مرتجع بدل الحذف أو التعديل'}, status=400)
         if any(getattr(x.payment_method, 'method_type', '') == 'CREDIT' or getattr(getattr(x.payment_method, 'treasury', None), 'name', '') == 'قسائم الرصيد' for x in pays):
             return Response({'detail': 'الفاتورة دي فيها آجل - اعملها مرتجع بدل الحذف'}, status=400)
         cash = sum((D(str(x.amount)) for x in pays if getattr(x.payment_method, 'method_type', '') == 'CASH'), D('0'))
@@ -1472,6 +1474,8 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         SP = G('sales', 'SalePayment')
         spfk = [f.name for f in SP._meta.concrete_fields if getattr(f, 'related_model', None) is G('sales', 'SaleInvoice')][0]
         pays = list(SP.objects.filter(**{spfk: old}).select_related('payment_method'))
+        if any(getattr(x.payment_method, 'method_type', '') == 'EMPLOYEE' for x in pays):  # EMPLOYEE_GOODS
+            return Response({'detail': 'الفاتورة دي على حساب موظف - اعملها مرتجع بدل الحذف أو التعديل'}, status=400)
         if any(getattr(x.payment_method, 'method_type', '') == 'CREDIT' or getattr(getattr(x.payment_method, 'treasury', None), 'name', '') == 'قسائم الرصيد' for x in pays):
             return Response({'detail': 'الفاتورة دي فيها آجل - عدّلها بمرتجع'}, status=400)
         old_cash = sum((D(str(x.amount)) for x in pays if getattr(x.payment_method, 'method_type', '') == 'CASH'), D('0'))
@@ -1565,6 +1569,12 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
         if _vmsg:
             return Response({'detail': _vmsg}, status=400)
         from django.core.exceptions import ValidationError as _DjVE
+        _emp = None  # EMPLOYEE_GOODS
+        if request.data.get('employee_id'):
+            from apps.staff.models import Employee as _Emp
+            _emp = _Emp.objects.filter(tenant=self.get_tenant(), pk=request.data.get('employee_id')).first()
+            if _emp is None:
+                return Response({'detail': 'الموظف مش موجود'}, status=400)
         try:
             invoice = process_pos_sale(
                 shift_id=request.data['shift_id'],
@@ -1578,7 +1588,8 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
                 notes=request.data.get('notes'),
                 online=(request.data.get('online') or None),
                 coupon_code=(request.data.get('coupon_code') or '').strip() or None,
-                applied_offers=request.data.get('applied_offers') or []
+                applied_offers=request.data.get('applied_offers') or [],
+                employee=_emp
             )
         except _DjVE as e:
             return Response({'detail': '; '.join(e.messages)}, status=400)

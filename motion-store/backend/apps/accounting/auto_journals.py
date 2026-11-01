@@ -228,3 +228,62 @@ def sync_staff_entry_journal(entry, entry_date=None) -> bool:
     except Exception:
         logger.exception("Staff ledger journal not posted for %s", getattr(entry, 'number', '?'))
         return False
+
+
+SALARIES_PAYABLE, PENALTY_INCOME, SALARIES = '2030', '4030', '5110'
+
+
+def post_payroll_journal(run) -> bool:
+    """ On approval, once per run:
+        Dr 5110 salaries (pay earned after attendance deductions)   Dr 1060 shortfalls kept on the employees
+        Cr 4030 penalties   Cr 1060 advances/goods taken back   Cr 2030 net to pay """
+    from apps.accounting.models import JournalEntry
+    from apps.accounting.services import create_balanced_journal_entry
+    from apps.staff.services import earnings_of
+    try:
+        with transaction.atomic():
+            tenant = run.tenant
+            if JournalEntry.objects.filter(tenant=tenant, source_document_type='PayrollRun', source_document_id=str(run.id)).exists():
+                return True
+            lines = list(run.lines.all())
+            earn = _q(sum((earnings_of(l) for l in lines), ZERO))
+            pen = _q(sum((l.penalties for l in lines), ZERO))
+            rec = _q(sum((l.recovered for l in lines), ZERO))
+            net = _q(sum((l.net for l in lines), ZERO))
+            short = _q(sum((l.shortfall for l in lines), ZERO))
+            if not any((earn, pen, rec, net, short)):
+                return True
+            _ensure_accounts(tenant)
+            data = [_line(SALARIES, earn, f"Salaries {run.number}"), _line(EMPLOYEES, short - rec, f"Employees recovered/shortfall {run.number}"),
+                    _line(PENALTY_INCOME, -pen, f"Penalties {run.number}"), _line(SALARIES_PAYABLE, -net, f"Net payable {run.number}")]
+            data = [l for l in data if l['debit'] or l['credit']]
+            create_balanced_journal_entry(tenant=tenant, entry_number=_next_number(tenant, f"JV-{run.number}"), entry_date=run.period_end,
+                                          source_document_type='PayrollRun', source_document_id=str(run.id),
+                                          notes=f"Payroll {run.number} {run.period_start} - {run.period_end}", lines_data=data)
+        return True
+    except Exception:
+        logger.exception("Payroll journal not posted for %s", getattr(run, 'number', '?'))
+        return False
+
+
+def post_payroll_payment_journal(run, amount=None, when=None, tag=None) -> bool:
+    """ Dr 2030 / Cr 1030 for whatever was paid and not posted yet (all payments of the run add up). """
+    from django.db.models import Sum
+    from django.utils import timezone
+    from apps.accounting.services import create_balanced_journal_entry
+    try:
+        with transaction.atomic():
+            tenant = run.tenant
+            paid = _q(run.lines.aggregate(x=Sum('paid_amount'))['x'] or 0)
+            posted = _posted_on(tenant, 'PayrollPayment', run.id, SALARIES_PAYABLE)
+            diff = paid - posted
+            if diff == ZERO:
+                return True
+            _ensure_accounts(tenant)
+            create_balanced_journal_entry(tenant=tenant, entry_number=_next_number(tenant, f"JV-PAY-{run.number}"), entry_date=when or timezone.localdate(),
+                                          source_document_type='PayrollPayment', source_document_id=str(run.id), notes=f"Salaries paid {run.number}",
+                                          lines_data=[_line(SALARIES_PAYABLE, diff, f"Paid {run.number}"), _line(CASH, -diff, f"Cash {run.number}")])
+        return True
+    except Exception:
+        logger.exception("Payroll payment journal not posted for %s", getattr(run, 'number', '?'))
+        return False

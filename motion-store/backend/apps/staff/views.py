@@ -285,3 +285,109 @@ class StaffLedgerViewSet(viewsets.ViewSet):
             return Response({'detail': 'الحركة مش موجودة'}, status=400)
         except ValidationError as e:
             return _err(e)
+
+
+# ---------------------------------------------------------------- phase 3: payroll
+def _payer(request, tenant):
+    from apps.api.screen_permissions import can
+    u = request.user
+    if u.is_authenticated and (can(u, 'treasury_moves') or can(u, 'approve') or _is_admin(u)):
+        return u
+    from apps.api.views import _verify_manager
+    return _verify_manager(tenant, request.data.get('manager_password'))
+
+
+class PayrollViewSet(viewsets.ViewSet):
+    """ /api/v1/staff-payroll/... (screen /staff) """
+
+    def list(self, request):
+        return Response(services.payroll_list(_tenant(request)))
+
+    def retrieve(self, request, pk=None):
+        try:
+            return Response(services.payroll_detail(_tenant(request), pk))
+        except services.PayrollRun.DoesNotExist:
+            return Response({'detail': 'المسير مش موجود'}, status=404)
+
+    def create(self, request):
+        t = _tenant(request)
+        d = request.data
+        try:
+            run = services.create_payroll(t, d.get('cycle'), _date(d.get('from'), 'من تاريخ'), _date(d.get('to'), 'إلى تاريخ'),
+                                          d.get('notes'), request.user if request.user.is_authenticated else None)
+            return Response(services.payroll_detail(t, run.id), status=201)
+        except ValidationError as e:
+            return _err(e)
+
+    def destroy(self, request, pk=None):
+        try:
+            services.delete_draft(_tenant(request), pk)
+            return Response({'ok': True})
+        except services.PayrollRun.DoesNotExist:
+            return Response({'detail': 'المسير مش موجود'}, status=404)
+        except ValidationError as e:
+            return _err(e)
+
+    @action(detail=True, methods=['post'])
+    def recalc(self, request, pk=None):
+        t = _tenant(request)
+        try:
+            services.recalc_payroll(t, pk)
+            return Response(services.payroll_detail(t, pk))
+        except ValidationError as e:
+            return _err(e)
+
+    @action(detail=True, methods=['post'], url_path='edit-line')
+    def edit_line(self, request, pk=None):
+        t = _tenant(request)
+        try:
+            services.edit_line(t, request.data.get('line_id'), request.data.get('changes') or {}, request.data.get('note') or '')
+            return Response(services.payroll_detail(t, pk))
+        except services.PayrollLine.DoesNotExist:
+            return Response({'detail': 'السطر مش موجود'}, status=404)
+        except ValidationError as e:
+            return _err(e)
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        t = _tenant(request)
+        who = _approver(request, t)
+        if who is None:
+            return Response({'detail': 'اعتماد المرتبات محتاج باسورد المدير'}, status=403)
+        try:
+            services.approve_payroll(t, pk, who)
+            return Response(services.payroll_detail(t, pk))
+        except ValidationError as e:
+            return _err(e)
+
+    @action(detail=True, methods=['post'])
+    def pay(self, request, pk=None):
+        from apps.treasury.models import Treasury
+        t = _tenant(request)
+        who = _payer(request, t)
+        if who is None:
+            return Response({'detail': 'صرف المرتبات محتاج باسورد المدير'}, status=403)
+        tr = Treasury.objects.filter(tenant=t, pk=request.data.get('treasury_id')).first() if request.data.get('treasury_id') else None
+        try:
+            _, total = services.pay_payroll(t, pk, tr, request.data.get('line_ids') or None, who)
+            return Response({'paid_now': str(total), **services.payroll_detail(t, pk)})
+        except ValidationError as e:
+            return _err(e)
+
+
+# ---------------------------------------------------------------- phase 4: goods on the employee account (sales screen)
+class StaffGoodsViewSet(viewsets.ViewSet):
+    """ /api/v1/staff-goods/setup/ (screens /pos or /staff): who can take goods and at what price rule. """
+
+    @action(detail=False, methods=['get'])
+    def setup(self, request):
+        from apps.payments.models import PaymentMethod
+        t = _tenant(request)
+        pm = PaymentMethod.objects.filter(tenant=t, method_type='EMPLOYEE').first()
+        if pm is None:
+            pm = PaymentMethod.objects.create(tenant=t, name='على حساب موظف', method_type='EMPLOYEE', is_active=True)
+        s = StaffSettings.for_tenant(t).merged()
+        emps = [{'id': str(e.id), 'name': e.name, 'job_title': e.job_title, 'owed': str(services.employee_balance(e)[0])}
+                for e in Employee.objects.filter(tenant=t, is_active=True).order_by('name')]
+        return Response({'payment_method_id': str(pm.id), 'price_mode': s.get('goods_price_mode'),
+                         'discount_pct': s.get('goods_discount_pct'), 'employees': emps})

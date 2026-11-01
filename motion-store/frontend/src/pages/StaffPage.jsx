@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExportButtons from '../components/ExportButtons';
-import { Clock, CalendarDays, Users, BarChart3, Settings, Save, ChevronRight, ChevronLeft, Plus, Trash2, X, Wallet } from 'lucide-react';
+import { Clock, CalendarDays, Users, BarChart3, Settings, Save, ChevronRight, ChevronLeft, Plus, Trash2, X, Wallet, Banknote } from 'lucide-react';
 
 const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
 const pad = (n) => String(n).padStart(2, '0');
@@ -386,6 +386,161 @@ function AccountTab() {
   );
 }
 
+// ---------------------------------------------------------------- payroll (phase 3)
+const ST_COLOR = { DRAFT: 'bg-amber-100 text-amber-800', APPROVED: 'bg-sky-100 text-sky-800', PAID: 'bg-emerald-100 text-emerald-800' };
+const DED = [['absence_deduction', 'الغياب'], ['unpaid_leave_deduction', 'إجازة من غير أجر'], ['unpaid_holiday_deduction', 'عطلة من غير أجر'], ['late_deduction', 'التأخير'],
+  ['early_deduction', 'الخروج بدري'], ['penalties', 'الخصومات والجزاءات'], ['recovered', 'السلف والبضاعة']];
+const ADD = [['overtime_amount', 'الإضافي'], ['holiday_extra', 'الشغل في العطلات'], ['bonuses', 'المكافآت']];
+const EDIT_FIELDS = [['absence_deduction', 'خصم الغياب'], ['unpaid_leave_deduction', 'إجازة من غير أجر'], ['unpaid_holiday_deduction', 'عطلة من غير أجر'], ['late_deduction', 'خصم التأخير'],
+  ['early_deduction', 'خصم الخروج بدري'], ['overtime_amount', 'الإضافي'], ['holiday_extra', 'الشغل في العطلات'], ['bonuses', 'المكافآت'], ['penalties', 'الخصومات'], ['recovery_due', 'السلف والبضاعة المطلوب خصمها']];
+const DAYS_L = { PRESENT: 'حضور', ABSENT: 'غياب', LEAVE_PAID: 'إجازة بأجر', LEAVE_UNPAID: 'من غير أجر', OFF: 'إجازته', HOLIDAY: 'عطلة', worked_on_holiday: 'اشتغل في عطلة', worked_on_off_day: 'اشتغل في إجازته' };
+function suggestPeriod(cycle, settings) {
+  const t = new Date();
+  if (cycle === 'MONTHLY') { const e = new Date(t.getFullYear(), t.getMonth(), 0); return { from: iso(new Date(e.getFullYear(), e.getMonth(), 1)), to: iso(e) }; }
+  const ws = Number(settings?.week_start ?? 5); const thisStart = weekStartOf(today(), ws); return { from: addDays(thisStart, -7), to: addDays(thisStart, -1) };
+}
+function PayrollTab({ settings }) {
+  const [list, setList] = useState([]); const [run, setRun] = useState(null); const [trs, setTrs] = useState([]);
+  const [nf, setNf] = useState({ cycle: 'MONTHLY', ...suggestPeriod('MONTHLY', settings), notes: '' });
+  const [edit, setEdit] = useState(null); const [payBox, setPayBox] = useState(null); const [pwd, setPwd] = useState('');
+  const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const loadList = async () => { try { const r = await axiosClient.get('/staff-payroll/'); setList(r.data); } catch (e) { setErr(errOf(e)); } };
+  const open = async (id) => { try { const r = await axiosClient.get(`/staff-payroll/${id}/`); setRun(r.data); setErr(''); } catch (e) { setErr(errOf(e)); } };
+  useEffect(() => { loadList(); axiosClient.get('/treasuries/').then((r) => setTrs(listOf(r.data).filter((t) => t.is_active !== false))).catch(() => {}); }, []);
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
+  const call = async (fn, okMsg) => { setBusy(true); setErr(''); try { const r = await fn(); if (r?.data?.id) setRun(r.data); if (okMsg) flash(okMsg); loadList(); return r; } catch (e) { setErr(errOf(e)); return null; } finally { setBusy(false); } };
+  const create = () => call(() => axiosClient.post('/staff-payroll/', nf), 'اتحسب المسير ✅ راجعه قبل الاعتماد');
+  const approve = () => { if (!window.confirm('بعد الاعتماد: أيام الحضور بتتقفل، والخصومات والمكافآت بتتحسب، والسلف بتتخصم، والقيد بيتعمل. متأكد؟')) return; call(() => axiosClient.post(`/staff-payroll/${run.id}/approve/`, { manager_password: pwd }), 'اتعمد ✅'); };
+  const removeDraft = async () => { if (!window.confirm('تلغي المسودة دي؟')) return; const r = await call(() => axiosClient.delete(`/staff-payroll/${run.id}/`), 'المسودة اتلغت'); if (r) setRun(null); };
+  const pay = async () => { const r = await call(() => axiosClient.post(`/staff-payroll/${run.id}/pay/`, { treasury_id: payBox.treasury_id, line_ids: payBox.ids, manager_password: pwd }), null); if (r) { flash(`اتصرف ${money(r.data.paid_now)} ✅`); setPayBox(null); } };
+  const saveEdit = async () => { const r = await call(() => axiosClient.post(`/staff-payroll/${run.id}/edit-line/`, { line_id: edit.line.id, changes: edit.changes, note: edit.note }), 'اتعدل ✅'); if (r) setEdit(null); };
+  const report = () => ({ title: `مسير مرتبات ${run.number} (${run.period_start} → ${run.period_end})`, filename: `payroll_${run.number}`,
+    columns: [{ key: 'name', header: 'الموظف', width: 20 }, { key: 'base', header: 'الأساسي', type: 'money' }, { key: 'add', header: 'إضافي ومكافآت', type: 'money' }, { key: 'att', header: 'خصم الحضور', type: 'money' },
+      { key: 'pen', header: 'جزاءات', type: 'money' }, { key: 'rec', header: 'سلف وبضاعة', type: 'money' }, { key: 'net', header: 'الصافي', type: 'money' }, { key: 'paid', header: 'اتصرف', width: 10 }],
+    rows: run.lines.map((l) => ({ name: l.name, base: Number(l.base), add: Number(l.overtime_amount) + Number(l.holiday_extra) + Number(l.bonuses),
+      att: Number(l.absence_deduction) + Number(l.unpaid_leave_deduction) + Number(l.unpaid_holiday_deduction) + Number(l.late_deduction) + Number(l.early_deduction),
+      pen: Number(l.penalties), rec: Number(l.recovered), net: Number(l.net), paid: l.paid ? 'أيوه' : 'لأ' })), totals: { net: Number(run.totals.net) } });
+  const printSlips = (lines) => {
+    const w = window.open('', '_blank'); if (!w) return;
+    const row = (k, v, c = '') => `<tr><td>${k}</td><td style="text-align:left;${c}">${money(v)}</td></tr>`;
+    const slips = lines.map((l) => `<div class="slip"><h2>قسيمة مرتب</h2><div class="m"><b>${l.name}</b> · ${l.job_title || ''}<br/>${run.number} · من ${run.period_start} لـ ${run.period_end}</div>
+      <div class="m">${Object.entries(l.days || {}).filter(([k, v]) => DAYS_L[k] && v).map(([k, v]) => `${DAYS_L[k]}: ${v}`).join(' · ')}</div>
+      <table>${row('الأساسي', l.base)}${ADD.filter(([k]) => Number(l[k])).map(([k, n]) => row('+ ' + n, l[k], 'color:#047857')).join('')}${Number(l.manual_adjust) ? row('تسوية: ' + (l.manual_note || ''), l.manual_adjust) : ''}
+      ${DED.filter(([k]) => Number(l[k])).map(([k, n]) => row('− ' + n, l[k], 'color:#b91c1c')).join('')}<tr class="t"><td>الصافي</td><td style="text-align:left">${money(l.net)}</td></tr>
+      ${Number(l.shortfall) ? `<tr><td>عجز مرحّل للمرتب الجاي</td><td style="text-align:left">${money(l.shortfall)}</td></tr>` : ''}</table>
+      <div class="sig">توقيع الموظف: ____________</div></div>`).join('');
+    w.document.write(`<html dir="rtl"><head><meta charset="utf-8"><title>${run.number}</title><style>body{font-family:Tahoma,Arial;margin:0}.slip{width:90mm;padding:6mm;margin:4mm auto;border:1px dashed #999;page-break-inside:avoid;font-size:12px}h2{margin:0 0 4px;font-size:15px;text-align:center}.m{color:#444;margin:4px 0}table{width:100%;border-collapse:collapse}td{padding:3px 0;border-bottom:1px dotted #ccc}.t td{font-weight:bold;font-size:14px;border-top:2px solid #000}.sig{margin-top:14px}</style></head><body>${slips}<script>window.onload=()=>window.print()<\/script></body></html>`);
+    w.document.close();
+  };
+  if (!run) return (
+    <div className="space-y-3">
+      <Box msg={msg} err={err} />
+      <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+        <h3 className="font-black text-sm">مسير جديد</h3>
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-xs font-bold">النوع<br /><select className={input} value={nf.cycle} onChange={(e) => setNf({ ...nf, cycle: e.target.value, ...suggestPeriod(e.target.value, settings) })}><option value="MONTHLY">شهري</option><option value="WEEKLY">أسبوعي (الأسبوعي واليومية)</option></select></label>
+          <label className="text-xs font-bold">من<br /><input type="date" className={input} value={nf.from} onChange={(e) => setNf({ ...nf, from: e.target.value })} /></label>
+          <label className="text-xs font-bold">إلى<br /><input type="date" max={today()} className={input} value={nf.to} onChange={(e) => setNf({ ...nf, to: e.target.value })} /></label>
+          <label className="text-xs font-bold flex-1 min-w-40">ملاحظة<br /><input className={`${input} w-full`} value={nf.notes} onChange={(e) => setNf({ ...nf, notes: e.target.value })} /></label>
+          <button className={btn()} disabled={busy} onClick={create}>{busy ? 'جاري الحساب...' : 'احسب المسير'}</button>
+        </div>
+        <p className="text-[11px] text-slate-400">البرنامج بيحسب كل موظف من النوع ده من حضوره وحسابه. لو فيه أيام ماتسجلتش هيقولك عليها الأول.</p>
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-xs text-slate-500"><tr>{['الرقم', 'النوع', 'الفترة', 'الموظفين', 'الصافي', 'الحالة', ''].map((h) => <th key={h} className="p-2 text-start">{h}</th>)}</tr></thead>
+          <tbody>{list.map((r) => (
+            <tr key={r.id} className="border-t border-slate-100">
+              <td className="p-2 font-mono text-xs">{r.number}</td><td className="p-2 text-xs">{r.cycle_label}</td><td className="p-2 text-xs">{r.period_start} ← {r.period_end}</td>
+              <td className="p-2">{r.employees}</td><td className="p-2 font-bold">{money(r.net)}</td>
+              <td className="p-2"><span className={`px-2 py-0.5 rounded text-[11px] font-black ${ST_COLOR[r.status]}`}>{r.status_label}</span></td>
+              <td className="p-2"><button className="text-xs font-bold text-sky-700 hover:underline cursor-pointer" onClick={() => open(r.id)}>فتح</button></td>
+            </tr>))}
+            {!list.length && <tr><td colSpan="7" className="p-6 text-center text-slate-400">لسه مفيش مسيرات</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+  const draft = run.status === 'DRAFT';
+  const unpaid = run.lines.filter((l) => !l.paid && Number(l.net) > 0);
+  return (
+    <div className="space-y-3">
+      <div className="bg-white p-3 rounded-xl border border-slate-200 flex flex-wrap items-center gap-2">
+        <button className={btn('slate')} onClick={() => { setRun(null); loadList(); }}><ChevronRight size={14} /> المسيرات</button>
+        <span className="font-black">{run.number}</span><span className="text-xs text-slate-500">{run.cycle_label} · {run.period_start} ← {run.period_end}</span>
+        <span className={`px-2 py-0.5 rounded text-[11px] font-black ${ST_COLOR[run.status]}`}>{run.status_label}</span>
+        <div className="flex-1" />
+        <ExportButtons getReport={report} />
+        <button className={btn('slate')} onClick={() => printSlips(run.lines)}>🖨️ القسايم</button>
+      </div>
+      <Box msg={msg} err={err} />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+        {[['الأساسي', run.totals.base], ['المكافآت', run.totals.bonuses], ['الخصومات', run.totals.penalties], ['السلف والبضاعة', run.totals.recovered], ['الصافي', run.totals.net]].map(([l, v]) => (
+          <div key={l} className="bg-white p-3 rounded-xl border border-slate-200"><div className="text-[11px] text-slate-500 font-bold">{l}</div><div className="font-black text-lg">{money(v)}</div></div>))}
+      </div>
+      <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-xs text-slate-500"><tr>{['الموظف', 'الأيام', 'الأساسي', '+ إضافي ومكافآت', '− خصم الحضور', '− جزاءات', '− سلف وبضاعة', 'الصافي', ''].map((h) => <th key={h} className="p-2 text-start whitespace-nowrap">{h}</th>)}</tr></thead>
+          <tbody>{run.lines.map((l) => {
+            const att = ['absence_deduction', 'unpaid_leave_deduction', 'unpaid_holiday_deduction', 'late_deduction', 'early_deduction'].reduce((a, k) => a + Number(l[k]), 0);
+            return (
+              <tr key={l.id} className="border-t border-slate-100">
+                <td className="p-2 font-bold">{l.name}<div className="text-[11px] text-slate-400 font-normal">{PAY[l.pay_type]} · {money(l.salary)}{l.manual_note ? ` · ✏️ ${l.manual_note}` : ''}</div></td>
+                <td className="p-2 text-[11px] text-slate-500">{Object.entries(l.days || {}).filter(([k, v]) => DAYS_L[k] && v).map(([k, v]) => `${DAYS_L[k]} ${v}`).join(' · ')}</td>
+                <td className="p-2">{money(l.base)}</td>
+                <td className="p-2 text-emerald-700">{money(Number(l.overtime_amount) + Number(l.holiday_extra) + Number(l.bonuses) + Math.max(0, Number(l.manual_adjust)))}</td>
+                <td className="p-2 text-rose-700">{money(att - Math.min(0, Number(l.manual_adjust)))}</td>
+                <td className="p-2 text-rose-700">{money(l.penalties)}</td>
+                <td className="p-2 text-rose-700">{money(l.recovered)}{Number(l.recovery_due) > Number(l.recovered) && <div className="text-[10px] text-slate-400">المطلوب {money(l.recovery_due)}</div>}</td>
+                <td className="p-2 font-black">{money(l.net)}{Number(l.shortfall) > 0 && <div className="text-[10px] text-rose-600">عجز مرحّل {money(l.shortfall)}</div>}</td>
+                <td className="p-2 whitespace-nowrap">
+                  {draft && <button className="text-xs font-bold text-sky-700 hover:underline mx-1 cursor-pointer" onClick={() => setEdit({ line: l, changes: {}, note: l.manual_note })}>تعديل</button>}
+                  <button className="text-xs font-bold text-slate-600 hover:underline mx-1 cursor-pointer" onClick={() => printSlips([l])}>قسيمة</button>
+                  {!draft && (l.paid ? <span className="text-[11px] text-emerald-700 font-bold">اتصرف</span> : Number(l.net) > 0 && <button className="text-xs font-bold text-emerald-700 hover:underline mx-1 cursor-pointer" onClick={() => setPayBox({ ids: [l.id], treasury_id: '', total: l.net })}>صرف</button>)}
+                </td>
+              </tr>);
+          })}</tbody>
+        </table>
+      </div>
+      <div className="bg-white p-3 rounded-xl border border-slate-200 flex flex-wrap items-center gap-2">
+        <input type="password" className={input} placeholder="باسورد المدير (لو انت مش مدير)" value={pwd} onChange={(e) => setPwd(e.target.value)} />
+        {draft && <>
+          <button className={btn('slate')} disabled={busy} onClick={() => call(() => axiosClient.post(`/staff-payroll/${run.id}/recalc/`), 'اتحسب تاني ✅')}>إعادة حساب</button>
+          <button className={btn()} disabled={busy} onClick={approve}>اعتماد المسير</button>
+          <button className="h-9 px-3 rounded-lg text-xs font-black text-rose-700 border border-rose-200 bg-rose-50 cursor-pointer" disabled={busy} onClick={removeDraft}>إلغاء المسودة</button>
+        </>}
+        {!draft && unpaid.length > 0 && <button className={btn()} onClick={() => setPayBox({ ids: null, treasury_id: '', total: run.unpaid })}>صرف الكل ({money(run.unpaid)})</button>}
+        <span className="text-[11px] text-slate-400">{draft ? 'المسودة بتتعدل وتتحسب تاني براحتك. الاعتماد بيقفل الأيام ويعمل القيد.' : run.approved_by ? `اتعمد بواسطة ${run.approved_by}` : ''}</span>
+      </div>
+      {edit && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEdit(null)}>
+          <div className="bg-white rounded-xl p-4 w-full max-w-xl max-h-[90vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between"><h3 className="font-black">تعديل مرتب {edit.line.name}</h3><button className="cursor-pointer" onClick={() => setEdit(null)}><X size={18} /></button></div>
+            <Box err={err} />
+            <p className="text-[11px] text-slate-500">سيب الخانة فاضية علشان ترجع للرقم المحسوب. الرقم الحالي مكتوب جوه الخانة.</p>
+            <div className="grid grid-cols-2 gap-2">
+              {EDIT_FIELDS.map(([k, l]) => <label key={k} className="text-xs font-bold space-y-1 block">{l}{edit.line.overrides?.[k] !== undefined && <span className="text-amber-600"> (متعدّل)</span>}
+                <input type="number" min="0" className={`${input} w-full`} placeholder={edit.line[k]} value={edit.changes[k] ?? (edit.line.overrides?.[k] ?? '')} onChange={(e) => setEdit({ ...edit, changes: { ...edit.changes, [k]: e.target.value } })} /></label>)}
+              <label className="text-xs font-bold space-y-1 block">تسوية (+ أو −)<input type="number" className={`${input} w-full`} value={edit.changes.manual_adjust ?? edit.line.manual_adjust} onChange={(e) => setEdit({ ...edit, changes: { ...edit.changes, manual_adjust: e.target.value } })} /></label>
+            </div>
+            <label className="text-xs font-bold space-y-1 block">سبب التعديل *<input className={`${input} w-full`} value={edit.note} onChange={(e) => setEdit({ ...edit, note: e.target.value })} /></label>
+            <div className="flex gap-2 justify-end"><button className={btn('slate')} onClick={() => setEdit(null)}>رجوع</button><button className={btn()} disabled={busy} onClick={saveEdit}>حفظ</button></div>
+          </div>
+        </div>)}
+      {payBox && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setPayBox(null)}>
+          <div className="bg-white rounded-xl p-4 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-black">صرف {money(payBox.total)}</h3>
+            <Box err={err} />
+            <select className={`${input} w-full`} value={payBox.treasury_id} onChange={(e) => setPayBox({ ...payBox, treasury_id: e.target.value })}><option value="">من خزنة...</option>{trs.map((t) => <option key={t.id} value={t.id}>{t.name} (رصيدها {money(t.current_balance)})</option>)}</select>
+            <div className="flex gap-2 justify-end"><button className={btn('slate')} onClick={() => setPayBox(null)}>رجوع</button><button className={btn()} disabled={busy || !payBox.treasury_id} onClick={pay}>تأكيد الصرف</button></div>
+          </div>
+        </div>)}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- settings + holidays
 function SettingsTab({ settings, canEdit, reload }) {
   const [s, setS] = useState(settings); const [hol, setHol] = useState([]); const [nh, setNh] = useState({ date: '', name: '' });
@@ -441,7 +596,7 @@ function SettingsTab({ settings, canEdit, reload }) {
           {row('لو اشتغل في العطلة', sel('holiday_work_mode', [['NORMAL', 'يوم عادي'], ['OVERTIME', 'إضافي بمعامل'], ['EXTRA_DAY', 'أجر يوم زيادة × معامل']]))}
           {row('معامل الشغل في العطلة', numIn('holiday_work_multiplier'))}
         </div>
-        <h3 className="font-black text-sm pt-2">البضاعة والسلف (للمراحل الجاية)</h3>
+        <h3 className="font-black text-sm pt-2">البضاعة والسلف</h3>
         <div className="grid md:grid-cols-3 gap-3">
           {row('سعر البضاعة للموظف', sel('goods_price_mode', [['SALE', 'سعر البيع'], ['SALE_DISCOUNT', 'سعر البيع بخصم %'], ['COST', 'التكلفة']]))}
           {row('نسبة خصم الموظفين %', numIn('goods_discount_pct'))}
@@ -464,7 +619,7 @@ function SettingsTab({ settings, canEdit, reload }) {
 }
 
 // ---------------------------------------------------------------- page
-const TABS = [['att', 'الحضور', Clock], ['roster', 'جدول الإجازات', CalendarDays], ['emps', 'الموظفين', Users], ['account', 'الحساب', Wallet], ['report', 'تقرير الحضور', BarChart3], ['settings', 'الإعدادات', Settings]];
+const TABS = [['att', 'الحضور', Clock], ['roster', 'جدول الإجازات', CalendarDays], ['emps', 'الموظفين', Users], ['account', 'الحساب', Wallet], ['payroll', 'المرتبات', Banknote], ['report', 'تقرير الحضور', BarChart3], ['settings', 'الإعدادات', Settings]];
 export default function StaffPage() {
   const [tab, setTab] = useState('att');
   const [cfg, setCfg] = useState(null); const [canEdit, setCanEdit] = useState(false); const [err, setErr] = useState('');
@@ -484,6 +639,7 @@ export default function StaffPage() {
       {cfg && tab === 'roster' && <RosterTab key={rev} settings={cfg} />}
       {tab === 'emps' && <EmployeesTab onChange={() => setRev((x) => x + 1)} />}
       {tab === 'account' && <AccountTab key={rev} />}
+      {cfg && tab === 'payroll' && <PayrollTab key={rev} settings={cfg} />}
       {tab === 'report' && <ReportTab />}
       {cfg && tab === 'settings' && <SettingsTab settings={cfg} canEdit={canEdit} reload={loadCfg} />}
     </div>

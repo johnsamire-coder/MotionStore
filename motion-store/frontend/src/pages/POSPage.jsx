@@ -114,6 +114,7 @@ export default function POSPage() {
   const [openingCash, setOpeningCash] = useState('0');
   const [showPay, setShowPay] = useState(false);
   const [payRows, setPayRows] = useState([]);
+  const [empGoods, setEmpGoods] = useState(null); // EMPLOYEE_GOODS: { setup, employee_id }
   const [cashGiven, setCashGiven] = useState('');
   const [receipt, setReceipt] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -217,7 +218,7 @@ export default function POSPage() {
       setShift(sh); if (!sh) { setShowOpenShift(true); try { const trr = await axiosClient.get('/treasuries/'); const dd = listOf(trr.data).find((x) => String(x.id) === String(term.cash_drawer)); if (dd) setOpeningCash(String(dd.current_balance)); } catch (e2) { /* ignore */ } }
       setStock(listOf(stRes.data));
       setPieceItems(piItems);
-      setPayMethods(listOf(pmRes.data));
+      setPayMethods(listOf(pmRes.data).filter((m) => m.method_type !== 'EMPLOYEE'));
       setActiveOffers(listOf(ofRes.data));
       try { const allH = JSON.parse(localStorage.getItem(HOLD_KEY(term.id)) || '[]'); const keepH = allH.filter((h) => sh && h.shiftId === sh.id); setHeld(keepH); localStorage.setItem(HOLD_KEY(term.id), JSON.stringify(keepH)); } catch (e) { setHeld([]); }
     } catch (e) { apiErr(e); }
@@ -402,7 +403,7 @@ export default function POSPage() {
     } catch (e) { apiErr(e); setCoupon(null); }
   };
 
-  const resetSale = () => { setOnline(false); setOnl({ name: '', phone: '', address: '', courier: '' }); setApprovedBy(null); setApprovedPwd(''); setCart([]); setBundle(null); setBundleCount(0); setDiscount(''); setDelivery(''); setPrevBal(''); setNotes(''); setCustQ(''); setCust(null); setCustNew(false); setCustNameIn(''); setPicked([]); setCoupon(null); setCouponIn(''); setPayRows([]); setCashGiven(''); };
+  const resetSale = () => { setOnline(false); setOnl({ name: '', phone: '', address: '', courier: '' }); setApprovedBy(null); setApprovedPwd(''); setCart([]); setBundle(null); setBundleCount(0); setDiscount(''); setDelivery(''); setPrevBal(''); setNotes(''); setCustQ(''); setCust(null); setCustNew(false); setCustNameIn(''); setPicked([]); setCoupon(null); setCouponIn(''); setPayRows([]); setCashGiven(''); setEmpGoods(null); };
 
   const holdSale = () => {
     if (!cart.length) return;
@@ -421,7 +422,7 @@ export default function POSPage() {
     if (!cart.length) { showErr(T.needItems); return; }
     if (cart.some((l) => (l.mode === 'PIECE' ? num(l.qty) < 1 : num(l.kg) <= 0))) { showErr(T.badLine); return; } if (cart.some((l) => num(l.price) <= 0)) { showErr(isRTL ? 'فيه صنف سعره صفر. حط سعره في التسعير أو اكتبه في السطر' : 'A line has a zero price. Set its price first'); return; }
     const cashM = payMethods.find((m) => m.method_type === 'CASH') || payMethods[0];
-    setPayRows([{ key: 'r0', id: cashM ? cashM.id : '', amount: required.toFixed(2) }]); setCashGiven(required.toFixed(2)); setShowPay(true);
+    setEmpGoods(null); setPayRows([{ key: 'r0', id: cashM ? cashM.id : '', amount: required.toFixed(2) }]); setCashGiven(required.toFixed(2)); setShowPay(true);
   };
   const addPayRow = () => { const used = payRows.map((r) => r.id); const m = payMethods.find((x) => !used.includes(x.id)); if (!m) return; setPayRows([...payRows, { key: `r${Date.now()}`, id: m.id, amount: Math.max(0, remaining).toFixed(2) }]); };
   const [online, setOnline] = useState(false);
@@ -471,8 +472,9 @@ export default function POSPage() {
 
   const submitSale = async (printAfterSave = true) => {
     if (busy) return;
-    if (Math.abs(remaining) >= 0.01 || (cashRow && changeDue < 0)) { showErr(isRTL ? 'راجع قيمة الدفع قبل التأكيد' : 'Check the payment amount before confirming'); return; }
-    if (!cust && (!phoneDigits || phoneDigits.length < 6 || !custNameIn.trim())) {
+    if (!empGoods && (Math.abs(remaining) >= 0.01 || (cashRow && changeDue < 0))) { showErr(isRTL ? 'راجع قيمة الدفع قبل التأكيد' : 'Check the payment amount before confirming'); return; }
+    if (empGoods && !empGoods.employee_id) { showErr('اختار الموظف'); return; }
+    if (!empGoods && !cust && (!phoneDigits || phoneDigits.length < 6 || !custNameIn.trim())) {
       showErr('برجاء كتابة اسم العميل ورقم التليفون قبل تأكيد الفاتورة');
       return;
     }
@@ -486,10 +488,12 @@ export default function POSPage() {
       coupon_code: coupon ? coupon.code : '', manager_password: approvedPwd || undefined, applied_offers: applied.map((x) => ({ id: x.o.id, name: x.o.name, discount: x.d.toFixed(2), coupon: x.coupon }))
     };
     if (cust) body.customer_id = cust.id; else if (phoneDigits) { body.customer_phone = phoneDigits; body.customer_name = custNameIn; }
+    if (empGoods) { Object.assign(body, { employee_id: empGoods.employee_id, applied_offers: [], coupon_code: '', discount_amount: '0.00', delivery_fee: '0.00', previous_balance: '0.00', online: undefined, payments: [{ payment_method_id: empGoods.setup.payment_method_id, amount: required.toFixed(2) }] }); }
     try {
       const r = await axiosClient.post(editInv ? '/sales/' + editInv.id + '/replace/' : '/sales/checkout/', editInv ? { ...body, manager_password: editInv.pw } : body); if (editInv) setEditInv(null); let rc = cust; if (!rc && phoneDigits) { try { const lr = await axiosClient.get(`/customers/lookup/?q=${phoneDigits}`); rc = lr.data; } catch (e2) { rc = null; } }
-      const nextReceipt = { number: r.data.invoice_number, lines: cart, subtotal, offers: applied.map((x) => ({ name: x.o.name, d: x.d })), discount: num(discount), delivery: num(delivery), prev: num(prevBal), required,
-        pays: payRows.filter((x) => num(x.amount) > 0).map((x) => ({ name: payMethods.find((m) => m.id === x.id)?.name || '', amount: num(x.amount) })), cashGiven: num(cashGiven), change: changeDue,
+      const _empName = empGoods ? (empGoods.setup.employees.find((x) => x.id === empGoods.employee_id)?.name || '') : '';
+      const nextReceipt = { number: r.data.invoice_number, lines: cart, subtotal, offers: empGoods ? [] : applied.map((x) => ({ name: x.o.name, d: x.d })), discount: empGoods ? num(r.data.discount_amount) : num(discount), delivery: empGoods ? 0 : num(delivery), prev: empGoods ? 0 : num(prevBal), required: empGoods ? num(r.data.total_amount) : required,
+        pays: empGoods ? [{ name: `على حساب الموظف ${_empName}`, amount: num(r.data.total_amount) }] : payRows.filter((x) => num(x.amount) > 0).map((x) => ({ name: payMethods.find((m) => m.id === x.id)?.name || '', amount: num(x.amount) })), cashGiven: empGoods ? 0 : num(cashGiven), change: empGoods ? 0 : changeDue,
         customer: cust ? `${cust.code || ''} ${cust.name}` : '', custName: rc ? rc.name : custNameIn, custPhone: rc ? rc.phone : phoneDigits, custCode: rc ? (rc.code || '') : '', at: new Date().toLocaleString('en-GB') };
       setReceipt(nextReceipt);
       setShowPay(false); resetSale(); loadShop(terminal);
@@ -887,16 +891,25 @@ export default function POSPage() {
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-4">
             <div className="flex items-center justify-between"><div className="text-base font-bold">{T.payTitle}</div><button type="button" onClick={() => setShowPay(false)} aria-label="close" className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><X size={16} /></button></div>
             <div className="text-center text-3xl font-black text-emerald-800">{money(required)} <span className="text-sm">{T.cur}</span></div>{err && <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2 rounded-lg text-xs font-bold">{err}</div>}
-            <OnlineBox online={online} setOnline={setOnline} onl={onl} setOnl={setOnl} /><button type="button" onClick={oldPaper} className="mb-2 h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">📝 رصيد قديم (ورقة)</button>{payRows.map((r) => (
+            <OnlineBox online={online} setOnline={setOnline} onl={onl} setOnl={setOnl} /><button type="button" onClick={oldPaper} className="mb-2 h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">📝 رصيد قديم (ورقة)</button>
+            {!empGoods && <button type="button" onClick={async () => { try { const r = await axiosClient.get('/staff-goods/setup/'); setEmpGoods({ setup: r.data, employee_id: '' }); } catch (e) { apiErr(e); } }} className="mb-2 ms-2 h-8 px-3 rounded-lg border border-sky-300 bg-sky-50 text-sky-800 text-xs font-bold cursor-pointer">🧑‍💼 على حساب موظف</button>}
+            {empGoods && (
+              <div className="border border-sky-300 bg-sky-50 rounded-xl p-3 space-y-2">
+                <div className="flex justify-between items-center"><span className="text-sm font-black text-sky-900">🧑‍💼 بضاعة على حساب موظف</span><button type="button" onClick={() => setEmpGoods(null)} className="text-xs font-bold text-slate-600 underline cursor-pointer">رجوع للدفع العادي</button></div>
+                <select value={empGoods.employee_id} onChange={(e) => setEmpGoods({ ...empGoods, employee_id: e.target.value })} className={input + ' w-full'}><option value="">اختار الموظف...</option>{empGoods.setup.employees.map((m) => <option key={m.id} value={m.id}>{m.name}{m.job_title ? ` (${m.job_title})` : ''} · عليه {money(m.owed)}</option>)}</select>
+                <div className="text-xs font-bold text-sky-800">{empGoods.setup.price_mode === 'COST' ? 'السعر: بالتكلفة (بيتحسب على السيرفر)' : empGoods.setup.price_mode === 'SALE_DISCOUNT' ? `السعر: سعر البيع ناقص ${empGoods.setup.discount_pct}% = ${money(required * (100 - Number(empGoods.setup.discount_pct || 0)) / 100)}` : 'السعر: سعر البيع العادي'}</div>
+                <div className="text-[11px] text-slate-500">مفيش فلوس بتدخل الدرج. المبلغ بيتسجل على الموظف وبيتخصم من مرتبه. العروض والكوبون والتوصيل مش بيتحسبوا.</div>
+              </div>)}
+            {!empGoods && payRows.map((r) => (
               <div key={r.key} className="flex gap-2 items-center">
                 <select value={r.id} onChange={(e) => updPay(r.key, 'id', e.target.value)} className={input + ' flex-1'}>{payMethods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select>{isVoucherPm(r.id) && <input value={r.code || ''} onChange={(e) => updPay(r.key, 'code', e.target.value.toUpperCase())} onBlur={(e) => checkVoucher(r, e.target.value)} placeholder="رقم القسيمة" title={r.bal ? 'رصيد القسيمة ' + r.bal : ''} className={input + ' w-28 text-center'} />}
                 <input type="number" min="0" step="0.01" value={r.amount} onChange={(e) => updPay(r.key, 'amount', e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSale(true); } }} className={input + ' w-32 text-center font-bold'} />
                 {payRows.length > 1 && <button type="button" onClick={() => setPayRows(payRows.filter((x) => x.key !== r.key))} aria-label="remove" className="h-10 w-10 rounded-lg border border-red-200 bg-red-50 text-red-700 flex items-center justify-center cursor-pointer"><Trash2 size={14} /></button>}
               </div>
             ))}
-            {payRows.length < payMethods.length && <button type="button" onClick={addPayRow} className="h-9 px-3 rounded-lg border border-dashed border-emerald-600 bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-1 cursor-pointer"><Plus size={13} /> {T.addPay}</button>}
-            <div className={`text-center text-sm font-bold ${Math.abs(remaining) < 0.01 ? 'text-emerald-700' : 'text-rose-700'}`}>{T.remaining}: {money(remaining)} {T.cur}</div>
-            {cashRow && (
+            {!empGoods && payRows.length < payMethods.length && <button type="button" onClick={addPayRow} className="h-9 px-3 rounded-lg border border-dashed border-emerald-600 bg-emerald-50 text-emerald-800 text-xs font-bold flex items-center gap-1 cursor-pointer"><Plus size={13} /> {T.addPay}</button>}
+            {!empGoods && <div className={`text-center text-sm font-bold ${Math.abs(remaining) < 0.01 ? 'text-emerald-700' : 'text-rose-700'}`}>{T.remaining}: {money(remaining)} {T.cur}</div>}
+            {!empGoods && cashRow && (
               <div className="grid grid-cols-2 gap-2 items-end">
                 <label className="text-xs font-bold text-slate-600 space-y-1 block">{T.cashGiven}<input type="number" min="0" step="0.01" value={cashGiven} onChange={(e) => setCashGiven(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSale(true); } }} className={input + ' w-full text-center font-bold'} /></label>
                 <div className={`text-center text-sm font-bold pb-2 ${changeDue >= 0 ? 'text-slate-800' : 'text-rose-700'}`}>{T.changeDue}: {money(changeDue)}</div>
@@ -905,7 +918,7 @@ export default function POSPage() {
             {hasCredit && !cust && phoneDigits.length < 6 && <div className="text-xs font-bold text-rose-700">{T.needPhone}</div>}
             <div className="flex gap-2">
               <button type="button" onClick={() => setShowPay(false)} className="flex-1 h-11 rounded-xl border border-slate-300 bg-white text-sm font-bold cursor-pointer">{T.cancel}</button>
-              <button type="button" disabled={busy || Math.abs(remaining) >= 0.01 || (cashRow && changeDue < 0) || (hasCredit && !cust && phoneDigits.length < 6)} onClick={submitSale} className="flex-1 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white text-sm font-black cursor-pointer">{busy ? T.saving : T.confirm}</button>
+              <button type="button" disabled={busy || (empGoods ? !empGoods.employee_id : (Math.abs(remaining) >= 0.01 || (cashRow && changeDue < 0) || (hasCredit && !cust && phoneDigits.length < 6)))} onClick={submitSale} className="flex-1 h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white text-sm font-black cursor-pointer">{busy ? T.saving : T.confirm}</button>
             </div>
           </div>
         </div>

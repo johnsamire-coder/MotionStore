@@ -16,6 +16,8 @@ RULES = [
     (r'^/api/v1/users/', A, ['/users']),
     (r'^/api/v1/staff/', A, ['/staff']),
     (r'^/api/v1/staff-ledger/', A, ['/staff']),
+    (r'^/api/v1/staff-payroll/', A, ['/staff']),
+    (r'^/api/v1/staff-goods/', A, ['/pos', '/staff']),
     (r'^/api/v1/expense', A, ['/expenses']),
     (r'^/api/v1/treasuries/(transfer|adjust|settle_custody|custodies|[^/]+/statement)', A, ['/treasury']),
     (r'^/api/v1/treasuries/', W, ['/treasury', '/settings']),

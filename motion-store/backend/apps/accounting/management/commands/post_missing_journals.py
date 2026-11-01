@@ -58,7 +58,18 @@ class Command(BaseCommand):
                         staff_todo.append(e)
             except Exception as ex:
                 self.stdout.write(f"  staff entries skipped: {ex}")
-            if not pur_todo and not srt_todo and not pay_todo and not staff_todo:
+            run_todo = []
+            try:
+                from apps.staff.models import PayrollRun
+                from apps.accounting.auto_journals import post_payroll_journal, post_payroll_payment_journal
+                done_runs = set(JournalEntry.objects.filter(tenant=tenant, source_document_type='PayrollRun').values_list('source_document_id', flat=True))
+                for r in PayrollRun.objects.filter(tenant=tenant).exclude(status='DRAFT'):
+                    paid = sum((l.paid_amount for l in r.lines.all()), ZERO)
+                    if str(r.id) not in done_runs or _q(paid) != _posted_on(tenant, 'PayrollPayment', r.id, '2030'):
+                        run_todo.append(r)
+            except Exception as ex:
+                self.stdout.write(f"  payroll runs skipped: {ex}")
+            if not pur_todo and not srt_todo and not pay_todo and not staff_todo and not run_todo:
                 continue
             pur_total = sum((_q(i.total_cost) for i in pur_todo if str(i.status) != 'CANCELLED'), Decimal('0'))
             srt_total = sum((_q(o.raw_lot.purchase_cost) for o in srt_todo), Decimal('0'))
@@ -71,6 +82,8 @@ class Command(BaseCommand):
                 self.stdout.write(f"  sorting  {o.order_code}  {o.sorting_date}  lot {o.raw_lot.lot_code}  {o.raw_lot.purchase_cost}")
             for p in pay_todo:
                 self.stdout.write(f"  payment  {p.supplier.name}  {p.created_at.date()}  {p.amount}")
+            for r in run_todo:
+                self.stdout.write(f"  payroll  {r.number}  {r.period_start} - {r.period_end}")
             for e in staff_todo:
                 self.stdout.write(f"  staff    {e.number}  {e.date}  {e.amount}  {e.kind}{' (cancelled)' if e.cancelled else ''}")
             if not apply:
@@ -87,6 +100,9 @@ class Command(BaseCommand):
                 grand['pay' if ok else 'fail'] += 1
             for e in staff_todo:
                 ok = sync_staff_entry_journal(e)
+                grand['staff' if ok else 'fail'] += 1
+            for r in run_todo:
+                ok = post_payroll_journal(r) and post_payroll_payment_journal(r)
                 grand['staff' if ok else 'fail'] += 1
         if apply:
             self.stdout.write(self.style.SUCCESS(f"\nDone: {grand['pur']} purchase entries, {grand['srt']} sorting entries, {grand['pay']} supplier payment entries, {grand['staff']} staff entries, {grand['fail']} failed"))

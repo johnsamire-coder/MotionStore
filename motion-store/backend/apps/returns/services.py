@@ -202,7 +202,17 @@ def process_sales_return_v2(invoice_id, shift_id, cashier, items: list, refund_m
         raise ValidationError('اختار صنف واحد على الأقل وكمية ترجّعها')
     customer = invoice.customer
     pm = None
-    if refund_to_credit:
+    from apps.sales.models import SalePayment as _SP
+    _emp_entry = None  # EMPLOYEE_GOODS: goods taken on an employee account come back to his account
+    if _SP.objects.filter(sale_invoice=invoice, payment_method__method_type='EMPLOYEE').exists():
+        from apps.staff.models import EmployeeLedgerEntry as _ELE
+        _emp_entry = _ELE.objects.filter(tenant=tenant, kind='GOODS', reason=f'بضاعة فاتورة {invoice.invoice_number}').select_related('employee').first()
+        if _emp_entry is None:
+            raise ValidationError('مش لاقي حساب الموظف بتاع الفاتورة دي')
+        refund_to_credit = False
+    if _emp_entry is not None:
+        pm = PaymentMethod.objects.filter(tenant=tenant, method_type='EMPLOYEE').first()
+    elif refund_to_credit:
         if not customer:
             raise ValidationError('الفاتورة دي مالهاش عميل عشان نخصم من حسابه')
         cu = Customer.objects.select_for_update().get(pk=customer.pk)
@@ -229,11 +239,16 @@ def process_sales_return_v2(invoice_id, shift_id, cashier, items: list, refund_m
         SalesReturnLineItem.objects.create(tenant=tenant, sales_return=sr, **l)
     jv = [
         {'account_code': '4010', 'debit': total_refund, 'credit': Decimal('0.00'), 'desc': f'Sales Revenue Reversal Ret #{return_number}'},
-        {'account_code': '1050' if refund_to_credit else '1030', 'debit': Decimal('0.00'), 'credit': total_refund, 'desc': f'Refund Ret #{return_number}'},
+        {'account_code': '1060' if _emp_entry is not None else ('1050' if refund_to_credit else '1030'), 'debit': Decimal('0.00'), 'credit': total_refund, 'desc': f'Refund Ret #{return_number}'},
     ]
     if total_cogs > 0:
         jv.append({'account_code': '1020', 'debit': total_cogs, 'credit': Decimal('0.00'), 'desc': f'Inventory Restored Ret #{return_number}'})
         jv.append({'account_code': '5010', 'debit': Decimal('0.00'), 'credit': total_cogs, 'desc': f'COGS Reversal Ret #{return_number}'})
+    if _emp_entry is not None and total_refund > 0:
+        from apps.staff.models import EmployeeLedgerEntry as _ELE2
+        from apps.staff.services import _next_ledger_number as _nln
+        _ELE2.objects.create(tenant=tenant, number=_nln(tenant, 'SGRT'), employee=_emp_entry.employee, kind='GOODS_RETURN', date=now.date(),
+                             amount=total_refund, reason=f'مرتجع {return_number} من فاتورة {invoice.invoice_number}', created_by=cashier)
     if total_refund > 0:
         create_balanced_journal_entry(tenant=tenant, entry_number=f"JV-RET-{return_number}", entry_date=now.date(), source_document_type='SalesReturn',
                                       source_document_id=str(sr.id), notes=f"Sales Return #{return_number}", lines_data=jv)

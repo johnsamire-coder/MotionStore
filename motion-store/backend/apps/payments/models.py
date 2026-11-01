@@ -5,6 +5,7 @@ class PaymentMethodType(models.TextChoices):
     CASH = 'CASH', 'Cash (نقدي)'
     ELECTRONIC = 'ELECTRONIC', 'Electronic / Card / Wallet (فيزا / محفظة إلكترونية)'
     CREDIT = 'CREDIT', 'Credit / Deferred (آجل على العميل)'
+    EMPLOYEE = 'EMPLOYEE', 'Employee account (على حساب موظف)'
 
 
 class PaymentMethod(TenantAwareModel):

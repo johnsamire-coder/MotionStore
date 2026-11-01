@@ -47,7 +47,7 @@ def process_pos_sale(
     notes: str = None,
     coupon_code: str = None,
     applied_offers: list = None,
-    allowed_warehouse_id=None, online=None) -> SaleInvoice:
+    allowed_warehouse_id=None, online=None, employee=None) -> SaleInvoice:
     """
     Central POS Sale Engine:
     Decrements stock, calculates COGS & Margins, collects cash into Treasury drawer, updates Shift, and posts Double-Entry Journal Entry.
@@ -141,6 +141,32 @@ def process_pos_sale(
             'offer_label': item_data.get('offer_label') or None
         })
 
+    # EMPLOYEE_GOODS: goods taken by an employee on his account, priced by the owner's setting
+    from apps.payments.models import PaymentMethod as _PM
+    _emp_pm = [p for p in payments_data if (p.get('payment_method').method_type if isinstance(p.get('payment_method'), _PM)
+                                            else _PM.objects.filter(pk=p.get('payment_method_id') or p.get('payment_method'), tenant=tenant).values_list('method_type', flat=True).first()) == 'EMPLOYEE']
+    if _emp_pm or employee is not None:
+        if employee is None or not _emp_pm:
+            raise ValidationError('اختار الموظف وطريقة الدفع «على حساب موظف»')
+        if len(payments_data) != 1:
+            raise ValidationError('فاتورة الموظف بتتدفع كلها على حسابه (من غير طرق دفع تانية)')
+        if online or coupon_code or applied_offers or delivery_fee or previous_balance:
+            raise ValidationError('فاتورة الموظف مينفعش يبقى فيها عروض أو كوبون أو توصيل أو رصيد سابق أو أونلاين')
+        if employee.tenant_id != tenant.id or not employee.is_active:
+            raise ValidationError('الموظف ده مش موجود أو موقوف')
+        from apps.staff.models import StaffSettings as _SS
+        _s = _SS.for_tenant(tenant).merged()
+        _mode = _s.get('goods_price_mode')
+        if _mode == 'COST':
+            _target = total_cogs
+        elif _mode == 'SALE_DISCOUNT':
+            _target = (subtotal * (Decimal('100') - Decimal(str(_s.get('goods_discount_pct') or 0))) / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        else:
+            _target = subtotal
+        _target = max(Decimal('0.00'), min(subtotal, _target))
+        discount_amount = subtotal - _target
+        _emp_pm[0]['amount'] = str(_target)
+
     total_amount = subtotal - discount_amount + delivery_fee
     gross_profit = total_amount - total_cogs
 
@@ -178,6 +204,7 @@ def process_pos_sale(
     # 5. Process Payments & Treasury Receipts
     cash_collected = Decimal('0.00')
     credit_total = Decimal('0.00')
+    employee_total = Decimal('0.00')
     for p_data in payments_data:
         from apps.payments.models import PaymentMethod
         pm = p_data.get('payment_method')
@@ -185,6 +212,10 @@ def process_pos_sale(
             pm_id = p_data.get('payment_method_id') or pm
             pm = PaymentMethod.objects.get(pk=pm_id, tenant=tenant)
         p_amount = Decimal(str(p_data['amount']))
+        if pm.method_type == 'EMPLOYEE':  # EMPLOYEE_GOODS: no money moves, it goes on the employee account
+            SalePayment.objects.create(tenant=tenant, sale_invoice=invoice, payment_method=pm, amount=p_amount, reference_number=employee.name[:100])
+            employee_total += p_amount
+            continue
         if pm.method_type == 'CREDIT':
             if not customer:
                 raise ValidationError('البيع على الحساب محتاج اسم العميل وتليفونه')
@@ -258,9 +289,14 @@ def process_pos_sale(
         {'account_code': '1020', 'debit': Decimal('0.00'), 'credit': total_cogs, 'desc': f'Inventory Relief Inv #{invoice_number}'},
     ]
 
-    if credit_total > 0:
-        jv_lines[0]['debit'] = total_amount - credit_total
-        jv_lines.insert(1, {'account_code': '1050', 'debit': credit_total, 'credit': Decimal('0.00'), 'desc': f'Customer Credit Inv #{invoice_number}'})
+    if credit_total > 0 or employee_total > 0:
+        jv_lines[0]['debit'] = total_amount - credit_total - employee_total
+        if credit_total > 0:
+            jv_lines.insert(1, {'account_code': '1050', 'debit': credit_total, 'credit': Decimal('0.00'), 'desc': f'Customer Credit Inv #{invoice_number}'})
+        if employee_total > 0:
+            jv_lines.insert(1, {'account_code': '1060', 'debit': employee_total, 'credit': Decimal('0.00'), 'desc': f'Employee {employee.name} Inv #{invoice_number}'})
+            from apps.accounting.services import init_standard_chart_of_accounts as _coa
+            _coa(tenant)
         if jv_lines[0]['debit'] <= 0:
             jv_lines.pop(0)
     create_balanced_journal_entry(
@@ -272,6 +308,13 @@ def process_pos_sale(
         notes=f"POS Sale Invoice #{invoice_number}",
         lines_data=jv_lines
     )
+    if employee_total > 0:  # EMPLOYEE_GOODS: what he owes, taken back by the next payroll
+        from apps.staff.models import EmployeeLedgerEntry as _ELE, LedgerKind as _LK
+        from apps.staff.services import _next_ledger_number as _nln
+        _ELE.objects.create(tenant=tenant, number=_nln(tenant, 'SGDS'), employee=employee, kind=_LK.GOODS, date=timezone.localdate(),
+                            amount=employee_total, reason=f'بضاعة فاتورة {invoice_number}', created_by=cashier)
+        invoice.notes = ((invoice.notes or '') + f' | على حساب الموظف {employee.name}').strip(' |')
+        invoice.save(update_fields=['notes'])
 
     if online:  # ONLINE_SALES
         invoice.channel = 'ONLINE'

@@ -156,10 +156,13 @@ class LedgerKind(models.TextChoices):
     REPAYMENT = 'REPAYMENT', 'سداد نقدي'
     GOODS = 'GOODS', 'بضاعة'                      # phase 4 (from the sales screen)
     RECOVERY = 'RECOVERY', 'اتخصم من المرتب'        # phase 3 (advances / goods taken back by payroll)
+    CARRY = 'CARRY', 'عجز مرتب مرحّل'             # phase 3: deductions bigger than the pay, kept for the next payroll
+    GOODS_RETURN = 'GOODS_RETURN', 'مرتجع بضاعة'   # phase 4: goods brought back
 
 
 # What the employee owes the shop (advances + goods - repayments - recovered by payroll)
-OWED_SIGN = {LedgerKind.ADVANCE: 1, LedgerKind.GOODS: 1, LedgerKind.REPAYMENT: -1, LedgerKind.RECOVERY: -1}
+OWED_SIGN = {LedgerKind.ADVANCE: 1, LedgerKind.GOODS: 1, LedgerKind.CARRY: 1,
+             LedgerKind.REPAYMENT: -1, LedgerKind.RECOVERY: -1, LedgerKind.GOODS_RETURN: -1}
 # Waiting for the next payroll (not money yet)
 PENDING_KINDS = (LedgerKind.DEDUCTION, LedgerKind.BONUS)
 
@@ -167,7 +170,7 @@ PENDING_KINDS = (LedgerKind.DEDUCTION, LedgerKind.BONUS)
 class EmployeeLedgerEntry(TenantAwareModel):
     number = models.CharField(max_length=30, db_index=True)
     employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='ledger')
-    kind = models.CharField(max_length=10, choices=LedgerKind.choices)
+    kind = models.CharField(max_length=15, choices=LedgerKind.choices)
     date = models.DateField()
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     installment = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
@@ -186,3 +189,72 @@ class EmployeeLedgerEntry(TenantAwareModel):
         db_table = "staff_ledger_entries"
         ordering = ["date", "created_at"]
         constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="unique_staff_ledger_number")]
+
+
+# ---------------------------------------------------------------- phase 3: payroll
+class PayrollCycle(models.TextChoices):
+    MONTHLY = 'MONTHLY', 'شهري'
+    WEEKLY = 'WEEKLY', 'أسبوعي (والأسبوعي واليومية)'
+
+
+class PayrollStatus(models.TextChoices):
+    DRAFT = 'DRAFT', 'مسودة'
+    APPROVED = 'APPROVED', 'معتمد'
+    PAID = 'PAID', 'اتصرف'
+
+
+class PayrollRun(TenantAwareModel):
+    number = models.CharField(max_length=30)
+    cycle = models.CharField(max_length=10, choices=PayrollCycle.choices)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    status = models.CharField(max_length=10, choices=PayrollStatus.choices, default=PayrollStatus.DRAFT)
+    notes = models.CharField(max_length=255, blank=True, default='')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    approved_at = models.DateTimeField(null=True, blank=True)
+    settings_used = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "staff_payroll_runs"
+        ordering = ["-period_end", "-created_at"]
+        constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="unique_payroll_run_number")]
+
+
+MONEY = dict(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+
+class PayrollLine(TenantAwareModel):
+    run = models.ForeignKey(PayrollRun, on_delete=models.CASCADE, related_name='lines')
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='payroll_lines')
+    pay_type = models.CharField(max_length=10)
+    salary = models.DecimalField(**MONEY)
+    day_rate = models.DecimalField(max_digits=12, decimal_places=4, default=Decimal('0'))
+    minute_rate = models.DecimalField(max_digits=12, decimal_places=6, default=Decimal('0'))
+    days = models.JSONField(default=dict, blank=True, help_text="Day counts by status, worked on holiday/off day, employed days")
+    base = models.DecimalField(**MONEY)
+    absence_deduction = models.DecimalField(**MONEY)
+    unpaid_leave_deduction = models.DecimalField(**MONEY)
+    unpaid_holiday_deduction = models.DecimalField(**MONEY)
+    late_deduction = models.DecimalField(**MONEY)
+    early_deduction = models.DecimalField(**MONEY)
+    overtime_amount = models.DecimalField(**MONEY)
+    holiday_extra = models.DecimalField(**MONEY)
+    bonuses = models.DecimalField(**MONEY)
+    penalties = models.DecimalField(**MONEY)
+    manual_adjust = models.DecimalField(**MONEY)
+    manual_note = models.CharField(max_length=255, blank=True, default='')
+    overrides = models.JSONField(default=dict, blank=True, help_text="Fields typed by hand on the draft")
+    recovery_due = models.DecimalField(**MONEY)
+    recovered = models.DecimalField(**MONEY)
+    net = models.DecimalField(**MONEY)
+    shortfall = models.DecimalField(**MONEY)
+    paid_amount = models.DecimalField(**MONEY)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    paid_treasury = models.ForeignKey('treasury.Treasury', on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    paid_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+
+    class Meta:
+        db_table = "staff_payroll_lines"
+        ordering = ["employee__name"]
+        constraints = [models.UniqueConstraint(fields=["run", "employee"], name="unique_payroll_line")]
