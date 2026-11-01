@@ -34,6 +34,30 @@ def _err(e):
     return Response({'detail': '; '.join(getattr(e, 'messages', []) or [str(e)])}, status=400)
 
 
+# SALARY_LOCK: salaries are hidden until a manager password is typed; the server checks a short-lived
+# signed token on every salary request, so hiding is not only on the screen.
+SALARY_TTL = 15 * 60
+SALARY_SALT = 'staff-salary-unlock'
+SALARY_LOCKED = 'المرتبات مقفولة: دوس «إظهار المرتبات» واكتب باسورد المدير'
+
+
+def issue_salary_token(user, tenant):
+    from django.core import signing
+    return signing.dumps({'u': str(user.pk), 't': str(getattr(tenant, 'pk', ''))}, salt=SALARY_SALT)
+
+
+def salary_unlocked(request):
+    from django.core import signing
+    tok = request.headers.get('X-Salary-Token') if request is not None else None
+    if not tok or not getattr(request, 'user', None) or not request.user.is_authenticated:
+        return False
+    try:
+        data = signing.loads(tok, salt=SALARY_SALT, max_age=SALARY_TTL)
+    except signing.BadSignature:
+        return False
+    return data.get('u') == str(request.user.pk) and data.get('t') == str(getattr(_tenant(request), 'pk', ''))
+
+
 class EmployeeSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.username', read_only=True, default='')
 
@@ -42,7 +66,18 @@ class EmployeeSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'phone', 'job_title', 'hire_date', 'is_active', 'pay_type', 'salary', 'start_time',
                   'end_time', 'off_days_per_week', 'fixed_off_weekday', 'user', 'user_name', 'notes']
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not salary_unlocked(self.context.get('request')):
+            data['salary'] = None       # SALARY_LOCK
+        return data
+
     def validate(self, attrs):
+        if 'salary' in attrs and not salary_unlocked(self.context.get('request')):
+            if self.instance is not None or not attrs['salary']:
+                attrs.pop('salary')     # locked: an edit keeps the old salary
+            else:
+                raise serializers.ValidationError({'salary': 'المرتب مقفول: دوس «إظهار المرتبات» واكتب باسورد المدير الأول'})
         if 'name' in attrs and not (attrs['name'] or '').strip():
             raise serializers.ValidationError({'name': 'اكتب اسم الموظف'})
         if attrs.get('salary') is not None and attrs['salary'] < 0:
@@ -297,8 +332,33 @@ def _payer(request, tenant):
     return _verify_manager(tenant, request.data.get('manager_password'))
 
 
+class _SalaryLocked(Exception):
+    pass
+
+
 class PayrollViewSet(viewsets.ViewSet):
-    """ /api/v1/staff-payroll/... (screen /staff) """
+    """ /api/v1/staff-payroll/... (screen /staff). Everything but 'unlock' needs a valid salary token. """
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self.action != 'unlock' and not salary_unlocked(request):
+            raise _SalaryLocked()
+
+    def handle_exception(self, exc):
+        if isinstance(exc, _SalaryLocked):
+            return Response({'detail': SALARY_LOCKED, 'salary_locked': True}, status=403)
+        return super().handle_exception(exc)
+
+    @action(detail=False, methods=['post'])
+    def unlock(self, request):
+        from apps.api.views import _verify_manager
+        t = _tenant(request)
+        who = _verify_manager(t, request.data.get('password'))
+        if who is None:
+            return Response({'detail': 'الباسورد غلط أو صاحبه مش مدير'}, status=403)
+        import logging
+        logging.getLogger(__name__).info("Salaries shown to %s with the password of %s", request.user, who)
+        return Response({'token': issue_salary_token(request.user, t), 'expires_in': SALARY_TTL, 'by': who.username})
 
     def list(self, request):
         return Response(services.payroll_list(_tenant(request)))

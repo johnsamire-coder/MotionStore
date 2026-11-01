@@ -18,6 +18,15 @@ const WD = ['الاتنين', 'التلات', 'الأربع', 'الخميس', '�
 const pyWeekday = (s) => (parse(s).getDay() + 6) % 7;
 const weekStartOf = (s, ws) => addDays(s, -((pyWeekday(s) - ws + 7) % 7));
 
+// SALARY_LOCK: salaries show only after a manager password; the server checks this token on every salary request
+let SALARY_TOKEN = '';
+let SALARY_HOOKED = false;
+const hookSalary = () => {
+  if (SALARY_HOOKED) return;
+  SALARY_HOOKED = true;
+  axiosClient.interceptors.request.use((cfg) => { if (SALARY_TOKEN) { cfg.headers = cfg.headers || {}; cfg.headers['X-Salary-Token'] = SALARY_TOKEN; } return cfg; });
+};
+
 const STATUSES = [['', '— لسه —'], ['PRESENT', 'حاضر'], ['ABSENT', 'غياب'], ['LEAVE_PAID', 'إجازة بأجر'], ['LEAVE_UNPAID', 'إجازة من غير أجر'], ['OFF', 'إجازته'], ['HOLIDAY', 'عطلة رسمية']];
 const PAY = { MONTHLY: 'شهري ثابت', WEEKLY: 'أسبوعي ثابت', DAILY: 'يومية' };
 const input = 'h-9 px-2 border border-slate-300 rounded-lg text-sm bg-white';
@@ -149,7 +158,7 @@ function RosterTab({ settings }) {
 
 // ---------------------------------------------------------------- employees
 const emptyEmp = () => ({ name: '', phone: '', job_title: '', hire_date: '', is_active: true, pay_type: 'MONTHLY', salary: '', start_time: '10:00', end_time: '22:00', off_days_per_week: 1, fixed_off_weekday: '', user: '', notes: '' });
-function EmployeesTab({ onChange }) {
+function EmployeesTab({ onChange, salaryOpen }) {
   const [list, setList] = useState([]); const [users, setUsers] = useState([]);
   const [form, setForm] = useState(null);
   const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
@@ -161,6 +170,7 @@ function EmployeesTab({ onChange }) {
   const save = async () => {
     setBusy(true); setErr('');
     const body = { ...form, hire_date: form.hire_date || null, user: form.user || null, fixed_off_weekday: form.fixed_off_weekday === '' ? null : Number(form.fixed_off_weekday), salary: form.salary || '0' };
+    if (!salaryOpen) delete body.salary;
     try {
       if (form.id) await axiosClient.put(`/staff/employees/${form.id}/`, body); else await axiosClient.post('/staff/employees/', body);
       setForm(null); setMsg('اتحفظ ✅'); setTimeout(() => setMsg(''), 3000); await load(); onChange && onChange();
@@ -183,12 +193,12 @@ function EmployeesTab({ onChange }) {
             <tr key={e1.id} className={`border-t border-slate-100 ${e1.is_active ? '' : 'opacity-50'}`}>
               <td className="p-2 font-bold">{e1.name}{e1.user_name && <div className="text-[11px] text-slate-400 font-normal">حساب: {e1.user_name}</div>}</td>
               <td className="p-2">{e1.job_title}</td><td className="p-2">{e1.phone}</td><td className="p-2">{PAY[e1.pay_type]}</td>
-              <td className="p-2 font-bold">{Number(e1.salary).toLocaleString('en-US')}</td>
+              <td className="p-2 font-bold">{e1.salary === null || e1.salary === undefined ? <span className="text-slate-400">🔒 •••</span> : Number(e1.salary).toLocaleString('en-US')}</td>
               <td className="p-2 text-xs">{String(e1.start_time).slice(0, 5)} ← {String(e1.end_time).slice(0, 5)}</td>
               <td className="p-2 text-xs">{e1.fixed_off_weekday !== null ? `ثابتة: ${WD[e1.fixed_off_weekday]}` : `${e1.off_days_per_week} يوم بالتناوب`}</td>
               <td className="p-2 text-xs font-bold">{e1.is_active ? <span className="text-emerald-700">شغال</span> : <span className="text-slate-500">موقوف</span>}</td>
               <td className="p-2 whitespace-nowrap">
-                <button className="text-xs font-bold text-sky-700 hover:underline mx-1 cursor-pointer" onClick={() => setForm({ ...emptyEmp(), ...e1, start_time: String(e1.start_time).slice(0, 5), end_time: String(e1.end_time).slice(0, 5), hire_date: e1.hire_date || '', user: e1.user || '', fixed_off_weekday: e1.fixed_off_weekday ?? '' })}>تعديل</button>
+                <button className="text-xs font-bold text-sky-700 hover:underline mx-1 cursor-pointer" onClick={() => setForm({ ...emptyEmp(), ...e1, start_time: String(e1.start_time).slice(0, 5), end_time: String(e1.end_time).slice(0, 5), hire_date: e1.hire_date || '', user: e1.user || '', salary: e1.salary ?? '', fixed_off_weekday: e1.fixed_off_weekday ?? '' })}>تعديل</button>
                 {e1.is_active && <button className="text-xs font-bold text-rose-700 hover:underline mx-1 cursor-pointer" onClick={() => remove(e1)}><Trash2 size={12} className="inline" /></button>}
               </td>
             </tr>))}
@@ -207,7 +217,7 @@ function EmployeesTab({ onChange }) {
               {F('phone', 'التليفون', <input className={`${input} w-full`} value={form.phone} onChange={set('phone')} />)}
               {F('hire_date', 'تاريخ التعيين', <input type="date" className={`${input} w-full`} value={form.hire_date} onChange={set('hire_date')} />)}
               {F('pay_type', 'نوع المرتب', <select className={`${input} w-full`} value={form.pay_type} onChange={set('pay_type')}>{Object.entries(PAY).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>)}
-              {F('salary', form.pay_type === 'MONTHLY' ? 'المرتب في الشهر' : form.pay_type === 'WEEKLY' ? 'المرتب في الأسبوع' : 'اليومية', <input type="number" min="0" className={`${input} w-full`} value={form.salary} onChange={set('salary')} />)}
+              {F('salary', form.pay_type === 'MONTHLY' ? 'المرتب في الشهر' : form.pay_type === 'WEEKLY' ? 'المرتب في الأسبوع' : 'اليومية', <input type="number" min="0" disabled={!salaryOpen} placeholder={salaryOpen ? '' : '🔒 مقفول: اضغط «إظهار المرتبات»'} className={`${input} w-full`} value={salaryOpen ? form.salary : ''} onChange={set('salary')} />)}
               {F('start_time', 'ميعاد الحضور', <input type="time" className={`${input} w-full`} value={form.start_time} onChange={set('start_time')} />)}
               {F('end_time', 'ميعاد الانصراف', <input type="time" className={`${input} w-full`} value={form.end_time} onChange={set('end_time')} />)}
               {F('off_days_per_week', 'أيام الإجازة في الأسبوع', <input type="number" min="0" max="6" className={`${input} w-full`} value={form.off_days_per_week} onChange={set('off_days_per_week')} />)}
@@ -399,16 +409,17 @@ function suggestPeriod(cycle, settings) {
   if (cycle === 'MONTHLY') { const e = new Date(t.getFullYear(), t.getMonth(), 0); return { from: iso(new Date(e.getFullYear(), e.getMonth(), 1)), to: iso(e) }; }
   const ws = Number(settings?.week_start ?? 5); const thisStart = weekStartOf(today(), ws); return { from: addDays(thisStart, -7), to: addDays(thisStart, -1) };
 }
-function PayrollTab({ settings }) {
+function PayrollTab({ settings, salaryOpen, askUnlock, onLocked }) {
   const [list, setList] = useState([]); const [run, setRun] = useState(null); const [trs, setTrs] = useState([]);
   const [nf, setNf] = useState({ cycle: 'MONTHLY', ...suggestPeriod('MONTHLY', settings), notes: '' });
   const [edit, setEdit] = useState(null); const [payBox, setPayBox] = useState(null); const [pwd, setPwd] = useState('');
   const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
-  const loadList = async () => { try { const r = await axiosClient.get('/staff-payroll/'); setList(r.data); } catch (e) { setErr(errOf(e)); } };
-  const open = async (id) => { try { const r = await axiosClient.get(`/staff-payroll/${id}/`); setRun(r.data); setErr(''); } catch (e) { setErr(errOf(e)); } };
+  const lockedErr = (e) => { if (e.response?.data?.salary_locked) { onLocked(); return true; } return false; };
+  const loadList = async () => { if (!salaryOpen) return; try { const r = await axiosClient.get('/staff-payroll/'); setList(r.data); } catch (e) { if (!lockedErr(e)) setErr(errOf(e)); } };
+  const open = async (id) => { try { const r = await axiosClient.get(`/staff-payroll/${id}/`); setRun(r.data); setErr(''); } catch (e) { if (!lockedErr(e)) setErr(errOf(e)); } };
   useEffect(() => { loadList(); axiosClient.get('/treasuries/').then((r) => setTrs(listOf(r.data).filter((t) => t.is_active !== false))).catch(() => {}); }, []);
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 4000); };
-  const call = async (fn, okMsg) => { setBusy(true); setErr(''); try { const r = await fn(); if (r?.data?.id) setRun(r.data); if (okMsg) flash(okMsg); loadList(); return r; } catch (e) { setErr(errOf(e)); return null; } finally { setBusy(false); } };
+  const call = async (fn, okMsg) => { setBusy(true); setErr(''); try { const r = await fn(); if (r?.data?.id) setRun(r.data); if (okMsg) flash(okMsg); loadList(); return r; } catch (e) { if (!lockedErr(e)) setErr(errOf(e)); return null; } finally { setBusy(false); } };
   const create = () => call(() => axiosClient.post('/staff-payroll/', nf), 'اتحسب المسير ✅ راجعه قبل الاعتماد');
   const approve = () => { if (!window.confirm('بعد الاعتماد: أيام الحضور بتتقفل، والخصومات والمكافآت بتتحسب، والسلف بتتخصم، والقيد بيتعمل. متأكد؟')) return; call(() => axiosClient.post(`/staff-payroll/${run.id}/approve/`, { manager_password: pwd }), 'اتعمد ✅'); };
   const removeDraft = async () => { if (!window.confirm('تلغي المسودة دي؟')) return; const r = await call(() => axiosClient.delete(`/staff-payroll/${run.id}/`), 'المسودة اتلغت'); if (r) setRun(null); };
@@ -432,6 +443,14 @@ function PayrollTab({ settings }) {
     w.document.write(`<html dir="rtl"><head><meta charset="utf-8"><title>${run.number}</title><style>body{font-family:Tahoma,Arial;margin:0}.slip{width:90mm;padding:6mm;margin:4mm auto;border:1px dashed #999;page-break-inside:avoid;font-size:12px}h2{margin:0 0 4px;font-size:15px;text-align:center}.m{color:#444;margin:4px 0}table{width:100%;border-collapse:collapse}td{padding:3px 0;border-bottom:1px dotted #ccc}.t td{font-weight:bold;font-size:14px;border-top:2px solid #000}.sig{margin-top:14px}</style></head><body>${slips}<script>window.onload=()=>window.print()<\/script></body></html>`);
     w.document.close();
   };
+  if (!salaryOpen) return (
+    <div className="bg-white p-10 rounded-xl border border-slate-200 text-center space-y-3">
+      <div className="text-5xl">🔒</div>
+      <div className="font-black text-lg">المرتبات مقفولة</div>
+      <p className="text-sm text-slate-500">علشان تظهر، اكتب باسورد مدير. بتفضل ظاهرة 15 دقيقة، أو لحد ما تدوس «قفل» أو تخرج من الشاشة.</p>
+      <button className={btn()} onClick={askUnlock}>🔓 إظهار المرتبات</button>
+    </div>
+  );
   if (!run) return (
     <div className="space-y-3">
       <Box msg={msg} err={err} />
@@ -626,6 +645,19 @@ export default function StaffPage() {
   const [tab, setTab] = useState('att');
   const [cfg, setCfg] = useState(null); const [canEdit, setCanEdit] = useState(false); const [err, setErr] = useState('');
   const [rev, setRev] = useState(0);
+  const [salUntil, setSalUntil] = useState(0); const [salBox, setSalBox] = useState(null);
+  const salaryOpen = salUntil > Date.now();
+  const lockSalary = () => { SALARY_TOKEN = ''; setSalUntil(0); setRev((x) => x + 1); };
+  useEffect(() => { hookSalary(); return () => { SALARY_TOKEN = ''; }; }, []);
+  useEffect(() => { if (!salUntil) return undefined; const t = setTimeout(lockSalary, Math.max(0, salUntil - Date.now())); return () => clearTimeout(t); }, [salUntil]);
+  const unlockSalary = async () => {
+    setSalBox({ ...salBox, busy: true, err: '' });
+    try {
+      const r = await axiosClient.post('/staff-payroll/unlock/', { password: salBox.pwd });
+      SALARY_TOKEN = r.data.token; setSalUntil(Date.now() + (r.data.expires_in - 10) * 1000); setSalBox(null); setRev((x) => x + 1);
+    } catch (e) { setSalBox({ ...salBox, busy: false, pwd: '', err: errOf(e) }); }
+  };
+  const askUnlock = () => setSalBox({ pwd: '', err: '', busy: false });
   const loadCfg = async () => { try { const r = await axiosClient.get('/staff/settings/'); setCfg(r.data.settings); setCanEdit(r.data.can_edit); } catch (e) { setErr(errOf(e)); } };
   useEffect(() => { loadCfg(); }, []);
   return (
@@ -634,16 +666,31 @@ export default function StaffPage() {
         <h1 className="text-xl font-black text-slate-800 flex items-center gap-2"><Clock size={20} className="text-emerald-600" /> الحضور والمرتبات</h1>
         <p className="text-xs text-slate-500 mt-1">صاحب الشركة بيسجل مواعيد الحضور والانصراف، والبرنامج بيحسب التأخير والخروج بدري والإضافي.</p>
         <div className="flex flex-wrap gap-1.5 mt-3">{TABS.map(([k, l, I]) => (
-          <button key={k} onClick={() => setTab(k)} className={`px-3 py-2 rounded-lg text-xs font-black cursor-pointer flex items-center gap-1.5 ${tab === k ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}><I size={14} /> {l}</button>))}</div>
+          <button key={k} onClick={() => setTab(k)} className={`px-3 py-2 rounded-lg text-xs font-black cursor-pointer flex items-center gap-1.5 ${tab === k ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}><I size={14} /> {l}</button>))}
+          <div className="flex-1" />
+          {salaryOpen
+            ? <button onClick={lockSalary} className="px-3 py-2 rounded-lg text-xs font-black cursor-pointer bg-amber-100 text-amber-800 hover:bg-amber-200">🔓 المرتبات ظاهرة لحد {new Date(salUntil).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })} · قفل</button>
+            : <button onClick={askUnlock} className="px-3 py-2 rounded-lg text-xs font-black cursor-pointer bg-slate-800 text-white hover:bg-slate-900">🔒 إظهار المرتبات</button>}</div>
       </div>
       <Box err={err} />
       {cfg && tab === 'att' && <AttendanceTab key={rev} settings={cfg} />}
       {cfg && tab === 'roster' && <RosterTab key={rev} settings={cfg} />}
-      {tab === 'emps' && <EmployeesTab onChange={() => setRev((x) => x + 1)} />}
+      {tab === 'emps' && <EmployeesTab key={`e${rev}`} salaryOpen={salaryOpen} onChange={() => setRev((x) => x + 1)} />}
       {tab === 'account' && <AccountTab key={rev} />}
-      {cfg && tab === 'payroll' && <PayrollTab key={rev} settings={cfg} />}
+      {cfg && tab === 'payroll' && <PayrollTab key={`p${rev}`} settings={cfg} salaryOpen={salaryOpen} askUnlock={askUnlock} onLocked={lockSalary} />}
       {tab === 'report' && <ReportTab />}
       {cfg && tab === 'settings' && <SettingsTab settings={cfg} canEdit={canEdit} reload={loadCfg} />}
+      {salBox && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setSalBox(null)}>
+          <div className="bg-white rounded-xl p-4 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-black">🔓 إظهار المرتبات</h3>
+            <Box err={salBox.err} />
+            <input autoFocus type="password" className={`${input} w-full`} placeholder="باسورد مدير" value={salBox.pwd}
+              onChange={(e) => setSalBox({ ...salBox, pwd: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter' && salBox.pwd) unlockSalary(); }} />
+            <p className="text-[11px] text-slate-400">المرتبات بتفضل ظاهرة 15 دقيقة، وبعدها بتتقفل لوحدها.</p>
+            <div className="flex gap-2 justify-end"><button className={btn('slate')} onClick={() => setSalBox(null)}>رجوع</button><button className={btn()} disabled={!salBox.pwd || salBox.busy} onClick={unlockSalary}>إظهار</button></div>
+          </div>
+        </div>)}
     </div>
   );
 }

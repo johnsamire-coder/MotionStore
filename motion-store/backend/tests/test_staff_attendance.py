@@ -125,6 +125,8 @@ class StaffAttendanceTest(TestCase):
     # ---- API and permissions
     def test_api_flow_and_permissions(self):
         mgr = self._client(self.manager)
+        tok = mgr.post('/api/v1/staff-payroll/unlock/', {'password': PWD}, format='json').data['token']   # SALARY_LOCK
+        mgr.credentials(HTTP_X_TENANT_ID=str(self.tenant.id), HTTP_X_SALARY_TOKEN=tok)
         r = mgr.post('/api/v1/staff/employees/', {'name': 'سعيد', 'pay_type': 'WEEKLY', 'salary': '900', 'start_time': '09:00', 'end_time': '17:00'}, format='json')
         self.assertEqual(r.status_code, 201, r.data)
         r = mgr.post('/api/v1/staff/attendance/', {'date': self.day.isoformat(), 'rows': [

@@ -70,8 +70,13 @@ class PayrollTest(StockBandsFollowSalesTest):
             a = JournalEntryLine.objects.filter(journal_entry=je).aggregate(d=Sum('debit'), c=Sum('credit'))
             self.assertEqual(a['d'], a['c'], je.entry_number)
 
-    def _c(self, user):
-        c = APIClient(); c.force_authenticate(user=user); c.credentials(HTTP_X_TENANT_ID=str(self.tenant.id)); return c
+    def _c(self, user, unlock=True):
+        c = APIClient(); c.force_authenticate(user=user); c.credentials(HTTP_X_TENANT_ID=str(self.tenant.id))
+        if unlock:  # SALARY_LOCK: open the salaries with the manager password, like the screen does
+            r = c.post('/api/v1/staff-payroll/unlock/', {'password': PWD}, format='json')
+            if r.status_code == 200:
+                c.credentials(HTTP_X_TENANT_ID=str(self.tenant.id), HTTP_X_SALARY_TOKEN=r.data['token'])
+        return c
 
     # ---- the main monthly story
     def test_monthly_payroll_end_to_end(self):
@@ -275,3 +280,29 @@ class PayrollTest(StockBandsFollowSalesTest):
         self.assertEqual(line.off_day_extra, D('100.00'))                                        # 240 min x 100/480 x 2
         r = self._c(self.boss).put('/api/v1/staff/settings/', {'settings': {'off_day_work_mode': 'BAD'}}, format='json')
         self.assertEqual(r.status_code, 400)
+
+    def test_salaries_are_locked_until_a_manager_password(self):
+        from django.core import signing
+        from apps.staff.views import SALARY_SALT
+        locked = self._c(self.boss, unlock=False)
+        r = locked.get('/api/v1/staff-payroll/')
+        self.assertEqual((r.status_code, r.data.get('salary_locked')), (403, True))
+        self.assertIsNone(locked.get('/api/v1/staff/employees/').data[0]['salary'])           # hidden in the employees list
+        self.assertEqual(locked.post('/api/v1/staff-payroll/unlock/', {'password': 'wrong'}, format='json').status_code, 403)
+        self.assertEqual(locked.post('/api/v1/staff-payroll/unlock/', {'password': 'AccPass2026x'}, format='json').status_code, 403)  # not a manager
+        # an edit while locked keeps the salary; creating with a salary while locked is refused
+        r = locked.patch(f'/api/v1/staff/employees/{self.emp.id}/', {'salary': '1', 'job_title': 'كاشير'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.emp.refresh_from_db(); self.assertEqual((self.emp.salary, self.emp.job_title), (D('3000.00'), 'كاشير'))
+        r = locked.post('/api/v1/staff/employees/', {'name': 'جديد', 'salary': '2000', 'start_time': '09:00', 'end_time': '17:00'}, format='json')
+        self.assertEqual(r.status_code, 400)
+        # unlocked: everything shows, and the token only works for the user who unlocked
+        acc = self._c(self.acc)                                  # accountant + manager password
+        self.assertEqual(acc.get('/api/v1/staff-payroll/').status_code, 200)
+        self.assertEqual(acc.get('/api/v1/staff/employees/').data[0]['salary'], '3000.00')
+        tok = signing.dumps({'u': str(self.acc.pk), 't': str(self.tenant.pk)}, salt=SALARY_SALT)
+        other = APIClient(); other.force_authenticate(user=self.boss)
+        other.credentials(HTTP_X_TENANT_ID=str(self.tenant.id), HTTP_X_SALARY_TOKEN=tok)
+        self.assertEqual(other.get('/api/v1/staff-payroll/').status_code, 403)
+        other.credentials(HTTP_X_TENANT_ID=str(self.tenant.id), HTTP_X_SALARY_TOKEN='forged')
+        self.assertEqual(other.get('/api/v1/staff-payroll/').status_code, 403)
