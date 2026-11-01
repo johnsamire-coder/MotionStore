@@ -225,3 +225,63 @@ class StaffViewSet(viewsets.ViewSet):
         qs = AttendanceEditLog.objects.filter(tenant=t).select_related('day__employee', 'user')[:200]
         return Response([{'at': x.created_at.isoformat(), 'user': getattr(x.user, 'username', ''), 'employee': x.day.employee.name,
                           'date': x.day.date.isoformat(), 'before': x.before, 'after': x.after} for x in qs])
+
+
+# ---------------------------------------------------------------- phase 2: employee account
+def _approver(request, tenant):
+    """ The user himself when he may approve, else whoever owns the manager password typed. """
+    from apps.api.screen_permissions import can
+    from apps.api.views import _verify_manager
+    u = request.user
+    if u.is_authenticated and (_is_admin(u) or can(u, 'approve')):
+        return u
+    return _verify_manager(tenant, request.data.get('manager_password'))
+
+
+class StaffLedgerViewSet(viewsets.ViewSet):
+    """ /api/v1/staff-ledger/... (screen /staff) """
+
+    @action(detail=False, methods=['get'], url_path='balances')
+    def balances(self, request):
+        return Response(services.balances(_tenant(request)))
+
+    @action(detail=False, methods=['get', 'post'], url_path='entries')
+    def entries(self, request):
+        from apps.treasury.models import Treasury
+        t = _tenant(request)
+        try:
+            if request.method == 'GET':
+                q = request.query_params
+                emp = Employee.objects.get(tenant=t, pk=q.get('employee'))
+                return Response(services.employee_statement(t, emp, _date(q['from'], 'من تاريخ') if q.get('from') else None,
+                                                            _date(q['to'], 'إلى تاريخ') if q.get('to') else None))
+            d = request.data
+            emp = Employee.objects.get(tenant=t, pk=d.get('employee_id'))
+            kind = d.get('kind')
+            approver = None
+            if kind != 'REPAYMENT':
+                approver = _approver(request, t)
+                if approver is None:
+                    return Response({'detail': 'الحركة دي محتاجة باسورد المدير'}, status=403)
+            tr = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first() if d.get('treasury_id') else None
+            e = services.add_ledger_entry(t, emp, kind, d.get('amount'), _date(d.get('date') or datetime.date.today()), d.get('reason'),
+                                          tr, d.get('installment'), request.user if request.user.is_authenticated else None, approver)
+            return Response({'ok': True, 'number': e.number, **services.employee_statement(t, emp)}, status=201)
+        except (Employee.DoesNotExist, KeyError):
+            return Response({'detail': 'اختار الموظف'}, status=400)
+        except ValidationError as e:
+            return _err(e)
+
+    @action(detail=False, methods=['post'], url_path='cancel')
+    def cancel(self, request):
+        t = _tenant(request)
+        approver = _approver(request, t)
+        if approver is None:
+            return Response({'detail': 'الإلغاء محتاج باسورد المدير'}, status=403)
+        try:
+            e = services.cancel_ledger_entry(t, request.data.get('id'), request.data.get('reason'), approver)
+            return Response({'ok': True, **services.employee_statement(t, e.employee)})
+        except services.EmployeeLedgerEntry.DoesNotExist:
+            return Response({'detail': 'الحركة مش موجودة'}, status=400)
+        except ValidationError as e:
+            return _err(e)

@@ -186,3 +186,45 @@ def post_supplier_payment_journal(payment, entry_date=None) -> bool:
     except Exception:
         logger.exception("Supplier payment journal not posted for payment %s", getattr(payment, 'id', '?'))
         return False
+
+
+EMPLOYEES = '1060'
+
+
+def sync_staff_entry_journal(entry, entry_date=None) -> bool:
+    """ Advance:   Dr 1060 Employee receivables / Cr 1030 Cash
+        Repayment: Dr 1030 Cash / Cr 1060 Employee receivables
+        A cancelled entry is brought back to zero by a reversing entry (nothing is deleted).
+        Deductions and bonuses post nothing here: they are booked when the payroll is approved. """
+    from django.utils import timezone
+    from apps.accounting.services import create_balanced_journal_entry
+    sign = {'ADVANCE': 1, 'REPAYMENT': -1}.get(entry.kind)
+    if sign is None:
+        return True
+    try:
+        with transaction.atomic():
+            tenant = entry.tenant
+            _ensure_accounts(tenant)
+            target = ZERO if entry.cancelled else _q(entry.amount) * sign
+            posted = _posted_on(tenant, 'StaffLedger', entry.id, EMPLOYEES)
+            diff = target - posted
+            if diff == ZERO:
+                return True
+            name = entry.employee.name
+            first = posted == ZERO
+            label = {'ADVANCE': 'Advance', 'REPAYMENT': 'Repayment'}[entry.kind]
+            note = f"{label} {entry.number} - {name}" + ('' if first else ' (cancelled)')
+            create_balanced_journal_entry(
+                tenant=tenant,
+                entry_number=_next_number(tenant, f"JV-{entry.number}"),
+                entry_date=entry_date or (entry.date if first else timezone.localdate()),
+                source_document_type='StaffLedger',
+                source_document_id=str(entry.id),
+                notes=note,
+                lines_data=[_line(EMPLOYEES, diff, f"Employee {name} {entry.number}"),
+                            _line(CASH, -diff, f"Cash {entry.number}")],
+            )
+        return True
+    except Exception:
+        logger.exception("Staff ledger journal not posted for %s", getattr(entry, 'number', '?'))
+        return False

@@ -146,3 +146,43 @@ class AttendanceEditLog(TenantAwareModel):
     class Meta:
         db_table = "staff_attendance_edit_logs"
         ordering = ["-created_at"]
+
+
+# ---------------------------------------------------------------- phase 2: employee account
+class LedgerKind(models.TextChoices):
+    ADVANCE = 'ADVANCE', 'سلفة'
+    DEDUCTION = 'DEDUCTION', 'خصم / جزاء'
+    BONUS = 'BONUS', 'مكافأة'
+    REPAYMENT = 'REPAYMENT', 'سداد نقدي'
+    GOODS = 'GOODS', 'بضاعة'                      # phase 4 (from the sales screen)
+    RECOVERY = 'RECOVERY', 'اتخصم من المرتب'        # phase 3 (advances / goods taken back by payroll)
+
+
+# What the employee owes the shop (advances + goods - repayments - recovered by payroll)
+OWED_SIGN = {LedgerKind.ADVANCE: 1, LedgerKind.GOODS: 1, LedgerKind.REPAYMENT: -1, LedgerKind.RECOVERY: -1}
+# Waiting for the next payroll (not money yet)
+PENDING_KINDS = (LedgerKind.DEDUCTION, LedgerKind.BONUS)
+
+
+class EmployeeLedgerEntry(TenantAwareModel):
+    number = models.CharField(max_length=30, db_index=True)
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT, related_name='ledger')
+    kind = models.CharField(max_length=10, choices=LedgerKind.choices)
+    date = models.DateField()
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    installment = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True,
+                                      help_text="Advances: amount taken back per payroll (empty = all of it)")
+    treasury = models.ForeignKey('treasury.Treasury', on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    reason = models.CharField(max_length=255, blank=True, default='')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    cancelled = models.BooleanField(default=False)
+    cancel_reason = models.CharField(max_length=255, blank=True, default='')
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    settled_run = models.CharField(max_length=64, blank=True, default='', help_text="Payroll run that used it (phase 3)")
+
+    class Meta:
+        db_table = "staff_ledger_entries"
+        ordering = ["date", "created_at"]
+        constraints = [models.UniqueConstraint(fields=["tenant", "number"], name="unique_staff_ledger_number")]

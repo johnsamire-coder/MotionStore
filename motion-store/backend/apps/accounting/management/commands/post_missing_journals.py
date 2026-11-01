@@ -29,7 +29,7 @@ class Command(BaseCommand):
                                                    _posted_on, _q, RAW, ZERO)
         apply = opts['apply']
         self.stdout.write('APPLY MODE - posting entries' if apply else 'PREVIEW ONLY - nothing will be written (add --apply to post)')
-        grand = {'pur': 0, 'srt': 0, 'pay': 0, 'fail': 0}
+        grand = {'pur': 0, 'srt': 0, 'pay': 0, 'staff': 0, 'fail': 0}
         for tenant in Tenant.objects.all():
             set_current_tenant(tenant)
             pur_todo, srt_todo = [], []
@@ -48,19 +48,31 @@ class Command(BaseCommand):
                            .values_list('source_document_id', flat=True))
             pay_todo = [p for p in SupplierPayment.objects.filter(tenant=tenant).select_related('supplier').order_by('created_at')
                         if str(p.id) not in paid_ids and _q(p.amount) > ZERO]
-            if not pur_todo and not srt_todo and not pay_todo:
+            staff_todo = []
+            try:
+                from apps.staff.models import EmployeeLedgerEntry
+                from apps.accounting.auto_journals import sync_staff_entry_journal, EMPLOYEES
+                for e in EmployeeLedgerEntry.objects.filter(tenant=tenant, kind__in=['ADVANCE', 'REPAYMENT']).select_related('employee').order_by('date', 'created_at'):
+                    want = ZERO if e.cancelled else _q(e.amount) * (1 if e.kind == 'ADVANCE' else -1)
+                    if want != _posted_on(tenant, 'StaffLedger', e.id, EMPLOYEES):
+                        staff_todo.append(e)
+            except Exception as ex:
+                self.stdout.write(f"  staff entries skipped: {ex}")
+            if not pur_todo and not srt_todo and not pay_todo and not staff_todo:
                 continue
             pur_total = sum((_q(i.total_cost) for i in pur_todo if str(i.status) != 'CANCELLED'), Decimal('0'))
             srt_total = sum((_q(o.raw_lot.purchase_cost) for o in srt_todo), Decimal('0'))
             pay_total = sum((_q(p.amount) for p in pay_todo), Decimal('0'))
             self.stdout.write(f"\n[{tenant.name}] purchases: {len(pur_todo)} (total {pur_total}) | sortings: {len(srt_todo)} (lot cost {srt_total})"
-                              f" | supplier payments: {len(pay_todo)} (total {pay_total})")
+                              f" | supplier payments: {len(pay_todo)} (total {pay_total}) | staff advances/repayments: {len(staff_todo)}")
             for i in pur_todo:
                 self.stdout.write(f"  purchase {i.invoice_number}  {i.invoice_date}  {i.total_cost}  {i.status}")
             for o in srt_todo:
                 self.stdout.write(f"  sorting  {o.order_code}  {o.sorting_date}  lot {o.raw_lot.lot_code}  {o.raw_lot.purchase_cost}")
             for p in pay_todo:
                 self.stdout.write(f"  payment  {p.supplier.name}  {p.created_at.date()}  {p.amount}")
+            for e in staff_todo:
+                self.stdout.write(f"  staff    {e.number}  {e.date}  {e.amount}  {e.kind}{' (cancelled)' if e.cancelled else ''}")
             if not apply:
                 continue
             # purchases first (raw bales in), then sortings (raw bales out), each dated on its own document
@@ -73,7 +85,10 @@ class Command(BaseCommand):
             for p in pay_todo:
                 ok = post_supplier_payment_journal(p)
                 grand['pay' if ok else 'fail'] += 1
+            for e in staff_todo:
+                ok = sync_staff_entry_journal(e)
+                grand['staff' if ok else 'fail'] += 1
         if apply:
-            self.stdout.write(self.style.SUCCESS(f"\nDone: {grand['pur']} purchase entries, {grand['srt']} sorting entries, {grand['pay']} supplier payment entries, {grand['fail']} failed"))
+            self.stdout.write(self.style.SUCCESS(f"\nDone: {grand['pur']} purchase entries, {grand['srt']} sorting entries, {grand['pay']} supplier payment entries, {grand['staff']} staff entries, {grand['fail']} failed"))
         else:
             self.stdout.write("\nPreview finished.")

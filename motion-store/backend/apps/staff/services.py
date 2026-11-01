@@ -233,3 +233,175 @@ def attendance_report(tenant, date_from, date_to, employee_id=None):
             'worked_minutes': sum(d.worked_minutes for d in ds), 'missing_days': missing,
         })
     return {'from': date_from.isoformat(), 'to': date_to.isoformat(), 'grace_minutes': grace, 'rows': out}
+
+
+# ---------------------------------------------------------------- phase 2: employee account
+from decimal import Decimal  # noqa: E402
+
+from .models import OWED_SIGN, PENDING_KINDS, EmployeeLedgerEntry, LedgerKind  # noqa: E402
+
+PREFIX = {LedgerKind.ADVANCE: 'SADV', LedgerKind.DEDUCTION: 'SDED', LedgerKind.BONUS: 'SBON', LedgerKind.REPAYMENT: 'SREP'}
+CREATABLE = tuple(PREFIX)          # GOODS and RECOVERY come from sales (phase 4) and payroll (phase 3)
+CENT = Decimal('0.01')
+
+
+def _money(v, name='المبلغ'):
+    try:
+        d = Decimal(str(v)).quantize(CENT)
+    except Exception:
+        raise ValidationError(f'{name} لازم يبقى رقم')
+    return d
+
+
+def _next_ledger_number(tenant, prefix):
+    last = (EmployeeLedgerEntry.objects.select_for_update().filter(tenant=tenant, number__startswith=prefix + '-')
+            .order_by('-number').values_list('number', flat=True).first())
+    n = int(last.split('-')[-1]) + 1 if last else 1
+    return f"{prefix}-{n:05d}"
+
+
+def employee_balance(emp):
+    """ -> (owed, pending_deductions, pending_bonuses). owed = what the employee owes the shop. """
+    owed = pend_d = pend_b = Decimal('0.00')
+    for kind, amount, settled in EmployeeLedgerEntry.objects.filter(employee=emp, cancelled=False).values_list('kind', 'amount', 'settled_run'):
+        if kind in OWED_SIGN:
+            owed += amount * OWED_SIGN[kind]
+        elif kind == LedgerKind.DEDUCTION and not settled:
+            pend_d += amount
+        elif kind == LedgerKind.BONUS and not settled:
+            pend_b += amount
+    return owed, pend_d, pend_b
+
+
+@transaction.atomic
+def add_ledger_entry(tenant, emp, kind, amount, date, reason='', treasury=None, installment=None, user=None, approver=None):
+    """ Advances leave the chosen treasury, repayments go into it; both post a journal entry.
+    Deductions and bonuses wait for the next payroll. """
+    from apps.treasury.models import TreasuryTransactionType
+    from apps.treasury.services import record_treasury_transaction
+    from apps.accounting.auto_journals import sync_staff_entry_journal
+    if kind not in CREATABLE:
+        raise ValidationError('نوع الحركة غلط')
+    amount = _money(amount)
+    if amount <= 0:
+        raise ValidationError('المبلغ لازم يبقى أكبر من صفر')
+    if date > datetime.date.today():
+        raise ValidationError('مينفعش تسجل حركة بتاريخ لسه ماجاش')
+    reason = (reason or '').strip()[:255]
+    if kind in (LedgerKind.DEDUCTION, LedgerKind.BONUS) and not reason:
+        raise ValidationError('اكتب سبب الخصم أو المكافأة')
+    emp = Employee.objects.select_for_update().get(pk=emp.pk)
+    if not emp.is_active and kind != LedgerKind.REPAYMENT:
+        raise ValidationError('الموظف ده موقوف')
+    if kind in (LedgerKind.ADVANCE, LedgerKind.REPAYMENT):
+        if treasury is None:
+            raise ValidationError('اختار الخزنة')
+        if treasury.tenant_id != tenant.id:
+            raise ValidationError('الخزنة مش تبع الشركة')
+    else:
+        treasury = None
+    if kind == LedgerKind.ADVANCE and installment not in (None, ''):
+        installment = _money(installment, 'القسط')
+        if installment <= 0 or installment > amount:
+            raise ValidationError('القسط لازم يبقى أكبر من صفر ومش أكبر من السلفة')
+    else:
+        installment = None
+    if kind == LedgerKind.REPAYMENT:
+        owed = employee_balance(emp)[0]
+        if amount > owed:
+            raise ValidationError(f'الموظف عليه {owed} بس، مينفعش يسدد أكتر من كده')
+    entry = EmployeeLedgerEntry.objects.create(
+        tenant=tenant, number=_next_ledger_number(tenant, PREFIX[kind]), employee=emp, kind=kind, date=date, amount=amount,
+        installment=installment, treasury=treasury, reason=reason, created_by=user, approved_by=approver)
+    if kind == LedgerKind.ADVANCE:
+        try:
+            record_treasury_transaction(treasury_id=treasury.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amount,
+                                        source_document_type='StaffAdvance', source_document_id=entry.number,
+                                        description=f"سلفة {emp.name} {entry.number}")
+        except ValidationError as e:
+            if 'Insufficient' in ' '.join(e.messages):
+                raise ValidationError(f'الخزنة «{treasury.name}» مفيهاش فلوس كفاية (رصيدها {treasury.current_balance})')
+            raise
+    elif kind == LedgerKind.REPAYMENT:
+        record_treasury_transaction(treasury_id=treasury.id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=amount,
+                                    source_document_type='StaffRepayment', source_document_id=entry.number,
+                                    description=f"سداد {emp.name} {entry.number}")
+    sync_staff_entry_journal(entry)
+    return entry
+
+
+@transaction.atomic
+def cancel_ledger_entry(tenant, entry_id, reason, user=None):
+    from django.utils import timezone
+    from apps.treasury.models import TreasuryTransactionType
+    from apps.treasury.services import record_treasury_transaction
+    from apps.accounting.auto_journals import sync_staff_entry_journal
+    e = EmployeeLedgerEntry.objects.select_for_update().select_related('employee', 'treasury').get(tenant=tenant, pk=entry_id)
+    reason = (reason or '').strip()
+    if not reason:
+        raise ValidationError('اكتب سبب الإلغاء')
+    if e.cancelled:
+        raise ValidationError('الحركة دي ملغية قبل كده')
+    if e.settled_run:
+        raise ValidationError('الحركة دي اتحسبت في مرتب، مينفعش تتلغي')
+    if e.kind not in CREATABLE:
+        raise ValidationError('الحركة دي بتتلغي من مكانها الأصلي')
+    if e.kind == LedgerKind.ADVANCE:
+        owed_after = employee_balance(e.employee)[0] - e.amount
+        if owed_after < 0:
+            raise ValidationError('الموظف سدد جزء من السلفة دي. الغي السداد الأول')
+        record_treasury_transaction(treasury_id=e.treasury_id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=e.amount,
+                                    source_document_type='StaffAdvanceCancel', source_document_id=e.number,
+                                    description=f"إلغاء سلفة {e.employee.name} {e.number}")
+    elif e.kind == LedgerKind.REPAYMENT:
+        try:
+            record_treasury_transaction(treasury_id=e.treasury_id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=e.amount,
+                                        source_document_type='StaffRepaymentCancel', source_document_id=e.number,
+                                        description=f"إلغاء سداد {e.employee.name} {e.number}")
+        except ValidationError:
+            raise ValidationError(f'الخزنة «{e.treasury.name}» مفيهاش فلوس كفاية علشان يرجع السداد')
+    e.cancelled, e.cancel_reason, e.cancelled_by, e.cancelled_at = True, reason[:255], user, timezone.now()
+    e.save(update_fields=['cancelled', 'cancel_reason', 'cancelled_by', 'cancelled_at', 'updated_at'])
+    sync_staff_entry_journal(e)
+    return e
+
+
+def _entry_row(e):
+    return {'id': str(e.id), 'number': e.number, 'date': e.date.isoformat(), 'kind': e.kind, 'kind_label': e.get_kind_display(),
+            'amount': str(e.amount), 'installment': str(e.installment) if e.installment is not None else '',
+            'treasury': getattr(e.treasury, 'name', '') or '', 'reason': e.reason,
+            'by': getattr(e.created_by, 'username', '') or '', 'approved_by': getattr(e.approved_by, 'username', '') or '',
+            'cancelled': e.cancelled, 'cancel_reason': e.cancel_reason, 'settled': bool(e.settled_run)}
+
+
+def employee_statement(tenant, emp, date_from=None, date_to=None):
+    """ Every movement with the running 'owes' balance; deductions/bonuses shown as waiting for payroll. """
+    qs = EmployeeLedgerEntry.objects.filter(tenant=tenant, employee=emp).select_related('treasury', 'created_by', 'approved_by')
+    opening = Decimal('0.00')
+    if date_from:
+        for k, a in qs.filter(date__lt=date_from, cancelled=False).values_list('kind', 'amount'):
+            opening += a * OWED_SIGN.get(k, 0)
+        qs = qs.filter(date__gte=date_from)
+    if date_to:
+        qs = qs.filter(date__lte=date_to)
+    run, rows = opening, []
+    for e in qs.order_by('date', 'created_at'):
+        r = _entry_row(e)
+        if not e.cancelled and e.kind in OWED_SIGN:
+            run += e.amount * OWED_SIGN[e.kind]
+        r['balance'] = str(run)
+        rows.append(r)
+    owed, pend_d, pend_b = employee_balance(emp)
+    return {'employee_id': str(emp.id), 'name': emp.name, 'opening': str(opening), 'rows': rows,
+            'owed': str(owed), 'pending_deductions': str(pend_d), 'pending_bonuses': str(pend_b)}
+
+
+def balances(tenant):
+    out = []
+    for e in Employee.objects.filter(tenant=tenant).order_by('-is_active', 'name'):
+        owed, pend_d, pend_b = employee_balance(e)
+        if not e.is_active and owed == 0 and pend_d == 0 and pend_b == 0:
+            continue
+        out.append({'employee_id': str(e.id), 'name': e.name, 'job_title': e.job_title, 'is_active': e.is_active,
+                    'owed': str(owed), 'pending_deductions': str(pend_d), 'pending_bonuses': str(pend_b)})
+    return out

@@ -10,18 +10,22 @@ STANDARD_COA_TEMPLATE = [
     ('1030', 'Cash on Hand / Safe (النقدية بالصناديق والخزائن)', AccountType.ASSET),
     ('1040', 'Bank Accounts (حسابات البنوك)', AccountType.ASSET),
     ('1050', 'Accounts Receivable / Customers (العملاء المدينون)', AccountType.ASSET),
+    ('1060', 'Employee Receivables (ذمم الموظفين - سلف وبضاعة)', AccountType.ASSET),
     # LIABILITIES (2000)
     ('2010', 'Accounts Payable / Suppliers (الموردون الدائنون)', AccountType.LIABILITY),
+    ('2030', 'Salaries Payable (رواتب مستحقة)', AccountType.LIABILITY),
     # EQUITY (3000)
     ('3010', 'Retained Earnings (الأرباح المبقاة / رأس المال)', AccountType.EQUITY),
     # REVENUE (4000)
     ('4010', 'Sales Revenue (إيرادات المبيعات)', AccountType.REVENUE),
     ('4020', 'Scrap & Waste Sales Revenue (إيرادات بيع هالك وخردة)', AccountType.REVENUE),
+    ('4030', 'Employee Penalties Income (إيرادات جزاءات وخصومات الموظفين)', AccountType.REVENUE),
     # EXPENSES & COSTS (5000)
     ('5010', 'Cost of Goods Sold - COGS (تكلفة البضاعة المباعة)', AccountType.EXPENSE),
     ('5020', 'Sorting Waste Loss (خسائر هالك الفرز المستقلة)', AccountType.EXPENSE),
     ('5030', 'Inventory Write-Down Loss (خسائر هبوط أسعار المخزون)', AccountType.EXPENSE),
     ('5040', 'Purchase Variance (فروقات أسعار الشراء والمعيارية)', AccountType.EXPENSE),
+    ('5110', 'Salaries & Wages (الرواتب والأجور)', AccountType.EXPENSE),
 ]
 
 def init_standard_chart_of_accounts(tenant):

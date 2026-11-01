@@ -14,7 +14,8 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.g
 const monthStart = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`; };
 const TYPES = { POS_DRAWER: { ar: 'درج كاشير', en: 'Cash drawer' }, MAIN_SAFE: { ar: 'خزينة رئيسية', en: 'Main safe' }, BANK: { ar: 'بنك / إلكتروني', en: 'Bank / e-wallet' } };
 const DOCS = { SaleInvoice: 'مبيعات', SalesReturn: 'مرتجع', Expense: 'مصروف', ExpenseCancel: 'إلغاء مصروف', DeferredSale: 'عربون مؤجلة', CustomerPayment: 'تحصيل عميل', SupplierPayment: 'دفع لمورد',
-  ShiftOpeningAdjust: 'تظبيط افتتاح', ShiftOpening: 'افتتاح (قديم)', OwnerDrawing: 'ترحيل لصاحب المحل', ShiftShortage: 'عجز على كاشير', ShiftSurplus: 'زيادة خزينة', CustodySettle: 'تسديد عهدة', ManualDeposit: 'إيداع يدوي', ManualWithdrawal: 'سحب يدوي' };
+  ShiftOpeningAdjust: 'تظبيط افتتاح', ShiftOpening: 'افتتاح (قديم)', OwnerDrawing: 'ترحيل لصاحب المحل', ShiftShortage: 'عجز على كاشير', ShiftSurplus: 'زيادة خزينة', CustodySettle: 'تسديد عهدة', ManualDeposit: 'إيداع يدوي', ManualWithdrawal: 'سحب يدوي',
+  StaffAdvance: 'سلفة موظف', StaffAdvanceCancel: 'إلغاء سلفة موظف', StaffRepayment: 'سداد موظف', StaffRepaymentCancel: 'إلغاء سداد موظف' };
 const TX = {
   ar: { title: 'الخزينة', sub: 'أرصدة كل الخزن، والتحويل، والإيداع والسحب، وكشف كل خزنة، وعهد الكاشيرية', tTr: 'الخزن', tCu: 'عهد الكاشيرية', total: 'إجمالي كل الخزن', transfer: 'تحويل', adjust: 'إيداع / سحب',
     from: 'من', to: 'إلى', amount: 'المبلغ', notes: 'ملاحظات', reason: 'السبب', deposit: 'إيداع', withdraw: 'سحب', mgr: 'باسورد المدير', confirm: 'تأكيد', cancel: 'إلغاء', stmt: 'كشف', dFrom: 'من تاريخ', dTo: 'إلى تاريخ', show: 'عرض',

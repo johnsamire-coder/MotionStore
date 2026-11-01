@@ -50,7 +50,8 @@ router.register(r"treasury-transactions", TreasuryTransactionViewSet, basename="
 router.register(r"returns", SalesReturnViewSet, basename="returns")
 
 # STAFF (attendance & payroll, docs/STAFF_PAYROLL_PLAN.md)
-from apps.staff.views import EmployeeViewSet as _StaffEmp, HolidayViewSet as _StaffHol, StaffViewSet as _Staff
+from apps.staff.views import EmployeeViewSet as _StaffEmp, HolidayViewSet as _StaffHol, StaffViewSet as _Staff, StaffLedgerViewSet as _StaffLedger
+router.register(r"staff-ledger", _StaffLedger, basename="staff-ledger")
 router.register(r"staff/employees", _StaffEmp, basename="staff-employees")
 router.register(r"staff/holidays", _StaffHol, basename="staff-holidays")
 router.register(r"staff", _Staff, basename="staff")

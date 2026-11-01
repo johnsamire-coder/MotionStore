@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExportButtons from '../components/ExportButtons';
-import { Clock, CalendarDays, Users, BarChart3, Settings, Save, ChevronRight, ChevronLeft, Plus, Trash2, X } from 'lucide-react';
+import { Clock, CalendarDays, Users, BarChart3, Settings, Save, ChevronRight, ChevronLeft, Plus, Trash2, X, Wallet } from 'lucide-react';
 
 const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
 const pad = (n) => String(n).padStart(2, '0');
@@ -266,6 +266,126 @@ function ReportTab() {
   );
 }
 
+// ---------------------------------------------------------------- employee account (phase 2)
+const KINDS = [['ADVANCE', 'سلفة'], ['DEDUCTION', 'خصم / جزاء'], ['BONUS', 'مكافأة'], ['REPAYMENT', 'سداد نقدي']];
+const money = (n) => Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const KIND_COLOR = { ADVANCE: 'text-rose-700', GOODS: 'text-rose-700', DEDUCTION: 'text-amber-700', BONUS: 'text-emerald-700', REPAYMENT: 'text-sky-700', RECOVERY: 'text-sky-700' };
+function AccountTab() {
+  const [bal, setBal] = useState([]); const [trs, setTrs] = useState([]);
+  const [emp, setEmp] = useState(''); const [st, setSt] = useState(null);
+  const [f, setF] = useState({ from: '', to: '' });
+  const blank = () => ({ kind: 'ADVANCE', amount: '', date: today(), reason: '', treasury_id: '', installment: '', manager_password: '' });
+  const [form, setForm] = useState(blank());
+  const [cancel, setCancel] = useState(null);
+  const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const loadBal = async () => { try { const r = await axiosClient.get('/staff-ledger/balances/'); setBal(r.data); } catch (e) { setErr(errOf(e)); } };
+  const loadSt = async (id = emp, x = f) => {
+    if (!id) { setSt(null); return; }
+    const p = new URLSearchParams({ employee: id }); if (x.from) p.append('from', x.from); if (x.to) p.append('to', x.to);
+    try { const r = await axiosClient.get(`/staff-ledger/entries/?${p}`); setSt(r.data); setErr(''); } catch (e) { setErr(errOf(e)); }
+  };
+  useEffect(() => { loadBal(); axiosClient.get('/treasuries/').then((r) => setTrs(listOf(r.data).filter((t) => t.is_active !== false))).catch(() => {}); }, []);
+  useEffect(() => { loadSt(emp); }, [emp]);
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(''), 3500); };
+  const needsTr = form.kind === 'ADVANCE' || form.kind === 'REPAYMENT';
+  const submit = async () => {
+    setBusy(true); setErr('');
+    try {
+      const r = await axiosClient.post('/staff-ledger/entries/', { ...form, employee_id: emp, treasury_id: needsTr ? form.treasury_id : '', installment: form.kind === 'ADVANCE' ? form.installment : '' });
+      setSt(r.data); setForm({ ...blank(), kind: form.kind, treasury_id: form.treasury_id }); flash(`اتسجلت ✅ ${r.data.number}`); loadBal();
+      axiosClient.get('/treasuries/').then((x) => setTrs(listOf(x.data).filter((t) => t.is_active !== false))).catch(() => {});
+    } catch (e) { setErr(errOf(e)); } finally { setBusy(false); }
+  };
+  const doCancel = async () => {
+    setBusy(true); setErr('');
+    try { const r = await axiosClient.post('/staff-ledger/cancel/', { id: cancel.id, reason: cancel.reason, manager_password: cancel.pwd }); setSt(r.data); setCancel(null); flash('اتلغت ✅'); loadBal(); }
+    catch (e) { setErr(errOf(e)); } finally { setBusy(false); }
+  };
+  const report = () => ({ title: `كشف حساب ${st?.name || ''}`, filename: 'employee_statement', filtersText: [f.from, f.to].filter(Boolean).join(' → '),
+    columns: [{ key: 'number', header: 'الرقم', width: 14 }, { key: 'date', header: 'التاريخ', width: 12 }, { key: 'kind', header: 'الحركة', width: 14 }, { key: 'reason', header: 'البيان', width: 26 },
+      { key: 'amount', header: 'المبلغ', type: 'money' }, { key: 'balance', header: 'عليه', type: 'money' }],
+    rows: (st?.rows || []).map((r) => ({ number: r.number, date: r.date, kind: r.kind_label + (r.cancelled ? ' (ملغية)' : ''), reason: r.reason || r.treasury, amount: Number(r.amount), balance: Number(r.balance) })) });
+  const name = (id) => bal.find((b) => b.employee_id === id)?.name || '';
+  return (
+    <div className="space-y-3">
+      <Box msg={msg} err={err} />
+      <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-xs text-slate-500"><tr>{['الموظف', 'عليه (سلف وبضاعة)', 'خصومات مستنية المرتب', 'مكافآت مستنية المرتب', ''].map((h) => <th key={h} className="p-2 text-start">{h}</th>)}</tr></thead>
+          <tbody>{bal.map((b) => (
+            <tr key={b.employee_id} className={`border-t border-slate-100 ${emp === b.employee_id ? 'bg-emerald-50' : ''} ${b.is_active ? '' : 'opacity-60'}`}>
+              <td className="p-2 font-bold">{b.name}<div className="text-[11px] text-slate-400 font-normal">{b.job_title}{b.is_active ? '' : ' · موقوف'}</div></td>
+              <td className="p-2 font-bold text-rose-700">{money(b.owed)}</td>
+              <td className="p-2 text-amber-700">{money(b.pending_deductions)}</td>
+              <td className="p-2 text-emerald-700">{money(b.pending_bonuses)}</td>
+              <td className="p-2"><button className="text-xs font-bold text-sky-700 hover:underline cursor-pointer" onClick={() => { setEmp(b.employee_id); setForm(blank()); }}>كشف الحساب</button></td>
+            </tr>))}
+            {!bal.length && <tr><td colSpan="5" className="p-6 text-center text-slate-400">لسه مفيش موظفين</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {emp && st && <>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
+          <div className="flex flex-wrap justify-between gap-2 items-center">
+            <h3 className="font-black">حركة جديدة: {name(emp)}</h3>
+            <div className="flex gap-1.5">{KINDS.map(([k, l]) => <button key={k} onClick={() => setForm({ ...form, kind: k })} className={`px-3 py-1.5 rounded-lg text-xs font-black cursor-pointer ${form.kind === k ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{l}</button>)}</div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <label className="text-xs font-bold space-y-1 block">المبلغ<input type="number" min="0" className={`${input} w-full`} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></label>
+            <label className="text-xs font-bold space-y-1 block">التاريخ<input type="date" max={today()} className={`${input} w-full`} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
+            {needsTr && <label className="text-xs font-bold space-y-1 block">{form.kind === 'ADVANCE' ? 'اتصرفت من خزنة' : 'دخلت خزنة'}<select className={`${input} w-full`} value={form.treasury_id} onChange={(e) => setForm({ ...form, treasury_id: e.target.value })}><option value="">اختار...</option>{trs.map((t) => <option key={t.id} value={t.id}>{t.name} (رصيدها {money(t.current_balance)})</option>)}</select></label>}
+            {form.kind === 'ADVANCE' && <label className="text-xs font-bold space-y-1 block">القسط في كل مرتب (اختياري)<input type="number" min="0" className={`${input} w-full`} value={form.installment} placeholder="فاضي = تتخصم كلها" onChange={(e) => setForm({ ...form, installment: e.target.value })} /></label>}
+            <label className="text-xs font-bold space-y-1 block md:col-span-2">{form.kind === 'DEDUCTION' || form.kind === 'BONUS' ? 'السبب *' : 'ملاحظة'}<input className={`${input} w-full`} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} /></label>
+            {form.kind !== 'REPAYMENT' && <label className="text-xs font-bold space-y-1 block">باسورد المدير<input type="password" className={`${input} w-full`} value={form.manager_password} placeholder="لو انت مش مدير" onChange={(e) => setForm({ ...form, manager_password: e.target.value })} /></label>}
+          </div>
+          <div className="flex justify-between items-center flex-wrap gap-2">
+            <p className="text-[11px] text-slate-400">{form.kind === 'ADVANCE' ? 'السلفة بتطلع من الخزنة فعلاً، وبتتخصم من المرتب بالقسط.' : form.kind === 'REPAYMENT' ? 'الموظف رجّع فلوس: بتدخل الخزنة وبتقلل اللي عليه.' : 'بتتحسب في المرتب الجاي.'}</p>
+            <button className={btn()} disabled={busy || !form.amount} onClick={submit}><Save size={14} /> {busy ? 'جاري الحفظ...' : 'تسجيل'}</button>
+          </div>
+        </div>
+        <div className="bg-white p-3 rounded-xl border border-slate-200 flex flex-wrap items-end gap-2">
+          <span className="font-black text-sm">كشف حساب {st.name}</span>
+          <label className="text-xs font-bold">من<br /><input type="date" className={input} value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></label>
+          <label className="text-xs font-bold">إلى<br /><input type="date" className={input} value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></label>
+          <button className={btn('slate')} onClick={() => loadSt(emp, f)}>عرض</button>
+          <div className="flex-1" />
+          <span className="text-xs font-bold">عليه: <b className="text-rose-700">{money(st.owed)}</b> · خصومات: <b className="text-amber-700">{money(st.pending_deductions)}</b> · مكافآت: <b className="text-emerald-700">{money(st.pending_bonuses)}</b></span>
+          <ExportButtons getReport={report} />
+        </div>
+        <div className="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-xs text-slate-500"><tr>{['الرقم', 'التاريخ', 'الحركة', 'البيان', 'المبلغ', 'عليه بعدها', 'بواسطة', ''].map((h) => <th key={h} className="p-2 text-start">{h}</th>)}</tr></thead>
+            <tbody>
+              {Number(st.opening) !== 0 && <tr className="border-t border-slate-100 bg-slate-50"><td className="p-2 text-xs" colSpan="5">رصيد أول المدة</td><td className="p-2 font-bold">{money(st.opening)}</td><td colSpan="2" /></tr>}
+              {st.rows.map((r) => (
+                <tr key={r.id} className={`border-t border-slate-100 ${r.cancelled ? 'line-through opacity-50' : ''}`}>
+                  <td className="p-2 text-xs font-mono">{r.number}</td><td className="p-2 text-xs">{r.date}</td>
+                  <td className={`p-2 font-bold text-xs ${KIND_COLOR[r.kind] || ''}`}>{r.kind_label}{r.settled ? ' ✓' : ''}</td>
+                  <td className="p-2 text-xs">{r.reason}{r.treasury && <span className="text-slate-400"> · {r.treasury}</span>}{r.installment && <span className="text-slate-400"> · قسط {money(r.installment)}</span>}{r.cancelled && <div className="text-rose-600 no-underline">ملغية: {r.cancel_reason}</div>}</td>
+                  <td className="p-2 font-bold">{money(r.amount)}</td><td className="p-2">{money(r.balance)}</td>
+                  <td className="p-2 text-[11px] text-slate-500">{r.by}{r.approved_by && r.approved_by !== r.by ? ` / وافق ${r.approved_by}` : ''}</td>
+                  <td className="p-2">{!r.cancelled && !r.settled && ['ADVANCE', 'DEDUCTION', 'BONUS', 'REPAYMENT'].includes(r.kind) && <button className="text-xs font-bold text-rose-700 hover:underline cursor-pointer" onClick={() => setCancel({ id: r.id, number: r.number, reason: '', pwd: '' })}>إلغاء</button>}</td>
+                </tr>))}
+              {!st.rows.length && <tr><td colSpan="8" className="p-6 text-center text-slate-400">مفيش حركات</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </>}
+      {cancel && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setCancel(null)}>
+          <div className="bg-white rounded-xl p-4 w-full max-w-sm space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-black">إلغاء {cancel.number}</h3>
+            <Box err={err} />
+            <input className={`${input} w-full`} placeholder="سبب الإلغاء *" value={cancel.reason} onChange={(e) => setCancel({ ...cancel, reason: e.target.value })} />
+            <input type="password" className={`${input} w-full`} placeholder="باسورد المدير (لو انت مش مدير)" value={cancel.pwd} onChange={(e) => setCancel({ ...cancel, pwd: e.target.value })} />
+            <p className="text-[11px] text-slate-400">السلفة الملغية فلوسها بترجع الخزنة، والسداد الملغي بيطلع من الخزنة.</p>
+            <div className="flex gap-2 justify-end"><button className={btn('slate')} onClick={() => setCancel(null)}>رجوع</button><button className={btn()} disabled={busy || !cancel.reason.trim()} onClick={doCancel}>تأكيد الإلغاء</button></div>
+          </div>
+        </div>)}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- settings + holidays
 function SettingsTab({ settings, canEdit, reload }) {
   const [s, setS] = useState(settings); const [hol, setHol] = useState([]); const [nh, setNh] = useState({ date: '', name: '' });
@@ -344,7 +464,7 @@ function SettingsTab({ settings, canEdit, reload }) {
 }
 
 // ---------------------------------------------------------------- page
-const TABS = [['att', 'الحضور', Clock], ['roster', 'جدول الإجازات', CalendarDays], ['emps', 'الموظفين', Users], ['report', 'تقرير الحضور', BarChart3], ['settings', 'الإعدادات', Settings]];
+const TABS = [['att', 'الحضور', Clock], ['roster', 'جدول الإجازات', CalendarDays], ['emps', 'الموظفين', Users], ['account', 'الحساب', Wallet], ['report', 'تقرير الحضور', BarChart3], ['settings', 'الإعدادات', Settings]];
 export default function StaffPage() {
   const [tab, setTab] = useState('att');
   const [cfg, setCfg] = useState(null); const [canEdit, setCanEdit] = useState(false); const [err, setErr] = useState('');
@@ -363,6 +483,7 @@ export default function StaffPage() {
       {cfg && tab === 'att' && <AttendanceTab key={rev} settings={cfg} />}
       {cfg && tab === 'roster' && <RosterTab key={rev} settings={cfg} />}
       {tab === 'emps' && <EmployeesTab onChange={() => setRev((x) => x + 1)} />}
+      {tab === 'account' && <AccountTab key={rev} />}
       {tab === 'report' && <ReportTab />}
       {cfg && tab === 'settings' && <SettingsTab settings={cfg} canEdit={canEdit} reload={loadCfg} />}
     </div>
