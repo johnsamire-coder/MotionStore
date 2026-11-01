@@ -258,3 +258,20 @@ class PayrollTest(StockBandsFollowSalesTest):
         self.assertEqual(services.employee_balance(self.emp)[0], D('80.00'))
         r = self._c(self.user).post('/api/v1/sales/checkout/', {**body, 'employee_id': '00000000-0000-0000-0000-000000000000'}, format='json')
         self.assertEqual(r.status_code, 400)
+
+    def test_work_on_day_off_option(self):
+        from apps.staff.models import OffDay
+        OffDay.objects.create(tenant=self.tenant, employee=self.emp, date=self._d(4))
+        self._fill(self.emp, self.start, self.end, {self._d(4): {'status': 'PRESENT', 'check_in': '10:00', 'check_out': '14:00'}})  # 4h on his day off
+        line = services.create_payroll(self.tenant, 'MONTHLY', self.start, self.end).lines.get()
+        self.assertEqual((line.off_day_extra, line.net, line.days['worked_on_off_day']), (D('0.00'), D('3000.00'), 1))   # default: normal day
+        PayrollRun.objects.all().delete()
+        self._settings(off_day_work_mode='EXTRA_DAY', off_day_work_multiplier='1.5')
+        line = services.create_payroll(self.tenant, 'MONTHLY', self.start, self.end).lines.get()
+        self.assertEqual((line.off_day_extra, line.net), (D('150.00'), D('3150.00')))          # 100 x 1.5
+        PayrollRun.objects.all().delete()
+        self._settings(off_day_work_mode='OVERTIME', off_day_work_multiplier='2')
+        line = services.create_payroll(self.tenant, 'MONTHLY', self.start, self.end).lines.get()
+        self.assertEqual(line.off_day_extra, D('100.00'))                                        # 240 min x 100/480 x 2
+        r = self._c(self.boss).put('/api/v1/staff/settings/', {'settings': {'off_day_work_mode': 'BAD'}}, format='json')
+        self.assertEqual(r.status_code, 400)

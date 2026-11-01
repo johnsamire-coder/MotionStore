@@ -149,7 +149,7 @@ class StaffViewSet(viewsets.ViewSet):
             'late_mode': ('PER_MINUTE', 'TIERS', 'NONE'), 'early_leave_mode': ('SAME_AS_LATE', 'NONE'),
             'overtime_mode': ('OFF', 'AUTO', 'MANUAL'), 'month_days_basis': ('THIRTY', 'WORKING_DAYS'),
             'goods_price_mode': ('SALE', 'SALE_DISCOUNT', 'COST'), 'advance_mode': ('ALL', 'INSTALLMENT'),
-            'holiday_work_mode': ('NORMAL', 'OVERTIME', 'EXTRA_DAY'),
+            'holiday_work_mode': ('NORMAL', 'OVERTIME', 'EXTRA_DAY'), 'off_day_work_mode': ('NORMAL', 'OVERTIME', 'EXTRA_DAY'),
         }
         data = dict(obj.data or {})
         for k, v in incoming.items():
@@ -164,7 +164,7 @@ class StaffViewSet(viewsets.ViewSet):
                     return Response({'detail': f'الإعداد {k} لازم يبقى رقم'}, status=400)
                 if v < 0 or (k in ('week_start', 'weekly_pay_day') and v > 6):
                     return Response({'detail': f'الإعداد {k} برّه الحدود'}, status=400)
-            if k in ('overtime_multiplier', 'absence_multiplier', 'goods_discount_pct', 'holiday_work_multiplier'):
+            if k in ('overtime_multiplier', 'absence_multiplier', 'goods_discount_pct', 'holiday_work_multiplier', 'off_day_work_multiplier'):
                 try:
                     f = float(v)
                 except Exception:

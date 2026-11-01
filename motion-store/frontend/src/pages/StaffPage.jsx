@@ -390,9 +390,9 @@ function AccountTab() {
 const ST_COLOR = { DRAFT: 'bg-amber-100 text-amber-800', APPROVED: 'bg-sky-100 text-sky-800', PAID: 'bg-emerald-100 text-emerald-800' };
 const DED = [['absence_deduction', 'الغياب'], ['unpaid_leave_deduction', 'إجازة من غير أجر'], ['unpaid_holiday_deduction', 'عطلة من غير أجر'], ['late_deduction', 'التأخير'],
   ['early_deduction', 'الخروج بدري'], ['penalties', 'الخصومات والجزاءات'], ['recovered', 'السلف والبضاعة']];
-const ADD = [['overtime_amount', 'الإضافي'], ['holiday_extra', 'الشغل في العطلات'], ['bonuses', 'المكافآت']];
+const ADD = [['overtime_amount', 'الإضافي'], ['holiday_extra', 'الشغل في العطلات'], ['off_day_extra', 'الشغل في أيام الإجازة'], ['bonuses', 'المكافآت']];
 const EDIT_FIELDS = [['absence_deduction', 'خصم الغياب'], ['unpaid_leave_deduction', 'إجازة من غير أجر'], ['unpaid_holiday_deduction', 'عطلة من غير أجر'], ['late_deduction', 'خصم التأخير'],
-  ['early_deduction', 'خصم الخروج بدري'], ['overtime_amount', 'الإضافي'], ['holiday_extra', 'الشغل في العطلات'], ['bonuses', 'المكافآت'], ['penalties', 'الخصومات'], ['recovery_due', 'السلف والبضاعة المطلوب خصمها']];
+  ['early_deduction', 'خصم الخروج بدري'], ['overtime_amount', 'الإضافي'], ['holiday_extra', 'الشغل في العطلات'], ['off_day_extra', 'الشغل في أيام الإجازة'], ['bonuses', 'المكافآت'], ['penalties', 'الخصومات'], ['recovery_due', 'السلف والبضاعة المطلوب خصمها']];
 const DAYS_L = { PRESENT: 'حضور', ABSENT: 'غياب', LEAVE_PAID: 'إجازة بأجر', LEAVE_UNPAID: 'من غير أجر', OFF: 'إجازته', HOLIDAY: 'عطلة', worked_on_holiday: 'اشتغل في عطلة', worked_on_off_day: 'اشتغل في إجازته' };
 function suggestPeriod(cycle, settings) {
   const t = new Date();
@@ -417,7 +417,7 @@ function PayrollTab({ settings }) {
   const report = () => ({ title: `مسير مرتبات ${run.number} (${run.period_start} → ${run.period_end})`, filename: `payroll_${run.number}`,
     columns: [{ key: 'name', header: 'الموظف', width: 20 }, { key: 'base', header: 'الأساسي', type: 'money' }, { key: 'add', header: 'إضافي ومكافآت', type: 'money' }, { key: 'att', header: 'خصم الحضور', type: 'money' },
       { key: 'pen', header: 'جزاءات', type: 'money' }, { key: 'rec', header: 'سلف وبضاعة', type: 'money' }, { key: 'net', header: 'الصافي', type: 'money' }, { key: 'paid', header: 'اتصرف', width: 10 }],
-    rows: run.lines.map((l) => ({ name: l.name, base: Number(l.base), add: Number(l.overtime_amount) + Number(l.holiday_extra) + Number(l.bonuses),
+    rows: run.lines.map((l) => ({ name: l.name, base: Number(l.base), add: Number(l.overtime_amount) + Number(l.holiday_extra) + Number(l.off_day_extra) + Number(l.bonuses),
       att: Number(l.absence_deduction) + Number(l.unpaid_leave_deduction) + Number(l.unpaid_holiday_deduction) + Number(l.late_deduction) + Number(l.early_deduction),
       pen: Number(l.penalties), rec: Number(l.recovered), net: Number(l.net), paid: l.paid ? 'أيوه' : 'لأ' })), totals: { net: Number(run.totals.net) } });
   const printSlips = (lines) => {
@@ -489,7 +489,7 @@ function PayrollTab({ settings }) {
                 <td className="p-2 font-bold">{l.name}<div className="text-[11px] text-slate-400 font-normal">{PAY[l.pay_type]} · {money(l.salary)}{l.manual_note ? ` · ✏️ ${l.manual_note}` : ''}</div></td>
                 <td className="p-2 text-[11px] text-slate-500">{Object.entries(l.days || {}).filter(([k, v]) => DAYS_L[k] && v).map(([k, v]) => `${DAYS_L[k]} ${v}`).join(' · ')}</td>
                 <td className="p-2">{money(l.base)}</td>
-                <td className="p-2 text-emerald-700">{money(Number(l.overtime_amount) + Number(l.holiday_extra) + Number(l.bonuses) + Math.max(0, Number(l.manual_adjust)))}</td>
+                <td className="p-2 text-emerald-700">{money(Number(l.overtime_amount) + Number(l.holiday_extra) + Number(l.off_day_extra) + Number(l.bonuses) + Math.max(0, Number(l.manual_adjust)))}</td>
                 <td className="p-2 text-rose-700">{money(att - Math.min(0, Number(l.manual_adjust)))}</td>
                 <td className="p-2 text-rose-700">{money(l.penalties)}</td>
                 <td className="p-2 text-rose-700">{money(l.recovered)}{Number(l.recovery_due) > Number(l.recovered) && <div className="text-[10px] text-slate-400">المطلوب {money(l.recovery_due)}</div>}</td>
@@ -595,6 +595,8 @@ function SettingsTab({ settings, canEdit, reload }) {
           {row('العطلة الرسمية', sel('holiday_paid', [[true, 'بأجر'], [false, 'من غير أجر']]))}
           {row('لو اشتغل في العطلة', sel('holiday_work_mode', [['NORMAL', 'يوم عادي'], ['OVERTIME', 'إضافي بمعامل'], ['EXTRA_DAY', 'أجر يوم زيادة × معامل']]))}
           {row('معامل الشغل في العطلة', numIn('holiday_work_multiplier'))}
+          {row('لو اشتغل في يوم إجازته (التناوب أو الثابتة)', sel('off_day_work_mode', [['NORMAL', 'يوم عادي'], ['OVERTIME', 'إضافي بمعامل'], ['EXTRA_DAY', 'أجر يوم زيادة × معامل']]))}
+          {row('معامل الشغل في يوم الإجازة', numIn('off_day_work_multiplier'))}
         </div>
         <h3 className="font-black text-sm pt-2">البضاعة والسلف</h3>
         <div className="grid md:grid-cols-3 gap-3">

@@ -412,7 +412,7 @@ from .models import PayrollCycle, PayrollLine, PayrollRun, PayrollStatus, PayTyp
 
 ZERO2 = Decimal('0.00')
 EDITABLE = ('absence_deduction', 'unpaid_leave_deduction', 'unpaid_holiday_deduction', 'late_deduction', 'early_deduction',
-            'overtime_amount', 'holiday_extra', 'bonuses', 'penalties', 'recovery_due')
+            'overtime_amount', 'holiday_extra', 'off_day_extra', 'bonuses', 'penalties', 'recovery_due')
 
 
 def _r2(x):
@@ -518,7 +518,8 @@ def _calc_line(tenant, emp, run, s):
         line.unpaid_leave_deduction = _r2(count[DayStatus.LEAVE_UNPAID] * day_rate)
         if not s.get('holiday_paid'):
             line.unpaid_holiday_deduction = _r2(count[DayStatus.HOLIDAY] * day_rate)
-    late = early = ot = hol = Decimal('0')
+    late = early = ot = hol = offx = Decimal('0')
+    o_mult = Decimal(str(s.get('off_day_work_multiplier') or 1))
     worked_hol = worked_off = 0
     ot_on = s.get('overtime_mode') in ('AUTO', 'MANUAL')
     ot_mult = Decimal(str(s.get('overtime_multiplier') or 1))
@@ -526,9 +527,10 @@ def _calc_line(tenant, emp, run, s):
     for d, (st, rec) in days.items():
         if st != DayStatus.PRESENT or rec is None:
             continue
-        late += _late_amount(rec.late_minutes, s, day_rate, minute_rate)
-        if s.get('early_leave_mode') == 'SAME_AS_LATE':
-            early += _late_amount(rec.early_minutes, s, day_rate, minute_rate)
+        if not (rec.is_off_day or rec.is_holiday):   # coming in on a day off or a holiday is never 'late' or 'early'
+            late += _late_amount(rec.late_minutes, s, day_rate, minute_rate)
+            if s.get('early_leave_mode') == 'SAME_AS_LATE':
+                early += _late_amount(rec.early_minutes, s, day_rate, minute_rate)
         if ot_on:
             ot += Decimal(rec.overtime_minutes) * minute_rate * ot_mult
         if rec.is_holiday:
@@ -540,8 +542,14 @@ def _calc_line(tenant, emp, run, s):
                 hol += Decimal(rec.worked_minutes) * minute_rate * h_mult
         if rec.is_off_day:
             worked_off += 1
+            if not rec.is_holiday:      # a holiday that falls on his day off is paid by the holiday rule only
+                omode = s.get('off_day_work_mode')
+                if omode == 'EXTRA_DAY':
+                    offx += day_rate * o_mult
+                elif omode == 'OVERTIME':
+                    offx += Decimal(rec.worked_minutes) * minute_rate * o_mult
     line.late_deduction, line.early_deduction = _r2(late), _r2(early)
-    line.overtime_amount, line.holiday_extra = _r2(ot), _r2(hol)
+    line.overtime_amount, line.holiday_extra, line.off_day_extra = _r2(ot), _r2(hol), _r2(offx)
     pend = EmployeeLedgerEntry.objects.filter(employee=emp, cancelled=False, settled_run='', date__lte=run.period_end)
     line.bonuses = _r2(sum((e.amount for e in pend if e.kind == LedgerKind.BONUS), Decimal('0')))
     line.penalties = _r2(sum((e.amount for e in pend if e.kind == LedgerKind.DEDUCTION), Decimal('0')))
@@ -557,7 +565,7 @@ def finish_line(line):
         if k in EDITABLE:
             setattr(line, k, _r2(Decimal(str(v))))
     earnings = (line.base - line.absence_deduction - line.unpaid_leave_deduction - line.unpaid_holiday_deduction
-                - line.late_deduction - line.early_deduction + line.overtime_amount + line.holiday_extra + line.bonuses + line.manual_adjust)
+                - line.late_deduction - line.early_deduction + line.overtime_amount + line.holiday_extra + line.off_day_extra + line.bonuses + line.manual_adjust)
     before_recovery = earnings - line.penalties
     line.recovered = _r2(max(Decimal('0'), min(line.recovery_due, before_recovery)))
     line.net = _r2(max(Decimal('0'), before_recovery - line.recovered))
@@ -567,7 +575,7 @@ def finish_line(line):
 
 def earnings_of(line):
     return (line.base - line.absence_deduction - line.unpaid_leave_deduction - line.unpaid_holiday_deduction
-            - line.late_deduction - line.early_deduction + line.overtime_amount + line.holiday_extra + line.bonuses + line.manual_adjust)
+            - line.late_deduction - line.early_deduction + line.overtime_amount + line.holiday_extra + line.off_day_extra + line.bonuses + line.manual_adjust)
 
 
 def _next_run_number(tenant):
@@ -760,7 +768,7 @@ def _line_row(l):
     return {'id': str(l.id), 'employee_id': str(l.employee_id), 'name': l.employee.name, 'job_title': l.employee.job_title,
             'pay_type': l.pay_type, 'salary': str(l.salary), 'day_rate': str(_r2(l.day_rate)), 'days': l.days,
             **{k: str(getattr(l, k)) for k in ('base', 'absence_deduction', 'unpaid_leave_deduction', 'unpaid_holiday_deduction', 'late_deduction',
-                                              'early_deduction', 'overtime_amount', 'holiday_extra', 'bonuses', 'penalties', 'manual_adjust',
+                                              'early_deduction', 'overtime_amount', 'holiday_extra', 'off_day_extra', 'bonuses', 'penalties', 'manual_adjust',
                                               'recovery_due', 'recovered', 'net', 'shortfall', 'paid_amount')},
             'earnings': str(_r2(earnings_of(l))), 'manual_note': l.manual_note, 'overrides': l.overrides,
             'paid': l.paid_at is not None, 'paid_at': l.paid_at.isoformat() if l.paid_at else '',

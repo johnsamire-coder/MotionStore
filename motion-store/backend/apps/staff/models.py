@@ -35,6 +35,8 @@ DEFAULT_SETTINGS = {
     'holiday_paid': True,
     'holiday_work_mode': 'EXTRA_DAY',   # NORMAL | OVERTIME | EXTRA_DAY
     'holiday_work_multiplier': '1',
+    'off_day_work_mode': 'NORMAL',     # worked on his rotating/fixed day off: NORMAL | OVERTIME | EXTRA_DAY
+    'off_day_work_multiplier': '1',
 }
 
 
@@ -240,6 +242,7 @@ class PayrollLine(TenantAwareModel):
     early_deduction = models.DecimalField(**MONEY)
     overtime_amount = models.DecimalField(**MONEY)
     holiday_extra = models.DecimalField(**MONEY)
+    off_day_extra = models.DecimalField(**MONEY)
     bonuses = models.DecimalField(**MONEY)
     penalties = models.DecimalField(**MONEY)
     manual_adjust = models.DecimalField(**MONEY)
