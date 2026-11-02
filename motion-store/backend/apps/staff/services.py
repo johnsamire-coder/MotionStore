@@ -341,7 +341,7 @@ def cancel_ledger_entry(tenant, entry_id, reason, user=None):
     from apps.treasury.models import TreasuryTransactionType
     from apps.treasury.services import record_treasury_transaction
     from apps.accounting.auto_journals import sync_staff_entry_journal
-    e = EmployeeLedgerEntry.objects.select_for_update().select_related('employee', 'treasury').get(tenant=tenant, pk=entry_id)
+    e = EmployeeLedgerEntry.objects.select_for_update(of=('self',)).select_related('employee', 'treasury').get(tenant=tenant, pk=entry_id)
     reason = (reason or '').strip()
     if not reason:
         raise ValidationError('اكتب سبب الإلغاء')
