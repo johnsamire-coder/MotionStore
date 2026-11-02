@@ -1129,7 +1129,8 @@ class ShiftViewSet(BaseTenantViewSet):
                   'CustomerPayment': 'تحصيل من عملاء', 'SupplierPayment': 'دفع لموردين', 'ShiftOpeningAdjust': 'تظبيط الافتتاح', 'ShiftOpening': 'افتتاح (قديم)', 'OwnerDrawing': 'ترحيل لصاحب المحل', 'ShiftShortage': 'عجز على الكاشير', 'ShiftSurplus': 'زيادة خزينة', 'Other': 'ترحيل لخزنة / تحويلات', 'None': 'ترحيل لخزنة / تحويلات'}
         LABELS['OnlineInDrawer'] = 'أونلاين نزل في الدرج (طريقة دفع من غير خزنة)'
         LABELS['OnlineReturn'] = 'مرتجع أونلاين اتصرف من الدرج'
-        invs = SaleInvoice.objects.filter(shift=sh).exclude(channel='ONLINE')
+        _emp = SaleInvoice.objects.filter(shift=sh, payments__payment_method__method_type='EMPLOYEE').distinct()  # EMPLOYEE_GOODS: no money, own section
+        invs = SaleInvoice.objects.filter(shift=sh).exclude(channel='ONLINE').exclude(pk__in=_emp.values('pk'))
         _onl = SaleInvoice.objects.filter(shift=sh, channel='ONLINE')
         from django.apps import apps as _ap
         _SR = _ap.get_model('returns', 'SalesReturn')
@@ -1152,8 +1153,13 @@ class ShiftViewSet(BaseTenantViewSet):
             by_method[p.payment_method.name] = by_method.get(p.payment_method.name, Decimal('0')) + p.amount
         rets = {}
         _orets = {}
+        _erets = {}
+        _emp_ids = set(_emp.values_list('pk', flat=True))
         for _r in _SR.objects.filter(shift=sh).select_related('refund_method', 'original_sale_invoice'):
             _k = 'على حساب العميل' if _r.refund_to_credit else (_r.refund_method.name if _r.refund_method_id else 'نقدي')
+            if _r.original_sale_invoice_id in _emp_ids:  # EMPLOYEE_GOODS: goods brought back by an employee
+                _erets[_k] = _erets.get(_k, Decimal('0')) + (_r.total_refund_amount or Decimal('0'))
+                continue
             _bucket = _orets if _r.original_sale_invoice.channel == 'ONLINE' else rets  # ONLINE_SALES: online returns stay in the online closing
             _bucket[_k] = _bucket.get(_k, Decimal('0')) + (_r.total_refund_amount or Decimal('0'))
         _net = dict(by_method)
@@ -1164,6 +1170,11 @@ class ShiftViewSet(BaseTenantViewSet):
         _om = {}
         for _p in SalePayment.objects.filter(sale_invoice__in=_onl).select_related('payment_method'):
             _om[_p.payment_method.name] = _om.get(_p.payment_method.name, Decimal('0')) + _p.amount
+        _etot = sum((i.total_amount or Decimal('0') for i in _emp), Decimal('0'))
+        _eret = sum(_erets.values(), Decimal('0'))
+        _extra.update({'employee_count': len(_emp_ids), 'employee_total': str(_etot), 'employee_returns_total': str(_eret), 'employee_net_total': str(_etot - _eret),
+                       'employee_orders': [{'number': i.invoice_number, 'total': str(i.total_amount),
+                                            'name': ', '.join(sorted({_p.reference_number or '' for _p in i.payments.all()})) or ''} for i in _emp.prefetch_related('payments').order_by('created_at')]})
         _otot = _onl.aggregate(s=Sum('total_amount'))['s'] or Decimal('0')
         _oret = sum(_orets.values(), Decimal('0'))
         _extra.update({'online_count': _onl.count(), 'online_total': str(_otot), 'online_by_method': [{'method': k, 'amount': str(v)} for k, v in _om.items()],

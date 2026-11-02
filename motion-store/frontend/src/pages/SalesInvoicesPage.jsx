@@ -61,10 +61,15 @@ export default function SalesInvoicesPage() {
 
   const custText = (r) => (r.customer_name || r.customer_phone ? [r.customer_name, r.customer_code ? `(${r.customer_code})` : ''].filter(Boolean).join(' ') : T.walkin);
   const paysText = (r) => (r.payments_info || []).map((p) => `${p.method} ${money(p.amount)}`).join(' + ');
-  const sumTotal = rows.reduce((a, r) => a + num(r.total_amount), 0);
-  const sumDisc = rows.reduce((a, r) => a + num(r.discount_amount), 0);
+  // EMPLOYEE_GOODS: goods on an employee's account bring no money: shown on their own, out of the sales totals
+  const isEmp = (r) => (r.payments_info || []).some((p) => p.type === 'EMPLOYEE');
+  const shopRows = rows.filter((r) => !isEmp(r));
+  const empRows = rows.filter(isEmp);
+  const empTotal = empRows.reduce((a, r) => a + num(r.total_amount), 0);
+  const sumTotal = shopRows.reduce((a, r) => a + num(r.total_amount), 0);
+  const sumDisc = shopRows.reduce((a, r) => a + num(r.discount_amount), 0);
   const byMethod = {};
-  rows.forEach((r) => (r.payments_info || []).forEach((p) => { byMethod[p.method] = (byMethod[p.method] || 0) + num(p.amount); }));
+  shopRows.forEach((r) => (r.payments_info || []).forEach((p) => { byMethod[p.method] = (byMethod[p.method] || 0) + num(p.amount); }));
   const lineQty = (l) => [num(l.quantity_pieces) > 0 ? `${l.quantity_pieces} ${T.pcs}` : '', num(l.weight_kg) > 0 ? `${kgf(l.weight_kg)} ${T.kg}` : ''].filter(Boolean).join(' · ');
 
   const report = () => ({ title: T.rTitle, filename: 'sales-invoices', filtersText: [f.from && `${T.from}: ${f.from}`, f.to && `${T.to}: ${f.to}`, f.q].filter(Boolean).join(' | '), columns: [
@@ -156,7 +161,7 @@ export default function SalesInvoicesPage() {
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.count}</div><div className="text-xl font-black mt-1">{rows.length}</div></div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.count}</div><div className="text-xl font-black mt-1">{shopRows.length}</div>{empRows.length > 0 && <div className="text-[11px] text-sky-800 font-bold mt-1">🧑‍💼 على حساب الموظفين: {empRows.length} فاتورة - {money(empTotal)} {T.cur} (مش فلوس، مش داخلة في الإجمالي)</div>}</div>
         <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.total}</div><div className="text-xl font-black mt-1 text-emerald-800">{money(sumTotal)} <span className="text-xs">{T.cur}</span></div></div>
         <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.disc}</div><div className="text-xl font-black mt-1 text-violet-800">{money(sumDisc)} <span className="text-xs">{T.cur}</span></div></div>
         <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.byMethod}</div>{Object.keys(byMethod).length === 0 ? <div className="text-xs text-slate-400 mt-1">—</div> : Object.keys(byMethod).map((k) => <div key={k} className="flex justify-between text-xs mt-1"><span>{k}</span><span className="font-bold">{money(byMethod[k])}</span></div>)}</div>

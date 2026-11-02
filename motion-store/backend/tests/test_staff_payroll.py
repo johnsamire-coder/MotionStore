@@ -223,6 +223,20 @@ class PayrollTest(StockBandsFollowSalesTest):
         self.drawer.refresh_from_db(); self.assertEqual(self.drawer.current_balance, D('500.00'))
         self._balanced()
 
+    def test_goods_stay_out_of_the_shift_sales(self):
+        from apps.api.views import ShiftViewSet
+        inv, shift, pm = self._employee_sale('SALE')
+        process_pos_sale(shift_id=shift.id, cashier=self.user, items_data=[{'stock_item_id': inv.lines.first().stock_item_id, 'weight_kg': '1.000', 'quantity_pieces': 1,
+                         'unit_price': D('100.00'), 'price_mode': 'KG'}], payments_data=[{'payment_method': self.pm_cash, 'amount': '100.00'}])
+        process_sales_return_v2(inv.id, shift.id, self.user, [{'sale_line_id': inv.lines.first().id, 'weight_kg': '0.5', 'quantity_pieces': 1}])
+        s = ShiftViewSet()._summary(shift)
+        self.assertEqual((s['invoices'], D(s['sales_total'])), (1, D('100.00')))
+        self.assertEqual([m['method'] for m in s['by_method']], [self.pm_cash.name])
+        self.assertEqual(s['returns_by_method'], [])
+        self.assertEqual((s['employee_count'], D(s['employee_total']), D(s['employee_returns_total'])), (1, D('100.00'), D('50.00')))
+        self.assertEqual(s['employee_orders'][0]['name'], self.emp.name)
+        self.assertEqual(D(s['expected']), D('600.00'))
+
     def test_goods_rules(self):
         self._settings(goods_price_mode='SALE')
         si = self._stock(self.shop, 10, 5)

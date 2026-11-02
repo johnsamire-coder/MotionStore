@@ -1,5 +1,6 @@
 import ShiftReturnsBox from '../components/ShiftReturnsBox';
 import OnlineShiftBox from '../components/OnlineShiftBox';
+import EmployeeShiftBox from '../components/EmployeeShiftBox';
 import MidShiftHandover from '../components/MidShiftHandover';
 // RECEIPT_PATCHED
 // SHIFTS_V2
@@ -84,6 +85,7 @@ export default function ShiftsPage() {
       <div class="b">${T.moves}</div><table>${(s.moves || []).map((m) => row(esc(m.label), money(m.amount))).join('')}</table><hr>
       <table class="b">${row(T.expected, money(sh.expected_cash ?? s.expected))}${sh.actual_cash != null ? row(T.actual, money(sh.actual_cash)) + row(T.diff, money(sh.difference)) : ''}${num(sh.handover_total) ? row(T.handed, money(sh.handover_total)) : ''}${s.remaining_in_drawer != null ? row(T.remain, money(s.remaining_in_drawer)) : ''}</table><hr>
       ${(num(s.online_count) || (s.online_returns_by_method || []).length) ? `<div class="c b" style="font-size:13px">تقفيل الأونلاين (منفصل - مش في الدرج)</div><table>${row('عدد الأوردرات', s.online_count || 0)}${row('إجمالي الأونلاين', money(s.online_total))}</table><div class="b">حسب طريقة الدفع</div><table>${(s.online_by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>${(s.online_returns_by_method || []).length ? `<div class="b">مرتجعات أونلاين</div><table>${s.online_returns_by_method.map((m) => row(esc(m.method), money(m.amount))).join('')}</table>` : ''}<table class="b">${row('صافي الأونلاين', money(s.online_net_total ?? s.online_total))}</table><table>${(s.online_orders || []).map((o) => row(esc(o.number) + (o.name || o.courier ? ' - ' + esc([o.name, o.courier].filter(Boolean).join(' / ')) : ''), money(o.total))).join('')}</table><hr>` : ''}
+      ${num(s.employee_count) ? `<div class="c b" style="font-size:13px">بضاعة على حساب الموظفين (مش فلوس)</div><table>${row('عدد الفواتير', s.employee_count)}${row('الإجمالي', money(s.employee_total))}${num(s.employee_returns_total) ? row('مرتجعات', money(s.employee_returns_total)) : ''}${(s.employee_orders || []).map((o) => row(esc(o.number) + ' - ' + esc(o.name), money(o.total))).join('')}</table><hr>` : ''}
       <div style="margin-top:14px">${T.cashier}: ${esc(sh.cashier_username || sh.cashier || '')} ..............</div>
       ${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=640'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
@@ -142,6 +144,7 @@ export default function ShiftsPage() {
             {(sum.moves || []).map((m) => <div key={m.key} className="flex justify-between"><span>{m.label}</span><b className={num(m.amount) < 0 ? 'text-rose-700' : 'text-emerald-700'}>{money(m.amount)}</b></div>)}
             <div className="flex justify-between text-base font-black bg-emerald-50 rounded-lg p-2 mt-2"><span>{T.expected}</span><span>{money(sum.expected)} {T.cur}</span></div>
             <div className="pt-2"><OnlineShiftBox sum={sum} /></div>
+            <div className="pt-2"><EmployeeShiftBox sum={sum} /></div>
           </div>
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
             <div className="text-sm font-bold">{T.close}</div>
