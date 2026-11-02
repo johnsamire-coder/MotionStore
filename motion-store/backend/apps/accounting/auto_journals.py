@@ -193,6 +193,7 @@ EMPLOYEES = '1060'
 
 def sync_staff_entry_journal(entry, entry_date=None) -> bool:
     """ Advance:   Dr 1060 Employee receivables / Cr 1030 Cash
+        Old advance (no treasury, paid before the system): Dr 1060 Employee receivables / Cr 3010 Owner equity
         Repayment: Dr 1030 Cash / Cr 1060 Employee receivables
         A cancelled entry is brought back to zero by a reversing entry (nothing is deleted).
         Deductions and bonuses post nothing here: they are booked when the payroll is approved. """
@@ -222,7 +223,7 @@ def sync_staff_entry_journal(entry, entry_date=None) -> bool:
                 source_document_id=str(entry.id),
                 notes=note,
                 lines_data=[_line(EMPLOYEES, diff, f"Employee {name} {entry.number}"),
-                            _line(CASH, -diff, f"Cash {entry.number}")],
+                            _line(OWNER_EQUITY if (entry.kind == 'ADVANCE' and not entry.treasury_id) else CASH, -diff, f"Cash {entry.number}")],
             )
         return True
     except Exception:

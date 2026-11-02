@@ -285,6 +285,7 @@ function AccountTab() {
   const [emp, setEmp] = useState(''); const [st, setSt] = useState(null);
   const [f, setF] = useState({ from: '', to: '' });
   const blank = () => ({ kind: 'ADVANCE', amount: '', date: today(), reason: '', treasury_id: '', installment: '', manager_password: '' });
+  const OLD_ADV = 'OLD_ADVANCE';  // an advance paid before the system: nothing leaves any treasury now
   const [form, setForm] = useState(blank());
   const [cancel, setCancel] = useState(null);
   const [msg, setMsg] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
@@ -301,7 +302,7 @@ function AccountTab() {
   const submit = async () => {
     setBusy(true); setErr('');
     try {
-      const r = await axiosClient.post('/staff-ledger/entries/', { ...form, employee_id: emp, treasury_id: needsTr ? form.treasury_id : '', installment: form.kind === 'ADVANCE' ? form.installment : '' });
+      const r = await axiosClient.post('/staff-ledger/entries/', { ...form, employee_id: emp, old_advance: form.kind === 'ADVANCE' && form.treasury_id === OLD_ADV, treasury_id: needsTr && form.treasury_id !== OLD_ADV ? form.treasury_id : '', installment: form.kind === 'ADVANCE' ? form.installment : '' });
       setSt(r.data); setForm({ ...blank(), kind: form.kind, treasury_id: form.treasury_id }); flash(`اتسجلت ✅ ${r.data.number}`); loadBal();
       axiosClient.get('/treasuries/').then((x) => setTrs(listOf(x.data).filter((t) => t.is_active !== false))).catch(() => {});
     } catch (e) { setErr(errOf(e)); } finally { setBusy(false); }
@@ -343,13 +344,13 @@ function AccountTab() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <label className="text-xs font-bold space-y-1 block">المبلغ<input type="number" min="0" className={`${input} w-full`} value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></label>
             <label className="text-xs font-bold space-y-1 block">التاريخ<input type="date" max={today()} className={`${input} w-full`} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} /></label>
-            {needsTr && <label className="text-xs font-bold space-y-1 block">{form.kind === 'ADVANCE' ? 'اتصرفت من خزنة' : 'دخلت خزنة'}<select className={`${input} w-full`} value={form.treasury_id} onChange={(e) => setForm({ ...form, treasury_id: e.target.value })}><option value="">اختار...</option>{trs.map((t) => <option key={t.id} value={t.id}>{t.name} (رصيدها {money(t.current_balance)})</option>)}</select></label>}
+            {needsTr && <label className="text-xs font-bold space-y-1 block">{form.kind === 'ADVANCE' ? 'اتصرفت من خزنة' : 'دخلت خزنة'}<select className={`${input} w-full`} value={form.treasury_id} onChange={(e) => setForm({ ...form, treasury_id: e.target.value })}><option value="">اختار...</option>{form.kind === 'ADVANCE' && <option value={OLD_ADV}>سلفة قديمة (اتصرفت قبل البرنامج) - من غير خزنة</option>}{trs.map((t) => <option key={t.id} value={t.id}>{t.name} (رصيدها {money(t.current_balance)})</option>)}</select></label>}
             {form.kind === 'ADVANCE' && <label className="text-xs font-bold space-y-1 block">القسط في كل مرتب (اختياري)<input type="number" min="0" className={`${input} w-full`} value={form.installment} placeholder="فاضي = تتخصم كلها" onChange={(e) => setForm({ ...form, installment: e.target.value })} /></label>}
             <label className="text-xs font-bold space-y-1 block md:col-span-2">{form.kind === 'DEDUCTION' || form.kind === 'BONUS' ? 'السبب *' : 'ملاحظة'}<input className={`${input} w-full`} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} /></label>
             {form.kind !== 'REPAYMENT' && <label className="text-xs font-bold space-y-1 block">باسورد المدير<input type="password" className={`${input} w-full`} value={form.manager_password} placeholder="لو انت مش مدير" onChange={(e) => setForm({ ...form, manager_password: e.target.value })} /></label>}
           </div>
           <div className="flex justify-between items-center flex-wrap gap-2">
-            <p className="text-[11px] text-slate-400">{form.kind === 'ADVANCE' ? 'السلفة بتطلع من الخزنة فعلاً، وبتتخصم من المرتب بالقسط.' : form.kind === 'REPAYMENT' ? 'الموظف رجّع فلوس: بتدخل الخزنة وبتقلل اللي عليه.' : 'بتتحسب في المرتب الجاي.'}</p>
+            <p className="text-[11px] text-slate-400">{form.kind === 'ADVANCE' ? (form.treasury_id === OLD_ADV ? 'سلفة قديمة: مفيش فلوس هتطلع من أي خزنة أو درج دلوقتي، بتتسجل على الموظف بس وبتتخصم من المرتب.' : 'السلفة بتطلع من الخزنة فعلاً، وبتتخصم من المرتب بالقسط.') : form.kind === 'REPAYMENT' ? 'الموظف رجّع فلوس: بتدخل الخزنة وبتقلل اللي عليه.' : 'بتتحسب في المرتب الجاي.'}</p>
             <button className={btn()} disabled={busy || !form.amount} onClick={submit}><Save size={14} /> {busy ? 'جاري الحفظ...' : 'تسجيل'}</button>
           </div>
         </div>

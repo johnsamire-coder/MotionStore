@@ -300,7 +300,8 @@ class StaffLedgerViewSet(viewsets.ViewSet):
                     return Response({'detail': 'الحركة دي محتاجة باسورد المدير'}, status=403)
             tr = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first() if d.get('treasury_id') else None
             e = services.add_ledger_entry(t, emp, kind, d.get('amount'), _date(d.get('date') or datetime.date.today()), d.get('reason'),
-                                          tr, d.get('installment'), request.user if request.user.is_authenticated else None, approver)
+                                          tr, d.get('installment'), request.user if request.user.is_authenticated else None, approver,
+                                          old_advance=str(d.get('old_advance') or '').lower() in ('1', 'true'))
             return Response({'ok': True, 'number': e.number, **services.employee_statement(t, emp)}, status=201)
         except (Employee.DoesNotExist, KeyError):
             return Response({'detail': 'اختار الموظف'}, status=400)

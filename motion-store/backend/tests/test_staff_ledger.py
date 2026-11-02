@@ -145,3 +145,32 @@ class StaffLedgerTest(TestCase):
         r = c.post('/api/v1/staff-ledger/entries/', {'employee_id': str(self.emp.id), 'kind': 'BONUS', 'amount': '5', 'reason': 'x'}, format='json')
         self.assertEqual(r.status_code, 400)
         self.assertEqual(c.get('/api/v1/staff-ledger/balances/').data, [])
+
+
+class OldAdvanceTest(StaffLedgerTest):
+    """ An advance paid before the staff screens existed: on the employee, out of no treasury """
+
+    def test_old_advance_touches_no_treasury(self):
+        r = self._post(self.manager, kind='ADVANCE', amount='180', date=D(2026, 10, 30).isoformat(), old_advance=True, reason='محمود')
+        self.assertEqual(r.status_code, 201, r.data)
+        e = EmployeeLedgerEntry.objects.get(number=r.data['number'])
+        self.assertIsNone(e.treasury_id)
+        self.assertIn('سلفة قديمة', e.reason)
+        self.assertFalse(TreasuryTransaction.objects.filter(tenant=self.tenant).exists())
+        self.safe.refresh_from_db()
+        self.assertEqual(self.safe.current_balance, Decimal('5000'))
+        from apps.staff.services import employee_balance
+        self.assertEqual(employee_balance(self.emp)[0], Decimal('180'))
+        self.assertEqual(self._net('1060'), Decimal('180'))
+        self.assertEqual(self._net('3010'), Decimal('-180'))
+        self.assertEqual(self._net('1030'), Decimal('0'))
+        self._balanced()
+        c = self._c(self.manager).post('/api/v1/staff-ledger/cancel/', {'id': str(e.id), 'reason': 'غلط', 'manager_password': PWD}, format='json')
+        self.assertIn(c.status_code, (200, 201), c.data)
+        self.assertFalse(TreasuryTransaction.objects.filter(tenant=self.tenant).exists())
+        self.assertEqual(self._net('1060'), Decimal('0'))
+        self._balanced()
+
+    def test_normal_advance_still_needs_a_treasury(self):
+        r = self._post(self.manager, kind='ADVANCE', amount='100')
+        self.assertEqual(r.status_code, 400)

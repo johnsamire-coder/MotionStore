@@ -274,8 +274,9 @@ def employee_balance(emp):
 
 
 @transaction.atomic
-def add_ledger_entry(tenant, emp, kind, amount, date, reason='', treasury=None, installment=None, user=None, approver=None):
+def add_ledger_entry(tenant, emp, kind, amount, date, reason='', treasury=None, installment=None, user=None, approver=None, old_advance=False):
     """ Advances leave the chosen treasury, repayments go into it; both post a journal entry.
+    An old advance (paid out before the staff screens existed) touches no treasury: it only puts the amount on the employee.
     Deductions and bonuses wait for the next payroll. """
     from apps.treasury.models import TreasuryTransactionType
     from apps.treasury.services import record_treasury_transaction
@@ -293,7 +294,11 @@ def add_ledger_entry(tenant, emp, kind, amount, date, reason='', treasury=None, 
     emp = Employee.objects.select_for_update().get(pk=emp.pk)
     if not emp.is_active and kind != LedgerKind.REPAYMENT:
         raise ValidationError('الموظف ده موقوف')
-    if kind in (LedgerKind.ADVANCE, LedgerKind.REPAYMENT):
+    old_advance = bool(old_advance) and kind == LedgerKind.ADVANCE
+    if old_advance:  # OLD_ADVANCE: money already left the drawer in the past, nothing moves now
+        treasury = None
+        reason = (('سلفة قديمة (قبل البرنامج) - ' + reason) if reason else 'سلفة قديمة (قبل البرنامج)')[:255]
+    elif kind in (LedgerKind.ADVANCE, LedgerKind.REPAYMENT):
         if treasury is None:
             raise ValidationError('اختار الخزنة')
         if treasury.tenant_id != tenant.id:
@@ -313,7 +318,7 @@ def add_ledger_entry(tenant, emp, kind, amount, date, reason='', treasury=None, 
     entry = EmployeeLedgerEntry.objects.create(
         tenant=tenant, number=_next_ledger_number(tenant, PREFIX[kind]), employee=emp, kind=kind, date=date, amount=amount,
         installment=installment, treasury=treasury, reason=reason, created_by=user, approved_by=approver)
-    if kind == LedgerKind.ADVANCE:
+    if kind == LedgerKind.ADVANCE and not old_advance:
         try:
             record_treasury_transaction(treasury_id=treasury.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=amount,
                                         source_document_type='StaffAdvance', source_document_id=entry.number,
@@ -350,9 +355,10 @@ def cancel_ledger_entry(tenant, entry_id, reason, user=None):
         owed_after = employee_balance(e.employee)[0] - e.amount
         if owed_after < 0:
             raise ValidationError('الموظف سدد جزء من السلفة دي. الغي السداد الأول')
-        record_treasury_transaction(treasury_id=e.treasury_id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=e.amount,
-                                    source_document_type='StaffAdvanceCancel', source_document_id=e.number,
-                                    description=f"إلغاء سلفة {e.employee.name} {e.number}")
+        if e.treasury_id:  # an old advance (no treasury) gives nothing back to any drawer
+            record_treasury_transaction(treasury_id=e.treasury_id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=e.amount,
+                                        source_document_type='StaffAdvanceCancel', source_document_id=e.number,
+                                        description=f"إلغاء سلفة {e.employee.name} {e.number}")
     elif e.kind == LedgerKind.REPAYMENT:
         try:
             record_treasury_transaction(treasury_id=e.treasury_id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=e.amount,
