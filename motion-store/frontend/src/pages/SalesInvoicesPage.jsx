@@ -63,8 +63,11 @@ export default function SalesInvoicesPage() {
   const paysText = (r) => (r.payments_info || []).map((p) => `${p.method} ${money(p.amount)}`).join(' + ');
   // EMPLOYEE_GOODS: goods on an employee's account bring no money: shown on their own, out of the sales totals
   const isEmp = (r) => (r.payments_info || []).some((p) => p.type === 'EMPLOYEE');
-  const shopRows = rows.filter((r) => !isEmp(r));
+  const isOnl = (r) => r.channel === 'ONLINE';  // ONLINE_SALES: listed as a normal invoice, but out of the totals (own closing)
+  const shopRows = rows.filter((r) => !isEmp(r) && !isOnl(r));
   const empRows = rows.filter(isEmp);
+  const onlRows = rows.filter((r) => isOnl(r) && !isEmp(r));
+  const onlTotal = onlRows.reduce((a, r) => a + num(r.total_amount), 0);
   const empTotal = empRows.reduce((a, r) => a + num(r.total_amount), 0);
   const sumTotal = shopRows.reduce((a, r) => a + num(r.total_amount), 0);
   const sumDisc = shopRows.reduce((a, r) => a + num(r.discount_amount), 0);
@@ -75,7 +78,7 @@ export default function SalesInvoicesPage() {
   const report = () => ({ title: T.rTitle, filename: 'sales-invoices', filtersText: [f.from && `${T.from}: ${f.from}`, f.to && `${T.to}: ${f.to}`, f.q].filter(Boolean).join(' | '), columns: [
     { key: 'no', header: T.no, width: 22 }, { key: 'date', header: T.date, width: 16 }, { key: 'cashier', header: T.cashier, width: 12 }, { key: 'term', header: T.terminal, width: 10 },
     { key: 'cust', header: T.customer, width: 20 }, { key: 'phone', header: T.phone, width: 14 }, { key: 'pays', header: T.pays, width: 30 }, { key: 'disc', header: T.discount, type: 'money' }, { key: 'total', header: T.amount, type: 'money' }
-  ], rows: rows.map((r) => ({ no: r.invoice_number, date: dt(r.invoice_date_time), cashier: r.cashier_username || '', term: r.terminal_code || '', cust: custText(r), phone: r.customer_phone || '', pays: paysText(r), disc: num(r.discount_amount), total: num(r.total_amount) })),
+  ], rows: rows.map((r) => ({ no: r.invoice_number + (isOnl(r) ? ' (أونلاين)' : '') + (isEmp(r) ? ' (موظف)' : ''), date: dt(r.invoice_date_time), cashier: r.cashier_username || '', term: r.terminal_code || '', cust: custText(r), phone: r.customer_phone || '', pays: paysText(r), disc: num(r.discount_amount), total: num(r.total_amount) })),
   totals: { disc: sumDisc, total: sumTotal } });
 
   const editInvoice = async (r) => {
@@ -161,7 +164,7 @@ export default function SalesInvoicesPage() {
         </div>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.count}</div><div className="text-xl font-black mt-1">{shopRows.length}</div>{empRows.length > 0 && <div className="text-[11px] text-sky-800 font-bold mt-1">🧑‍💼 على حساب الموظفين: {empRows.length} فاتورة - {money(empTotal)} {T.cur} (مش فلوس، مش داخلة في الإجمالي)</div>}</div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.count}</div><div className="text-xl font-black mt-1">{shopRows.length}</div>{onlRows.length > 0 && <div className="text-[11px] text-sky-700 font-bold mt-1">🛒 أونلاين: {onlRows.length} فاتورة - {money(onlTotal)} {T.cur} (تقفيل لوحدها، مش داخلة في الإجمالي)</div>}{empRows.length > 0 && <div className="text-[11px] text-sky-800 font-bold mt-1">🧑‍💼 على حساب الموظفين: {empRows.length} فاتورة - {money(empTotal)} {T.cur} (مش فلوس، مش داخلة في الإجمالي)</div>}</div>
         <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.total}</div><div className="text-xl font-black mt-1 text-emerald-800">{money(sumTotal)} <span className="text-xs">{T.cur}</span></div></div>
         <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.disc}</div><div className="text-xl font-black mt-1 text-violet-800">{money(sumDisc)} <span className="text-xs">{T.cur}</span></div></div>
         <div className="bg-white p-4 rounded-xl border border-slate-200"><div className="text-xs text-slate-500 font-bold">{T.byMethod}</div>{Object.keys(byMethod).length === 0 ? <div className="text-xs text-slate-400 mt-1">—</div> : Object.keys(byMethod).map((k) => <div key={k} className="flex justify-between text-xs mt-1"><span>{k}</span><span className="font-bold">{money(byMethod[k])}</span></div>)}</div>
@@ -177,7 +180,7 @@ export default function SalesInvoicesPage() {
             {rows.map((r) => (
               <React.Fragment key={r.id}>
                 <tr onClick={() => setOpenId(openId === r.id ? null : r.id)} className={`border-b border-slate-100 cursor-pointer ${openId === r.id ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
-                  <td className="p-2 font-mono font-bold">{r.invoice_number}</td>
+                  <td className="p-2 font-mono font-bold">{r.invoice_number}{isOnl(r) && <span className="ms-1 px-1.5 py-0.5 rounded bg-sky-100 text-sky-800 text-[10px] font-sans">🛒 أونلاين</span>}{isEmp(r) && <span className="ms-1 px-1.5 py-0.5 rounded bg-violet-100 text-violet-800 text-[10px] font-sans">🧑‍💼 موظف</span>}</td>
                   <td className="p-2 whitespace-nowrap">{dt(r.invoice_date_time)}</td>
                   <td className="p-2">{r.cashier_username || '—'}</td>
                   <td className="p-2">{r.terminal_code || '—'}</td>
