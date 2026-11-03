@@ -1,6 +1,7 @@
 import ShiftReturnsBox from '../components/ShiftReturnsBox';
 import OnlineShiftBox from '../components/OnlineShiftBox';
 import EmployeeShiftBox from '../components/EmployeeShiftBox';
+import PerfumeShiftBox from '../components/PerfumeShiftBox';
 import MidShiftHandover from '../components/MidShiftHandover';
 import ShiftCashIn from '../components/ShiftCashIn';
 // RECEIPT_PATCHED
@@ -93,6 +94,22 @@ export default function ShiftsPage() {
     const w = window.open('', '_blank', 'width=380,height=640'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
 
+  const printPerfume = async (r) => {  // PERFUME_SALES: the perfume counter's own closing slip
+    const co = await getCompanyInfo();
+    const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+    const row = (a, b) => `<tr><td>${a}</td><td style="text-align:left">${b}</td></tr>`;
+    const s = r.summary; const sh = s.shift;
+    const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>برفانات ${esc(sh.shift_code)}</title><style>@page{size:${co.paperMm || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${Math.min(co.bodyMm || 74, 68)}mm;margin:0 auto;font-size:12px} table{width:100%;border-collapse:collapse;table-layout:fixed} td{padding:2px 0;overflow-wrap:anywhere} td:last-child{text-align:left;white-space:nowrap;width:24mm} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b{font-weight:700}</style></head><body>
+      <div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div><div class="b">تقفيل البرفانات</div><div>${esc(sh.shift_code)}</div><div>${dt(new Date().toISOString())}</div></div><hr>
+      <table>${row('عدد الفواتير', s.perfume_count || 0)}${row('إجمالي البرفانات', money(s.perfume_total))}</table>
+      <div class="b">حسب طريقة الدفع</div><table>${(s.perfume_by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>
+      ${(s.perfume_returns_by_method || []).length ? `<div class="b">مرتجعات</div><table>${s.perfume_returns_by_method.map((m) => row(esc(m.method), money(m.amount))).join('')}</table>` : ''}
+      <table class="b">${row('صافي البرفانات', money(s.perfume_net_total))}</table><hr>
+      <table class="b">${row('المتوقع في الدرج', money(r.expected))}${row('اتعدّ', money(r.actual))}${row('الفرق', money(r.difference))}${num(r.handover) ? row('اترحّل', money(r.handover)) : ''}${row('فضل في الدرج', money(r.remaining))}</table><hr>
+      <div>بموافقة: ${esc(r.by)}</div><div style="margin-top:14px">${T.cashier}: ${esc(sh.cashier_username || '')} ..............</div>
+      <script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
+    const w = window.open('', '_blank', 'width=380,height=640'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
+  };
   const doOpen = async () => {
     setBusy(true); setErr('');
     try { await axiosClient.post('/shifts/open_v2/', { terminal_id: termId, counted_cash: counted, manager_password: pwd || undefined }); setPwd(''); await loadShift(); loadHist(); }
@@ -147,6 +164,7 @@ export default function ShiftsPage() {
             <div className="flex justify-between text-base font-black bg-emerald-50 rounded-lg p-2 mt-2"><span>{T.expected}</span><span>{money(sum.expected)} {T.cur}</span></div>
             <div className="pt-2"><OnlineShiftBox sum={sum} /></div>
             <div className="pt-2"><EmployeeShiftBox sum={sum} /></div>
+            <div className="pt-2"><PerfumeShiftBox shift={shift} sum={sum} trs={trs} onPrint={printPerfume} onDone={() => loadShift()} /></div>
           </div>
           <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 text-xs">
             <div className="text-sm font-bold">{T.close}</div>

@@ -226,6 +226,9 @@ def process_sales_return_v2(invoice_id, shift_id, cashier, items: list, refund_m
         if not pm or pm.method_type == 'CREDIT':
             raise ValidationError('اختار طريقة رد الفلوس')
         target_t = pm.treasury or terminal.cash_drawer
+        if invoice.channel == 'PERFUME' and (pm.method_type == 'CASH' or target_t.pk == terminal.cash_drawer_id):
+            from apps.sales.services import perfume_drawer_for
+            target_t = perfume_drawer_for(terminal)  # PERFUME_SALES: perfume cash refunds come out of the perfume drawer
         record_treasury_transaction(treasury_id=target_t.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=total_refund, payment_method=pm,
                                     source_document_type='SalesReturn', source_document_id=return_number, description=f"رد فلوس مرتجع {return_number}", allow_negative=(target_t.name == 'قسائم الرصيد'))
     sr = SalesReturn.objects.create(tenant=tenant, return_number=return_number, original_sale_invoice=invoice, shift=shift, cashier=cashier, return_date_time=now,

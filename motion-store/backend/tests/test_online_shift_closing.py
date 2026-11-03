@@ -85,3 +85,45 @@ class ShiftCashInTest(StockBandsFollowSalesTest):
         safe.refresh_from_db(); self.assertEqual(safe.current_balance, Decimal('700.00'))
         rep = reports_v2.owner_deposits(self.tenant, {})
         self.assertEqual(rep['totals']['amount'], 2050.0)
+
+
+class PerfumeCounterTest(StockBandsFollowSalesTest):
+    """ Perfume counter sales: their own drawer and their own closing, out of the cashier closing """
+
+    def test_perfume_sales_have_their_own_drawer_and_closing(self):
+        from rest_framework.test import APIClient
+        from apps.users.models import User
+        from apps.sales.services import PERFUME_DRAWER_NAME
+        self._stock(self.shop, 20, 10)
+        code = self._code()
+        boss = User.objects.create_user(username="boss4", password="Pass2026Password", role="ADMIN", tenant=self.tenant)
+        safe = Treasury.objects.create(tenant=self.tenant, name="الخزنة الرئيسية", branch=self.branch, treasury_type=TreasuryType.MAIN_SAFE)
+        shift = open_shift(self.terminal.id, self.user, Decimal('500.00'))
+        item = lambda n: [{'piece_item_id': code.id, 'quantity_pieces': n, 'weight_kg': '0', 'unit_price': Decimal('50.00'), 'price_mode': 'PIECE'}]
+        process_pos_sale(shift_id=shift.id, cashier=self.user, items_data=item(1), payments_data=[{'payment_method': self.pm_cash, 'amount': Decimal('50.00')}])
+        p = process_pos_sale(shift_id=shift.id, cashier=self.user, items_data=item(4), payments_data=[{'payment_method': self.pm_cash, 'amount': Decimal('200.00')}], perfume=True)
+        self.assertEqual(p.channel, 'PERFUME')
+        with self.assertRaises(ValidationError):
+            process_pos_sale(shift_id=shift.id, cashier=self.user, items_data=item(1), payments_data=[{'payment_method': self.pm_cash, 'amount': Decimal('50.00')}], perfume=True, online={'name': 'x'})
+        process_sales_return_v2(p.id, shift.id, self.user, [{'sale_line_id': p.lines.first().id, 'quantity_pieces': 1, 'weight_kg': '0'}], refund_method_id=self.pm_cash.id)
+
+        pdr = Treasury.objects.get(tenant=self.tenant, name=PERFUME_DRAWER_NAME)
+        self.assertEqual(pdr.current_balance, Decimal('150.00'))
+        self.drawer.refresh_from_db()
+        self.assertEqual(self.drawer.current_balance, Decimal('550.00'))          # only the store sale
+
+        s = ShiftViewSet()._summary(shift)
+        self.assertEqual((s['invoices'], Decimal(s['sales_total']), Decimal(s['expected'])), (1, Decimal('50.00'), Decimal('550.00')))
+        self.assertEqual(s['returns_by_method'], [])
+        self.assertEqual((s['perfume_count'], Decimal(s['perfume_total']), Decimal(s['perfume_returns_total']), Decimal(s['perfume_net_total'])),
+                         (1, Decimal('200.00'), Decimal('50.00'), Decimal('150.00')))
+        self.assertEqual(Decimal(s['perfume_drawer_balance']), Decimal('150.00'))
+
+        c = APIClient(); c.force_authenticate(user=boss)
+        url = f'/api/v1/shifts/{shift.id}/perfume_close/'
+        self.assertEqual(c.post(url, {'actual_cash': '140'}, format='json').status_code, 403)
+        r = c.post(url, {'actual_cash': '140', 'handover_amount': '140', 'destination': 'TREASURY', 'treasury_id': str(safe.id), 'manager_password': 'Pass2026Password'}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual((r.data['difference'], r.data['remaining']), ('-10.00', '0.00'))
+        safe.refresh_from_db(); self.assertEqual(safe.current_balance, Decimal('140.00'))
+        self.drawer.refresh_from_db(); self.assertEqual(self.drawer.current_balance, Decimal('550.00'))

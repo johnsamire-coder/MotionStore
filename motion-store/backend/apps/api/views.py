@@ -1135,7 +1135,8 @@ class ShiftViewSet(BaseTenantViewSet):
         cash_in = []
         LABELS['OnlineReturn'] = 'مرتجع أونلاين اتصرف من الدرج'
         _emp = SaleInvoice.objects.filter(shift=sh, payments__payment_method__method_type='EMPLOYEE').distinct()  # EMPLOYEE_GOODS: no money, own section
-        invs = SaleInvoice.objects.filter(shift=sh).exclude(channel='ONLINE').exclude(pk__in=_emp.values('pk'))
+        invs = SaleInvoice.objects.filter(shift=sh).exclude(channel__in=('ONLINE', 'PERFUME')).exclude(pk__in=_emp.values('pk'))
+        _prf = SaleInvoice.objects.filter(shift=sh, channel='PERFUME')  # PERFUME_SALES: own drawer, own closing
         _onl = SaleInvoice.objects.filter(shift=sh, channel='ONLINE')
         from django.apps import apps as _ap
         _SR = _ap.get_model('returns', 'SalesReturn')
@@ -1164,9 +1165,13 @@ class ShiftViewSet(BaseTenantViewSet):
         rets = {}
         _orets = {}
         _erets = {}
+        _prets = {}
         _emp_ids = set(_emp.values_list('pk', flat=True))
         for _r in _SR.objects.filter(shift=sh).select_related('refund_method', 'original_sale_invoice'):
             _k = 'على حساب العميل' if _r.refund_to_credit else (_r.refund_method.name if _r.refund_method_id else 'نقدي')
+            if _r.original_sale_invoice.channel == 'PERFUME':  # PERFUME_SALES
+                _prets[_k] = _prets.get(_k, Decimal('0')) + (_r.total_refund_amount or Decimal('0'))
+                continue
             if _r.original_sale_invoice_id in _emp_ids:  # EMPLOYEE_GOODS: goods brought back by an employee
                 _erets[_k] = _erets.get(_k, Decimal('0')) + (_r.total_refund_amount or Decimal('0'))
                 continue
@@ -1191,12 +1196,90 @@ class ShiftViewSet(BaseTenantViewSet):
                        'online_returns_by_method': [{'method': k, 'amount': str(v)} for k, v in _orets.items()], 'online_returns_total': str(_oret), 'online_net_total': str(_otot - _oret),
                        'online_orders': [{'number': i.invoice_number, 'total': str(i.total_amount), 'name': (i.online_info or {}).get('name') or '', 'courier': (i.online_info or {}).get('courier') or '',
                                           'methods': ' + '.join(sorted({_p.payment_method.name for _p in i.payments.all()}))} for i in _onl.prefetch_related('payments__payment_method').order_by('created_at')]})
+        _extra.update(self._perfume_part(sh, _prf, _prets))
         _extra['cash_in'] = cash_in
         _extra['cash_in_total'] = str(sum((Decimal(c['amount']) for c in cash_in), Decimal('0')))
         return {**_extra, 'shift': ShiftSerializer(sh).data, 'drawer': drawer.name, 'opening': str(sh.opening_cash), 'expected': str(drawer.current_balance),
                 'invoices': invs.count(), 'sales_total': str(invs.aggregate(s=Sum('total_amount'))['s'] or 0),
                 'by_method': [{'method': k, 'amount': str(v)} for k, v in by_method.items()],
                 'moves': [{'key': k, 'label': LABELS.get(k, k), 'amount': str(v)} for k, v in moves.items()]}
+
+    def _perfume_part(self, sh, prf, prets):
+        """ PERFUME_SALES: the perfume counter's part of a shift - sales, returns, and its drawer """
+        from django.db.models import Sum
+        from apps.sales.models import SalePayment
+        from apps.treasury.models import Treasury, TreasuryTransaction
+        from apps.sales.services import PERFUME_DRAWER_NAME
+        bym = {}
+        for p in SalePayment.objects.filter(sale_invoice__in=prf).select_related('payment_method'):
+            bym[p.payment_method.name] = bym.get(p.payment_method.name, Decimal('0')) + p.amount
+        tot = prf.aggregate(s=Sum('total_amount'))['s'] or Decimal('0')
+        ret = sum(prets.values(), Decimal('0'))
+        out = {'perfume_count': prf.count(), 'perfume_total': str(tot), 'perfume_by_method': [{'method': k, 'amount': str(v)} for k, v in bym.items()],
+               'perfume_returns_by_method': [{'method': k, 'amount': str(v)} for k, v in prets.items()], 'perfume_returns_total': str(ret), 'perfume_net_total': str(tot - ret)}
+        dr = Treasury.objects.filter(tenant=sh.tenant, name=PERFUME_DRAWER_NAME).first()
+        if dr:
+            moves = {}
+            qs = TreasuryTransaction.objects.filter(treasury=dr, created_at__gte=sh.opened_at)
+            if sh.closed_at:
+                qs = qs.filter(created_at__lte=sh.closed_at)
+            names = {'SaleInvoice': 'مبيعات كاش', 'SalesReturn': 'مرتجعات', 'PerfumeShortage': 'عجز البرفانات', 'PerfumeSurplus': 'زيادة البرفانات',
+                     'OwnerDrawing': 'ترحيل لصاحب المحل', 'TreasuryTransfer': 'تحويلات'}
+            for tx in qs:
+                sign = 1 if tx.transaction_type in ('DEPOSIT', 'TRANSFER_IN') else -1
+                k = names.get(tx.source_document_type or '', tx.source_document_type or 'أخرى')
+                moves[k] = moves.get(k, Decimal('0')) + (tx.amount if tx.amount < 0 else sign * tx.amount)
+            dr.refresh_from_db()
+            out.update({'perfume_drawer_id': str(dr.id), 'perfume_drawer_balance': str(dr.current_balance),
+                        'perfume_moves': [{'label': k, 'amount': str(v)} for k, v in moves.items()]})
+        return out
+
+    @action(detail=True, methods=['post'])
+    def perfume_close(self, request, pk=None):
+        """ PERFUME_SALES: closing of the perfume drawer on its own - count it, book any shortage/surplus, hand cash over """
+        from django.db import transaction as dbt
+        from apps.treasury.models import Treasury, TreasuryTransactionType
+        from apps.treasury.services import record_treasury_transaction, transfer_between_treasuries
+        from apps.sales.services import PERFUME_DRAWER_NAME
+        sh = self.get_object(); t = sh.tenant; d = request.data
+        dr = Treasury.objects.filter(tenant=t, name=PERFUME_DRAWER_NAME).first()
+        if not dr:
+            return Response({'detail': 'لسه مفيش مبيعات برفانات'}, status=400)
+        mgr = _verify_manager(t, d.get('manager_password'))
+        if not mgr:
+            return Response({'detail': 'تقفيل البرفانات محتاج باسورد المدير'}, status=403)
+        try:
+            actual = Decimal(str(d.get('actual_cash')))
+            hand = Decimal(str(d.get('handover_amount') or '0'))
+        except Exception:
+            return Response({'detail': 'اكتب الفلوس اللي اتعدّت في درج البرفانات'}, status=400)
+        if actual < 0 or hand < 0 or hand > actual:
+            return Response({'detail': 'المبالغ مش مظبوطة: الترحيل لازم يبقى أقل من أو قد اللي اتعدّ'}, status=400)
+        try:
+            with dbt.atomic():
+                dr = Treasury.objects.select_for_update().get(pk=dr.pk)
+                expected = dr.current_balance
+                diff = actual - expected
+                ref = sh.shift_code
+                if diff != 0:
+                    record_treasury_transaction(treasury_id=dr.id, transaction_type=TreasuryTransactionType.DEPOSIT if diff > 0 else TreasuryTransactionType.WITHDRAWAL, amount=abs(diff),
+                                                source_document_type='PerfumeSurplus' if diff > 0 else 'PerfumeShortage', source_document_id=ref,
+                                                description=f"{'زيادة' if diff > 0 else 'عجز'} درج البرفانات - وردية {ref} (بموافقة {mgr.username})", allow_negative=True)
+                if hand > 0:
+                    if d.get('destination') == 'OWNER':
+                        record_treasury_transaction(treasury_id=dr.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=hand, source_document_type='OwnerDrawing',
+                                                    source_document_id=ref, description=f"ترحيل البرفانات لصاحب المحل - وردية {ref}")
+                    else:
+                        to = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first()
+                        if not to or to.pk == dr.pk:
+                            raise ValueError('اختار الخزنة اللي هيترحّل ليها')
+                        transfer_between_treasuries(dr.id, to.id, hand, f"ترحيل البرفانات - وردية {ref}")
+        except Exception as ex:
+            msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
+            return Response({'detail': 'الخزنة مفيهاش فلوس كفاية' if 'Insufficient' in msg else msg}, status=400)
+        dr.refresh_from_db()
+        return Response({'ok': True, 'expected': str(expected), 'actual': str(actual), 'difference': str(diff), 'handover': str(hand),
+                         'remaining': str(dr.current_balance), 'by': mgr.username, 'summary': self._summary(sh)})
 
     @action(detail=True, methods=['get'])
     def summary(self, request, pk=None):
@@ -1548,6 +1631,11 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
             return Response({'detail': 'الفاتورة دي فيها آجل - عدّلها بمرتجع'}, status=400)
         old_cash = sum((D(str(x.amount)) for x in pays if getattr(x.payment_method, 'method_type', '') == 'CASH'), D('0'))
         num, when = old.invoice_number, old.invoice_date_time
+        if old.channel == 'PERFUME':  # PERFUME_SALES: an edited perfume invoice stays a perfume invoice
+            try:
+                request.data['perfume'] = True
+            except Exception:
+                pass
         Shift = G('shifts', 'Shift')
         class _Stop(Exception):
             pass
@@ -1657,7 +1745,8 @@ class SaleInvoiceViewSet(BaseTenantViewSet):
                 online=(request.data.get('online') or None),
                 coupon_code=(request.data.get('coupon_code') or '').strip() or None,
                 applied_offers=request.data.get('applied_offers') or [],
-                employee=_emp
+                employee=_emp,
+                perfume=str(request.data.get('perfume') or '').lower() in ('1', 'true')
             )
         except _DjVE as e:
             return Response({'detail': '; '.join(e.messages)}, status=400)

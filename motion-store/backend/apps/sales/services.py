@@ -47,7 +47,7 @@ def process_pos_sale(
     notes: str = None,
     coupon_code: str = None,
     applied_offers: list = None,
-    allowed_warehouse_id=None, online=None, employee=None) -> SaleInvoice:
+    allowed_warehouse_id=None, online=None, employee=None, perfume=False) -> SaleInvoice:
     """
     Central POS Sale Engine:
     Decrements stock, calculates COGS & Margins, collects cash into Treasury drawer, updates Shift, and posts Double-Entry Journal Entry.
@@ -58,6 +58,11 @@ def process_pos_sale(
 
     tenant = shift.tenant
     terminal = shift.terminal
+    perfume_drawer = None
+    if perfume:  # PERFUME_SALES: perfume counter sales - own drawer, own closing
+        if online or employee is not None:
+            raise ValidationError('بيع البرفانات مينفعش يبقى أونلاين أو على حساب موظف')
+        perfume_drawer = perfume_drawer_for(terminal)
     now = timezone.now()
 
     # 1. Generate Invoice #
@@ -258,6 +263,8 @@ def process_pos_sale(
             raise _VE2('"عند الاستلام" للأوردرات الأونلاين بس')
         # Deposit to target treasury (drawer or bank)
         target_treasury = pm.treasury or terminal.cash_drawer
+        if perfume_drawer is not None and (pm.method_type == 'CASH' or target_treasury.pk == terminal.cash_drawer_id):
+            target_treasury = perfume_drawer  # PERFUME_SALES: perfume cash goes into the perfume drawer, never the cashier's
         if online and target_treasury.pk == terminal.cash_drawer_id:  # ONLINE_SALES: online money never goes into the cashier drawer
             from django.core.exceptions import ValidationError as _VE3
             raise _VE3(f'طريقة الدفع "{pm.name}" فلوسها بتنزل في درج الكاشير - الأوردر الأونلاين لازم يتدفع بطريقة ليها خزنة منفصلة (إنستاباي / محفظة / فيزا / عند الاستلام)')
@@ -271,7 +278,7 @@ def process_pos_sale(
             description=f"Sales receipt from Invoice #{invoice_number}"
         )
 
-        if pm.method_type == 'CASH':
+        if pm.method_type == 'CASH' and perfume_drawer is None:
             cash_collected += p_amount
 
     # 6. Update Shift Cash Accumulator
@@ -316,6 +323,9 @@ def process_pos_sale(
         invoice.notes = ((invoice.notes or '') + f' | على حساب الموظف {employee.name}').strip(' |')
         invoice.save(update_fields=['notes'])
 
+    if perfume_drawer is not None:  # PERFUME_SALES
+        invoice.channel = 'PERFUME'
+        invoice.save(update_fields=['channel'])
     if online:  # ONLINE_SALES
         invoice.channel = 'ONLINE'
         invoice.online_info = {k: str((online or {}).get(k) or '')[:200] for k in ('name', 'phone', 'address', 'courier')}
@@ -354,3 +364,16 @@ def next_number(tenant, key, model=None, field=None):
         if not model or not model.objects.filter(tenant=tenant, **{field: number}).exists():
             seq.save(update_fields=['next_value'])
             return number
+
+
+PERFUME_DRAWER_NAME = 'درج البرفانات'
+
+
+def perfume_drawer_for(terminal):
+    """ PERFUME_SALES: the perfume counter's own cash drawer (made the first time it is needed) """
+    from apps.treasury.models import Treasury
+    tr = Treasury.objects.filter(tenant=terminal.tenant, name=PERFUME_DRAWER_NAME).first()
+    if tr is None:
+        tr = Treasury.objects.create(tenant=terminal.tenant, name=PERFUME_DRAWER_NAME, treasury_type='POS_DRAWER', branch=terminal.branch,
+                                     current_balance=Decimal('0.00'), is_active=True)
+    return tr

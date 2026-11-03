@@ -403,7 +403,7 @@ export default function POSPage() {
     } catch (e) { apiErr(e); setCoupon(null); }
   };
 
-  const resetSale = () => { setOnline(false); setOnl({ name: '', phone: '', address: '', courier: '' }); setApprovedBy(null); setApprovedPwd(''); setCart([]); setBundle(null); setBundleCount(0); setDiscount(''); setDelivery(''); setPrevBal(''); setNotes(''); setCustQ(''); setCust(null); setCustNew(false); setCustNameIn(''); setPicked([]); setCoupon(null); setCouponIn(''); setPayRows([]); setCashGiven(''); setEmpGoods(null); };
+  const resetSale = () => { setOnline(false); setPerfume(false); setOnl({ name: '', phone: '', address: '', courier: '' }); setApprovedBy(null); setApprovedPwd(''); setCart([]); setBundle(null); setBundleCount(0); setDiscount(''); setDelivery(''); setPrevBal(''); setNotes(''); setCustQ(''); setCust(null); setCustNew(false); setCustNameIn(''); setPicked([]); setCoupon(null); setCouponIn(''); setPayRows([]); setCashGiven(''); setEmpGoods(null); };
 
   const holdSale = () => {
     if (!cart.length) return;
@@ -426,6 +426,7 @@ export default function POSPage() {
   };
   const addPayRow = () => { const used = payRows.map((r) => r.id); const m = payMethods.find((x) => !used.includes(x.id)); if (!m) return; setPayRows([...payRows, { key: `r${Date.now()}`, id: m.id, amount: Math.max(0, remaining).toFixed(2) }]); };
   const [online, setOnline] = useState(false);
+  const [perfume, setPerfume] = useState(false);  // PERFUME_SALES: perfume counter - own drawer, own closing
   const [onl, setOnl] = useState({ name: '', phone: '', address: '', courier: '' });
   const isVoucherPm = (id) => ((payMethods.find((m) => m.id === id) || {}).name === 'قسيمة رصيد');
   const checkVoucher = async (r, code) => {
@@ -483,7 +484,7 @@ export default function POSPage() {
       ? { piece_item_id: l.piece_item_id, promo_price: !!l.promo, quantity_pieces: parseInt(l.qty || '1', 10) || 1, weight_kg: (l.mode === 'KG' || l.promo) ? num(l.kg).toFixed(6) : '0', unit_price: num(l.price).toFixed(2), price_mode: l.mode, display_name: l.name, bundle_label: l.bundle || null, offer_label: l.offer || null }
       : { stock_item_id: l.stock_item_id, weight_kg: num(l.kg).toFixed(6), quantity_pieces: 0, unit_price: num(l.price).toFixed(2), price_mode: 'KG', display_name: l.name, bundle_label: l.bundle || null }));
     const body = {
-      online: online ? onl : undefined, shift_id: shift.id, items, payments: payRows.filter((r) => num(r.amount) > 0).map((r) => ({ payment_method_id: r.id, amount: num(r.amount).toFixed(2), voucher_code: r.code || undefined, reference_number: r.code || undefined })),
+      online: online ? onl : undefined, perfume: perfume && !online ? true : undefined, shift_id: shift.id, items, payments: payRows.filter((r) => num(r.amount) > 0).map((r) => ({ payment_method_id: r.id, amount: num(r.amount).toFixed(2), voucher_code: r.code || undefined, reference_number: r.code || undefined })),
       discount_amount: r2(offersDisc + num(discount)).toFixed(2), delivery_fee: num(delivery).toFixed(2), previous_balance: num(prevBal).toFixed(2), notes: approvedBy ? `${notes} [موافقة المدير على تعديل السعر/الخصم: ${approvedBy}]`.trim() : notes,
       coupon_code: coupon ? coupon.code : '', manager_password: approvedPwd || undefined, applied_offers: applied.map((x) => ({ id: x.o.id, name: x.o.name, discount: x.d.toFixed(2), coupon: x.coupon }))
     };
@@ -566,7 +567,7 @@ export default function POSPage() {
       {err && <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2.5 rounded-lg text-sm font-bold">{err}</div>}
 
       {/* Mode Selection Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div onClick={() => setSellMode('WEIGHT')} className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${sellMode === 'WEIGHT' ? 'border-emerald-600 bg-emerald-50 shadow-md' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="flex items-center gap-2">
             <Scale className={sellMode === 'WEIGHT' ? 'text-emerald-700' : 'text-slate-500'} size={20} />
@@ -596,7 +597,10 @@ export default function POSPage() {
             </div>
           </div>
           <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-mono font-black text-xs">/</span>
-        </div><div onClick={() => setOnline(!online)} data-x="ONLINE_CARD" className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${online ? 'border-sky-600 bg-sky-50 shadow-md' : 'border-slate-200 bg-white hover:border-sky-300'}`}>
+        </div><div onClick={() => { setPerfume(!perfume); if (!perfume) setOnline(false); }} data-x="PERFUME_CARD" className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${perfume ? 'border-pink-600 bg-pink-50 shadow-md' : 'border-slate-200 bg-white hover:border-pink-300'}`}>
+          <div className="flex items-center gap-2"><span className="text-2xl">🌸</span><div><div className="font-bold text-sm">بيع برفانات محل</div><div className="text-[11px] text-slate-500">{perfume ? 'الفاتورة دي برفانات - فلوسها في درج البرفانات' : 'تقفيل لوحدها'}</div></div></div>
+          {perfume && <span className="h-7 px-2 rounded-md bg-pink-600 text-white text-xs font-bold flex items-center">✓</span>}
+        </div><div onClick={() => { setOnline(!online); if (!online) setPerfume(false); }} data-x="ONLINE_CARD" className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${online ? 'border-sky-600 bg-sky-50 shadow-md' : 'border-slate-200 bg-white hover:border-sky-300'}`}>
           <div className="flex items-center gap-2"><span className="text-2xl">🛒</span><div><div className="font-bold text-sm">بيع أونلاين</div><div className="text-[11px] text-slate-500">{online ? 'الفاتورة دي أونلاين - فلوسها مش في الدرج' : 'أوردر شحن أو توصيل'}</div></div></div>
           {online && <span className="h-7 px-2 rounded-md bg-sky-600 text-white text-xs font-bold flex items-center">✓</span>}
         </div>
@@ -891,7 +895,7 @@ export default function POSPage() {
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 space-y-4">
             <div className="flex items-center justify-between"><div className="text-base font-bold">{T.payTitle}</div><button type="button" onClick={() => setShowPay(false)} aria-label="close" className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center cursor-pointer"><X size={16} /></button></div>
             <div className="text-center text-3xl font-black text-emerald-800">{money(required)} <span className="text-sm">{T.cur}</span></div>{err && <div className="bg-rose-50 border border-rose-300 text-rose-800 p-2 rounded-lg text-xs font-bold">{err}</div>}
-            <OnlineBox online={online} setOnline={setOnline} onl={onl} setOnl={setOnl} /><button type="button" onClick={oldPaper} className="mb-2 h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">📝 رصيد قديم (ورقة)</button>
+            {perfume && <div className="mb-2 p-2 rounded-xl border border-pink-400 bg-pink-50 text-pink-800 text-sm font-bold" dir="rtl">🌸 فاتورة برفانات: الكاش بيدخل درج البرفانات وليها تقفيل لوحدها</div>}<OnlineBox online={online} setOnline={(v) => { setOnline(v); if (v) setPerfume(false); }} onl={onl} setOnl={setOnl} /><button type="button" onClick={oldPaper} className="mb-2 h-8 px-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-xs font-bold cursor-pointer">📝 رصيد قديم (ورقة)</button>
             {!empGoods && <button type="button" onClick={async () => { try { const r = await axiosClient.get('/staff-goods/setup/'); setEmpGoods({ setup: r.data, employee_id: '' }); } catch (e) { apiErr(e); } }} className="mb-2 ms-2 h-8 px-3 rounded-lg border border-sky-300 bg-sky-50 text-sky-800 text-xs font-bold cursor-pointer">🧑‍💼 على حساب موظف</button>}
             {empGoods && (
               <div className="border border-sky-300 bg-sky-50 rounded-xl p-3 space-y-2">
