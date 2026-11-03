@@ -77,6 +77,14 @@ const TX = {
 };
 const GL = { ar: { NEW_COLLECTION: 'عالي', MIDDLE: 'وسط', CLEARANCE: 'تصفيات' }, en: { NEW_COLLECTION: 'H', MIDDLE: 'M', CLEARANCE: 'L' } };
 
+// PERFUME_SALES: perfume items are known by their name (code name, category, linked stock names)
+const PERFUME_WORDS = ['برفان', 'برفيوم', 'بارفان', 'بيرفيوم', 'برفام', 'برفيم', 'عطر', 'عطور', 'سبلاش', 'بودي مست', 'مسك', 'perfume', 'parfum', 'fragrance', 'splash', 'mist', 'cologne', 'كولونيا'];
+const isPerfumeItem = (s) => {
+  if (!s) return false;
+  const txt = [s.name, s.product_name, s.category_name, s.brand, s.display_name, ...((s.linked_items_details || []).map((x) => x.full_name))].filter(Boolean).join(' ').toLowerCase();
+  return PERFUME_WORDS.some((w) => txt.includes(w));
+};
+
 export default function POSPage() {
   const { lang, isRTL } = useLanguage();
   const T = TX[lang] || TX.ar;
@@ -265,6 +273,7 @@ export default function POSPage() {
 
   // ---------- adding lines ----------
   const addWeight = (s, kgVal) => {
+    if (perfume && !isPerfumeItem(s)) { showErr('إنت في «بيع برفانات محل» - الصنف ده مش برفان'); return false; }
     const w = num(kgVal);
     if (w <= 0) { showErr(T.needKg); return false; }
     const used = cart.filter((l) => l.stock_item_id === s.id).reduce((a, l) => a + num(l.kg), 0);
@@ -275,6 +284,7 @@ export default function POSPage() {
   };
   const addPiece = (p, qtyVal, kgVal) => {
     if (!p) return false;
+    if (perfume && !isPerfumeItem(p)) { showErr('إنت في «بيع برفانات محل» - الصنف ده مش برفان'); return false; }
     const isWeightMode = sellMode === 'WEIGHT' || (sellMode === 'MIX' && num(kgVal) > 0);
     const w = num(kgVal);
     const actualW = isWeightMode ? (w > 0 ? w : 1.0) : w;
@@ -534,6 +544,7 @@ export default function POSPage() {
   const term = q.trim().toLowerCase();
   const sourceList = pieceItems.length > 0 ? pieceItems : stock;
   const dir = sourceList.filter((s) => {
+    if (perfume && !isPerfumeItem(s)) return false;  // PERFUME_SALES: only perfumes while the perfume button is on
     const termStr = ((code || '') + ' ' + (q || '')).trim().toLowerCase();
     if (!termStr) return true;
     const codeStr = String(s.code || s.product_code || '').toLowerCase();
@@ -597,7 +608,7 @@ export default function POSPage() {
             </div>
           </div>
           <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-800 font-mono font-black text-xs">/</span>
-        </div><div onClick={() => { setPerfume(!perfume); if (!perfume) setOnline(false); }} data-x="PERFUME_CARD" className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${perfume ? 'border-pink-600 bg-pink-50 shadow-md' : 'border-slate-200 bg-white hover:border-pink-300'}`}>
+        </div><div onClick={() => { if (!perfume && cart.some((l) => !isPerfumeItem(l))) { showErr('الفاتورة فيها أصناف مش برفانات - شيلها الأول أو خلّص الفاتورة دي'); return; } setPerfume(!perfume); if (!perfume) setOnline(false); }} data-x="PERFUME_CARD" className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${perfume ? 'border-pink-600 bg-pink-50 shadow-md' : 'border-slate-200 bg-white hover:border-pink-300'}`}>
           <div className="flex items-center gap-2"><span className="text-2xl">🌸</span><div><div className="font-bold text-sm">بيع برفانات محل</div><div className="text-[11px] text-slate-500">{perfume ? 'الفاتورة دي برفانات - فلوسها في درج البرفانات' : 'تقفيل لوحدها'}</div></div></div>
           {perfume && <span className="h-7 px-2 rounded-md bg-pink-600 text-white text-xs font-bold flex items-center">✓</span>}
         </div><div onClick={() => { setOnline(!online); if (!online) setPerfume(false); }} data-x="ONLINE_CARD" className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-center justify-between ${online ? 'border-sky-600 bg-sky-50 shadow-md' : 'border-slate-200 bg-white hover:border-sky-300'}`}>
