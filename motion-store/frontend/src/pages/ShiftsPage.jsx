@@ -75,41 +75,52 @@ export default function ShiftsPage() {
   useEffect(() => { if (termId) { loadShift(termId); loadHist(); } }, [termId]);
   useEffect(() => { if (drawer && !shift) setCounted(String(drawer.current_balance)); }, [drawer?.id, drawer?.current_balance, shift?.id]);
 
-  const printReport = async (s) => {
-    const co = await getCompanyInfo();
-    const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
-    const row = (a, b) => `<tr><td>${a}</td><td style="text-align:left">${b}</td></tr>`;
-    const sh = s.shift;
-    const html = `<html dir="${isRTL ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><title>${esc(sh.shift_code)}</title><style>body{max-width:64mm !important;padding:0 1mm !important;font-size:10.5px !important;box-sizing:border-box} table{width:100% !important;table-layout:fixed} td{overflow-wrap:anywhere} td:last-child{text-align:left;white-space:nowrap} @page{size:${((typeof co !== 'undefined' && co) && co.paperMm) || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${((typeof co !== 'undefined' && co) && co.bodyMm) || 74}mm;margin:0;font-size:12px} table{width:100%;border-collapse:collapse} td{padding:2px 0} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b{font-weight:700}</style></head><body>
-      <div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}<div class="b">${T.report}</div><div>${esc(sh.shift_code)}</div><div>${esc(s.drawer)}</div></div><hr>
-      <table>${row(T.openedAt, dt(sh.opened_at))}${row(T.closedAt, dt(sh.closed_at))}${row(T.opening, money(s.opening))}${row(T.sales, `${money(s.sales_total)} (${s.invoices})`)}</table><hr>
-      <div class="b">${T.byMethod}</div><table>${(s.by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>${(s.returns_by_method || []).length ? `<hr><div style="font-weight:700">مرتجعات حسب طريقة الرد</div><table>${s.returns_by_method.map((m) => row(m.method, money(m.amount))).join('')}</table><hr><div style="font-weight:700">الصافي حسب طريقة الدفع</div><table>${(s.net_by_method || []).map((m) => row(m.method, money(m.amount))).join('')}</table>` : ''}<hr>
+  // SHIFT_SLIPS: the closing prints 3 receipts - the store (cashier drawer), online, and the perfume counter
+  const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+  const row = (a, b) => `<tr><td>${a}</td><td>${b}</td></tr>`;
+  const list = (items) => `<table>${(items || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>`;
+  const slipHead = (co, title, s) => `<div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div>${co.headerHtml || ''}<div class="b big">${title}</div><div>${esc(s.shift.shift_code)}</div></div><hr>
+      <table>${row(T.openedAt, dt(s.shift.opened_at))}${row(T.closedAt, dt(s.shift.closed_at))}</table><hr>`;
+  const slipFoot = (co, s) => `<div style="margin-top:14px">${T.cashier}: ${esc(s.shift.cashier_username || s.shift.cashier || '')} ..............</div>${co.footerHtml || ''}`;
+  const storeSlip = (co, s) => { const sh = s.shift; return `${slipHead(co, '🏪 تقفيل البيع من المحل', s)}
+      <table>${row(esc(s.drawer), '')}${row(T.opening, money(s.opening))}${row(T.sales, `${money(s.sales_total)} (${s.invoices})`)}</table><hr>
+      <div class="b">${T.byMethod}</div>${list(s.by_method)}${(s.returns_by_method || []).length ? `<hr><div class="b">مرتجعات حسب طريقة الرد</div>${list(s.returns_by_method)}<hr><div class="b">الصافي حسب طريقة الدفع</div>${list(s.net_by_method)}` : ''}<hr>
       ${(s.cash_in || []).length ? `<div class="b">فلوس دخلت الدرج (مش بيع)</div><table>${s.cash_in.map((c) => row(esc(c.time + ' ' + c.label) + (c.notes ? '<br><small>' + esc(c.notes) + '</small>' : ''), money(c.amount))).join('')}${row('<b>الإجمالي</b>', money(s.cash_in_total))}</table><hr>` : ''}
       <div class="b">${T.moves}</div><table>${(s.moves || []).map((m) => row(esc(m.label), money(m.amount))).join('')}</table><hr>
       <table class="b">${row(T.expected, money(sh.expected_cash ?? s.expected))}${sh.actual_cash != null ? row(T.actual, money(sh.actual_cash)) + row(T.diff, money(sh.difference)) : ''}${num(sh.handover_total) ? row(T.handed, money(sh.handover_total)) : ''}${s.remaining_in_drawer != null ? row(T.remain, money(s.remaining_in_drawer)) : ''}</table><hr>
-      ${(num(s.online_count) || (s.online_returns_by_method || []).length) ? `<div class="c b" style="font-size:13px">تقفيل الأونلاين (منفصل - مش في الدرج)</div><table>${row('عدد الأوردرات', s.online_count || 0)}${row('إجمالي الأونلاين', money(s.online_total))}</table><div class="b">حسب طريقة الدفع</div><table>${(s.online_by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>${(s.online_returns_by_method || []).length ? `<div class="b">مرتجعات أونلاين</div><table>${s.online_returns_by_method.map((m) => row(esc(m.method), money(m.amount))).join('')}</table>` : ''}<table class="b">${row('صافي الأونلاين', money(s.online_net_total ?? s.online_total))}</table><table>${(s.online_orders || []).map((o) => row(esc(o.number) + (o.name || o.courier ? ' - ' + esc([o.name, o.courier].filter(Boolean).join(' / ')) : ''), money(o.total))).join('')}</table><hr>` : ''}
-      ${num(s.employee_count) ? `<div class="c b" style="font-size:13px">بضاعة على حساب الموظفين (مش فلوس)</div><table>${row('عدد الفواتير', s.employee_count)}${row('الإجمالي', money(s.employee_total))}${num(s.employee_returns_total) ? row('مرتجعات', money(s.employee_returns_total)) : ''}${(s.employee_orders || []).map((o) => row(esc(o.number) + ' - ' + esc(o.name), money(o.total))).join('')}</table><hr>` : ''}
-      <div style="margin-top:14px">${T.cashier}: ${esc(sh.cashier_username || sh.cashier || '')} ..............</div>
-      ${((typeof co !== 'undefined' && co) && co.footerHtml) || ''}<script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
-    const w = window.open('', '_blank', 'width=380,height=640'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
-  };
-
-  const printPerfume = async (r) => {  // PERFUME_SALES: the perfume counter's own closing slip
-    const co = await getCompanyInfo();
-    const esc = (x) => String(x ?? '').replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
-    const row = (a, b) => `<tr><td>${a}</td><td style="text-align:left">${b}</td></tr>`;
-    const s = r.summary; const sh = s.shift;
-    const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>برفانات ${esc(sh.shift_code)}</title><style>@page{size:${co.paperMm || 80}mm auto;margin:3mm} body{font-family:Tahoma,Arial,sans-serif;width:${Math.min(co.bodyMm || 74, 68)}mm;margin:0 auto;font-size:12px} table{width:100%;border-collapse:collapse;table-layout:fixed} td{padding:2px 0;overflow-wrap:anywhere} td:last-child{text-align:left;white-space:nowrap;width:24mm} .c{text-align:center} hr{border:0;border-top:1px dashed #000} .b{font-weight:700}</style></head><body>
-      <div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div><div class="b">تقفيل البرفانات</div><div>${esc(sh.shift_code)}</div><div>${dt(new Date().toISOString())}</div></div><hr>
-      <table>${row('عدد الفواتير', s.perfume_count || 0)}${row('إجمالي البرفانات', money(s.perfume_total))}</table>
-      <div class="b">حسب طريقة الدفع</div><table>${(s.perfume_by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>
-      ${(s.perfume_returns_by_method || []).length ? `<div class="b">مرتجعات</div><table>${s.perfume_returns_by_method.map((m) => row(esc(m.method), money(m.amount))).join('')}</table>` : ''}
+      ${num(s.employee_count) ? `<div class="b">بضاعة على حساب الموظفين (مش فلوس)</div><table>${row('عدد الفواتير', s.employee_count)}${row('الإجمالي', money(s.employee_total))}${num(s.employee_returns_total) ? row('مرتجعات', money(s.employee_returns_total)) : ''}${(s.employee_orders || []).map((o) => row(esc(o.number) + ' - ' + esc(o.name), money(o.total))).join('')}</table><hr>` : ''}
+      ${slipFoot(co, s)}`; };
+  const onlineSlip = (co, s) => `${slipHead(co, '🛒 تقفيل الأونلاين', s)}
+      <div class="m">فلوس الأونلاين مش في درج الكاشير</div>
+      <table>${row('عدد الأوردرات', s.online_count || 0)}${row('إجمالي الأونلاين', money(s.online_total))}</table><hr>
+      <div class="b">حسب طريقة الدفع</div>${list(s.online_by_method)}
+      ${(s.online_returns_by_method || []).length ? `<hr><div class="b">مرتجعات أونلاين</div>${list(s.online_returns_by_method)}` : ''}<hr>
+      <table class="b">${row('صافي الأونلاين', money(s.online_net_total ?? s.online_total))}</table>
+      ${(s.online_orders || []).length ? `<hr><div class="b">الأوردرات</div><table>${s.online_orders.map((o) => row(esc(o.number) + (o.name || o.courier ? '<br><small>' + esc([o.name, o.courier].filter(Boolean).join(' / ')) + ' · ' + esc(o.methods) + '</small>' : ''), money(o.total))).join('')}</table>` : ''}<hr>
+      ${slipFoot(co, s)}`;
+  const perfumeSlip = (co, s, r) => `${slipHead(co, '🌸 تقفيل البرفانات', s)}
+      <table>${row('عدد الفواتير', s.perfume_count || 0)}${row('إجمالي البرفانات', money(s.perfume_total))}</table><hr>
+      <div class="b">حسب طريقة الدفع</div>${list(s.perfume_by_method)}
+      ${(s.perfume_returns_by_method || []).length ? `<hr><div class="b">مرتجعات</div>${list(s.perfume_returns_by_method)}` : ''}<hr>
       <table class="b">${row('صافي البرفانات', money(s.perfume_net_total))}</table><hr>
-      <table class="b">${row('المتوقع في الدرج', money(r.expected))}${row('اتعدّ', money(r.actual))}${row('الفرق', money(r.difference))}${num(r.handover) ? row('اترحّل', money(r.handover)) : ''}${row('فضل في الدرج', money(r.remaining))}</table><hr>
-      <div>بموافقة: ${esc(r.by)}</div><div style="margin-top:14px">${T.cashier}: ${esc(sh.cashier_username || '')} ..............</div>
+      ${(s.perfume_moves || []).length ? `<div class="b">حركات درج البرفانات</div><table>${s.perfume_moves.map((m) => row(esc(m.label), money(m.amount))).join('')}</table><hr>` : ''}
+      <table class="b">${r ? row('المتوقع في الدرج', money(r.expected)) + row('اتعدّ', money(r.actual)) + row('الفرق', money(r.difference)) + (num(r.handover) ? row('اترحّل', money(r.handover)) : '') + row('فضل في الدرج', money(r.remaining)) : row('في درج البرفانات', money(s.perfume_drawer_balance))}</table><hr>
+      ${r ? `<div>بموافقة: ${esc(r.by)}</div>` : ''}${slipFoot(co, s)}`;
+  const printSlips = async (title, build) => {
+    const co = (await getCompanyInfo()) || {};
+    const parts = build(co).filter(Boolean);
+    const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:${co.paperMm || 80}mm auto;margin:3mm}
+      body{font-family:Tahoma,Arial,sans-serif;margin:0;font-size:11.5px;color:#000}.slip{width:${Math.min(co.bodyMm || 74, 68)}mm;margin:0 auto;page-break-after:always;break-after:page}.slip:last-child{page-break-after:auto;break-after:auto}
+      .gap{height:14mm}table{width:100%;border-collapse:collapse;table-layout:fixed}td{padding:2px 0;overflow-wrap:anywhere;vertical-align:top}td:last-child{text-align:left;white-space:nowrap;width:26mm}
+      .c{text-align:center}.b{font-weight:700}.big{font-size:13px}.m{font-size:10.5px}small{font-size:9.5px}hr{border:0;border-top:1px dashed #000;margin:3px 0}</style></head><body>
+      ${parts.map((p) => `<div class="slip">${p}<div class="gap"></div></div>`).join('')}
       <script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
     const w = window.open('', '_blank', 'width=380,height=640'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
   };
+  const printReport = (s) => printSlips(s.shift.shift_code, (co) => [storeSlip(co, s), onlineSlip(co, s), perfumeSlip(co, s, null)]);
+  const printOnline = (s) => printSlips('أونلاين ' + s.shift.shift_code, (co) => [onlineSlip(co, s)]);
+  const printPerfume = (r) => printSlips('برفانات ' + r.summary.shift.shift_code, (co) => [perfumeSlip(co, r.summary, r)]);
+
   const doOpen = async () => {
     setBusy(true); setErr('');
     try { await axiosClient.post('/shifts/open_v2/', { terminal_id: termId, counted_cash: counted, manager_password: pwd || undefined }); setPwd(''); await loadShift(); loadHist(); }
@@ -162,7 +173,7 @@ export default function ShiftsPage() {
             <div className="font-bold border-t border-slate-100 pt-2">{T.moves}</div>
             {(sum.moves || []).map((m) => <div key={m.key} className="flex justify-between"><span>{m.label}</span><b className={num(m.amount) < 0 ? 'text-rose-700' : 'text-emerald-700'}>{money(m.amount)}</b></div>)}
             <div className="flex justify-between text-base font-black bg-emerald-50 rounded-lg p-2 mt-2"><span>{T.expected}</span><span>{money(sum.expected)} {T.cur}</span></div>
-            <div className="pt-2"><OnlineShiftBox sum={sum} /></div>
+            <div className="pt-2"><OnlineShiftBox sum={sum} onPrint={() => printOnline(sum)} /></div>
             <div className="pt-2"><EmployeeShiftBox sum={sum} /></div>
             <div className="pt-2"><PerfumeShiftBox shift={shift} sum={sum} trs={trs} onPrint={printPerfume} onDone={() => loadShift()} /></div>
           </div>

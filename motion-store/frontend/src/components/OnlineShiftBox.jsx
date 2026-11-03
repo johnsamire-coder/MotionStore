@@ -3,11 +3,12 @@ import React from 'react';
 const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ONLINE_SALES: online orders have their own closing, separate from the cash drawer
-export default function OnlineShiftBox({ sum }) {
-  if (!sum || (!Number(sum.online_count) && !(sum.online_returns_by_method || []).length)) return null;
+export default function OnlineShiftBox({ sum, onPrint }) {
+  if (!sum) return null;
   return (
     <div className="bg-white p-4 rounded-xl border-2 border-sky-300 space-y-2 text-xs" dir="rtl">
-      <div className="text-sm font-black text-sky-800">🛒 تقفيل الأونلاين (منفصل - مش في الدرج)</div>
+      <div className="flex items-center justify-between"><div className="text-sm font-black text-sky-800">🛒 تقفيل الأونلاين (منفصل - مش في الدرج)</div>
+        {onPrint && <button type="button" onClick={onPrint} className="h-8 px-3 rounded-lg bg-sky-600 text-white font-bold cursor-pointer">🖨️ تقفيل الأونلاين</button>}</div>
       <div className="flex justify-between"><span>عدد الأوردرات</span><b>{sum.online_count || 0}</b></div>
       <div className="flex justify-between"><span>إجمالي الأونلاين</span><b>{money(sum.online_total)}</b></div>
       {(sum.online_by_method || []).length > 0 && <div className="font-bold border-t border-sky-100 pt-2">حسب طريقة الدفع</div>}
