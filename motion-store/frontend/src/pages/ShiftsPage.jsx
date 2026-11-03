@@ -107,15 +107,26 @@ export default function ShiftsPage() {
       <table class="b">${r ? row('المتوقع في الدرج', money(r.expected)) + row('اتعدّ', money(r.actual)) + row('الفرق', money(r.difference)) + (num(r.handover) ? row('اترحّل', money(r.handover)) : '') + row('فضل في الدرج', money(r.remaining)) : row('في درج البرفانات', money(s.perfume_drawer_balance))}</table><hr>
       ${r ? `<div>بموافقة: ${esc(r.by)}</div>` : ''}${slipFoot(co, s)}`;
   const printSlips = async (title, build) => {
+    // each receipt is its own print job, so the receipt printer cuts the paper after every one
+    const w = window.open('', '_blank', 'width=420,height=700'); if (!w) return;
     const co = (await getCompanyInfo()) || {};
     const parts = build(co).filter(Boolean);
-    const html = `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>@page{size:${co.paperMm || 80}mm auto;margin:3mm}
-      body{font-family:Tahoma,Arial,sans-serif;margin:0;font-size:11.5px;color:#000}.slip{width:${Math.min(co.bodyMm || 74, 68)}mm;margin:0 auto;page-break-after:always;break-after:page}.slip:last-child{page-break-after:auto;break-after:auto}
-      .gap{height:14mm}table{width:100%;border-collapse:collapse;table-layout:fixed}td{padding:2px 0;overflow-wrap:anywhere;vertical-align:top}td:last-child{text-align:left;white-space:nowrap;width:26mm}
-      .c{text-align:center}.b{font-weight:700}.big{font-size:13px}.m{font-size:10.5px}small{font-size:9.5px}hr{border:0;border-top:1px dashed #000;margin:3px 0}</style></head><body>
-      ${parts.map((p) => `<div class="slip">${p}<div class="gap"></div></div>`).join('')}
-      <script>window.onafterprint=function(){setTimeout(function(){window.close()},10000)};window.onload=function(){setTimeout(function(){window.print()},500)}<\/script></body></html>`;
-    const w = window.open('', '_blank', 'width=380,height=640'); if (!w) return; w.document.open(); w.document.write(html); w.document.close();
+    const css = `@page{size:${co.paperMm || 80}mm auto;margin:3mm}
+      body{font-family:Tahoma,Arial,sans-serif;margin:0;font-size:11.5px;color:#000}.slip{width:${Math.min(co.bodyMm || 74, 68)}mm;margin:0 auto}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}td{padding:2px 0;overflow-wrap:anywhere;vertical-align:top}td:last-child{text-align:left;white-space:nowrap;width:26mm}
+      .c{text-align:center}.b{font-weight:700}.big{font-size:13px}.m{font-size:10.5px}small{font-size:9.5px}hr{border:0;border-top:1px dashed #000;margin:3px 0}`;
+    const doc = (p) => `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>${css}</style></head><body><div class="slip">${p}</div></body></html>`;
+    const frames = parts.map((p, i) => `<iframe id="f${i}" srcdoc="${doc(p).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe>`).join('');
+    w.document.open();
+    w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{margin:0;background:#eee;font-family:Tahoma,Arial}
+      iframe{display:block;width:80mm;height:120mm;border:0;background:#fff;margin:8px auto;box-shadow:0 1px 4px #0003}.bar{text-align:center;padding:8px}button{padding:6px 14px;font-weight:700}</style></head><body>
+      <div class="bar"><button onclick="go()">🖨️ اطبع تاني</button></div>${frames}
+      <script>
+        function fit(){for(var i=0;i<${parts.length};i++){var f=document.getElementById('f'+i);try{f.style.height=(f.contentDocument.body.scrollHeight+20)+'px'}catch(e){}}}
+        function go(){for(var i=0;i<${parts.length};i++){var f=document.getElementById('f'+i);f.contentWindow.focus();f.contentWindow.print();}}
+        window.onload=function(){fit();setTimeout(go,400)};
+      <\/script></body></html>`);
+    w.document.close();
   };
   const printReport = (s) => printSlips(s.shift.shift_code, (co) => [storeSlip(co, s), onlineSlip(co, s), perfumeSlip(co, s, null)]);
   const printOnline = (s) => printSlips('أونلاين ' + s.shift.shift_code, (co) => [onlineSlip(co, s)]);
