@@ -1121,6 +1121,7 @@ class ShiftViewSet(BaseTenantViewSet):
 
     def _summary(self, sh):
         from django.db.models import Sum
+        from django.utils import timezone
         from apps.treasury.models import TreasuryTransaction
         from apps.sales.models import SaleInvoice, SalePayment
         drawer = sh.terminal.cash_drawer
@@ -1128,6 +1129,10 @@ class ShiftViewSet(BaseTenantViewSet):
         LABELS = {'SaleInvoice': 'مبيعات كاش', 'SalesReturn': 'مرتجعات', 'Expense': 'مصروفات', 'ExpenseCancel': 'إلغاء مصروفات', 'DeferredSale': 'عربون مؤجلة',
                   'CustomerPayment': 'تحصيل من عملاء', 'SupplierPayment': 'دفع لموردين', 'ShiftOpeningAdjust': 'تظبيط الافتتاح', 'ShiftOpening': 'افتتاح (قديم)', 'OwnerDrawing': 'ترحيل لصاحب المحل', 'ShiftShortage': 'عجز على الكاشير', 'ShiftSurplus': 'زيادة خزينة', 'Other': 'ترحيل لخزنة / تحويلات', 'None': 'ترحيل لخزنة / تحويلات'}
         LABELS['OnlineInDrawer'] = 'أونلاين نزل في الدرج (طريقة دفع من غير خزنة)'
+        LABELS.update({'OwnerDeposit': 'فلوس من صاحب المحل', 'OtherCashIn': 'وارد تاني (مش بيع)', 'TransferIn': 'فلوس جاية من خزنة تانية', 'TransferOut': 'ترحيل لخزنة',
+                       'ManualDeposit': 'إيداع يدوي', 'ManualWithdrawal': 'سحب يدوي', 'StaffAdvance': 'سلف موظفين', 'StaffAdvanceCancel': 'إلغاء سلف موظفين',
+                       'StaffRepayment': 'سداد موظفين', 'StaffRepaymentCancel': 'إلغاء سداد موظفين', 'Payroll': 'مرتبات', 'CustodySettle': 'تسديد عهدة'})
+        cash_in = []
         LABELS['OnlineReturn'] = 'مرتجع أونلاين اتصرف من الدرج'
         _emp = SaleInvoice.objects.filter(shift=sh, payments__payment_method__method_type='EMPLOYEE').distinct()  # EMPLOYEE_GOODS: no money, own section
         invs = SaleInvoice.objects.filter(shift=sh).exclude(channel='ONLINE').exclude(pk__in=_emp.values('pk'))
@@ -1140,14 +1145,19 @@ class ShiftViewSet(BaseTenantViewSet):
         qs = TreasuryTransaction.objects.filter(treasury=drawer, created_at__gte=sh.opened_at)
         if sh.closed_at:
             qs = qs.filter(created_at__lte=sh.closed_at)
-        for tx in qs:
+        for tx in qs.order_by('created_at'):
             sign = 1 if tx.transaction_type in ('DEPOSIT', 'TRANSFER_IN') else -1
             key = tx.source_document_type or 'Other'
             if key == 'SaleInvoice' and tx.source_document_id in _onl_nums:
                 key = 'OnlineInDrawer'
             elif key == 'SalesReturn' and tx.source_document_id in _onl_ret_nums:
                 key = 'OnlineReturn'
-            moves[key] = moves.get(key, Decimal('0')) + (tx.amount if tx.amount < 0 else sign * tx.amount)
+            elif key == 'TreasuryTransfer':
+                key = 'TransferIn' if sign > 0 else 'TransferOut'
+            _v = (tx.amount if tx.amount < 0 else sign * tx.amount)
+            moves[key] = moves.get(key, Decimal('0')) + _v
+            if key in ('OwnerDeposit', 'OtherCashIn', 'TransferIn', 'ManualDeposit'):  # SHIFT_CASH_IN: listed one by one with the reason
+                cash_in.append({'time': timezone.localtime(tx.created_at).strftime('%H:%M'), 'label': LABELS.get(key, key), 'notes': tx.description or '', 'amount': str(_v)})
         by_method = {}
         for p in SalePayment.objects.filter(sale_invoice__in=invs).select_related('payment_method'):
             by_method[p.payment_method.name] = by_method.get(p.payment_method.name, Decimal('0')) + p.amount
@@ -1181,6 +1191,8 @@ class ShiftViewSet(BaseTenantViewSet):
                        'online_returns_by_method': [{'method': k, 'amount': str(v)} for k, v in _orets.items()], 'online_returns_total': str(_oret), 'online_net_total': str(_otot - _oret),
                        'online_orders': [{'number': i.invoice_number, 'total': str(i.total_amount), 'name': (i.online_info or {}).get('name') or '', 'courier': (i.online_info or {}).get('courier') or '',
                                           'methods': ' + '.join(sorted({_p.payment_method.name for _p in i.payments.all()}))} for i in _onl.prefetch_related('payments__payment_method').order_by('created_at')]})
+        _extra['cash_in'] = cash_in
+        _extra['cash_in_total'] = str(sum((Decimal(c['amount']) for c in cash_in), Decimal('0')))
         return {**_extra, 'shift': ShiftSerializer(sh).data, 'drawer': drawer.name, 'opening': str(sh.opening_cash), 'expected': str(drawer.current_balance),
                 'invoices': invs.count(), 'sales_total': str(invs.aggregate(s=Sum('total_amount'))['s'] or 0),
                 'by_method': [{'method': k, 'amount': str(v)} for k, v in by_method.items()],
@@ -1233,6 +1245,51 @@ class ShiftViewSet(BaseTenantViewSet):
             return Response({'detail': 'الخزنة مفيهاش فلوس كفاية' if 'Insufficient' in msg else msg}, status=400)
         drawer.refresh_from_db()
         return Response({'ok': True, 'drawer': str(drawer.current_balance), 'handover_total': str(sh.handover_total)})
+
+    @action(detail=True, methods=['post'])
+    def cash_in(self, request, pk=None):
+        """ SHIFT_CASH_IN: money put into the drawer that is not a sale - from the owner, from another treasury, or any other income """
+        from django.db import transaction as dbt
+        from apps.treasury.models import Treasury, TreasuryTransactionType
+        from apps.treasury.services import record_treasury_transaction, transfer_between_treasuries
+        sh = self.get_object()
+        if sh.status != 'OPEN':
+            return Response({'detail': 'الوردية دي مقفولة'}, status=400)
+        t = sh.tenant; d = request.data
+        mgr = _verify_manager(t, d.get('manager_password'))
+        if not mgr:
+            return Response({'detail': 'دخول فلوس الدرج محتاج باسورد المدير'}, status=403)
+        try:
+            amt = Decimal(str(d.get('amount') or '0'))
+        except Exception:
+            amt = Decimal('0')
+        if amt <= 0:
+            return Response({'detail': 'اكتب المبلغ'}, status=400)
+        src = d.get('source') or 'OWNER'
+        notes = (d.get('notes') or '').strip()[:200]
+        drawer = sh.terminal.cash_drawer
+        try:
+            with dbt.atomic():
+                if src == 'OWNER':
+                    record_treasury_transaction(treasury_id=drawer.id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=amt, source_document_type='OwnerDeposit',
+                                                source_document_id=sh.shift_code, description=f"فلوس من صاحب المحل - {notes} (بموافقة {mgr.username})".replace(' -  (', ' ('))
+                elif src == 'TREASURY':
+                    fr = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first()
+                    if not fr or fr.pk == drawer.pk:
+                        raise ValueError('اختار الخزنة اللي الفلوس جاية منها')
+                    transfer_between_treasuries(fr.id, drawer.id, amt, f"للدرج - وردية {sh.shift_code} - {notes} (بموافقة {mgr.username})".replace(' -  (', ' ('))
+                elif src == 'OTHER':
+                    if not notes:
+                        raise ValueError('اكتب الفلوس دي جاية منين')
+                    record_treasury_transaction(treasury_id=drawer.id, transaction_type=TreasuryTransactionType.DEPOSIT, amount=amt, source_document_type='OtherCashIn',
+                                                source_document_id=sh.shift_code, description=f"وارد مش بيع - {notes} (بموافقة {mgr.username})")
+                else:
+                    raise ValueError('اختار الفلوس جاية منين')
+        except Exception as ex:
+            msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
+            return Response({'detail': 'الخزنة مفيهاش فلوس كفاية' if 'Insufficient' in msg else msg}, status=400)
+        drawer.refresh_from_db()
+        return Response({'ok': True, 'drawer': str(drawer.current_balance)})
 
     @action(detail=True, methods=['post'])
     def close_v2(self, request, pk=None):

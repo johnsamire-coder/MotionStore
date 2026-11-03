@@ -26,7 +26,7 @@ const TITLES = {
   purchases_list: 'فواتير الشراء', purchases_by_supplier: 'المشتريات بالمورد', supplier_balances: 'أرصدة الموردين', supplier_aging: 'أعمار ديون الموردين', stock_value: 'المخزون بالقيمة', stock_by_location: 'المخزون بالمكان',
   slow_moving: 'البضاعة الراكدة', low_stock: 'قربت تخلص', transfers_list: 'أذون النقل', holding_goods: 'بضاعة عند العملاء', top_customers: 'أكتر العملاء', new_customers: 'العملاء الجداد', inactive_customers: 'عملاء بطلوا ييجوا',
   customer_debts: 'ديون العملاء', collections: 'التحصيلات', offers_performance: 'أداء العروض', coupons_usage: 'الكوبونات', returns_list: 'المرتجعات', returns_by_reason: 'بالسبب', returns_by_item: 'بالصنف',
-  treasury_balances: 'أرصدة الخزن', cash_flow: 'التدفق النقدي', owner_drawings: '⭐ مسحوبات صاحب المحل', manual_moves: 'إيداع وسحب يدوي', shifts_list: 'الورديات', cashier_diffs: 'عجز وزيادة الكاشيرية', custodies: 'العهد',
+  treasury_balances: 'أرصدة الخزن', cash_flow: 'التدفق النقدي', owner_drawings: '⭐ مسحوبات صاحب المحل', owner_deposits: '💰 فلوس من صاحب المحل ووارد مش بيع', manual_moves: 'إيداع وسحب يدوي', shifts_list: 'الورديات', cashier_diffs: 'عجز وزيادة الكاشيرية', custodies: 'العهد',
   cashier_performance: 'أداء الكاشيرية', expenses_by_category: 'المصروفات بالبند', expenses_monthly: 'المصروفات شهرياً', expenses_cancelled: 'المصروفات الملغية', price_changes: 'تغيير الأسعار', manager_approvals: '⭐ موافقات المدير'
 };
 

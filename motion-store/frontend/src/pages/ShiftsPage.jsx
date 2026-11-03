@@ -2,6 +2,7 @@ import ShiftReturnsBox from '../components/ShiftReturnsBox';
 import OnlineShiftBox from '../components/OnlineShiftBox';
 import EmployeeShiftBox from '../components/EmployeeShiftBox';
 import MidShiftHandover from '../components/MidShiftHandover';
+import ShiftCashIn from '../components/ShiftCashIn';
 // RECEIPT_PATCHED
 // SHIFTS_V2
 import React, { useState, useEffect } from 'react';
@@ -82,6 +83,7 @@ export default function ShiftsPage() {
       <div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div>${((typeof co !== 'undefined' && co) && co.headerHtml) || ''}<div class="b">${T.report}</div><div>${esc(sh.shift_code)}</div><div>${esc(s.drawer)}</div></div><hr>
       <table>${row(T.openedAt, dt(sh.opened_at))}${row(T.closedAt, dt(sh.closed_at))}${row(T.opening, money(s.opening))}${row(T.sales, `${money(s.sales_total)} (${s.invoices})`)}</table><hr>
       <div class="b">${T.byMethod}</div><table>${(s.by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>${(s.returns_by_method || []).length ? `<hr><div style="font-weight:700">مرتجعات حسب طريقة الرد</div><table>${s.returns_by_method.map((m) => row(m.method, money(m.amount))).join('')}</table><hr><div style="font-weight:700">الصافي حسب طريقة الدفع</div><table>${(s.net_by_method || []).map((m) => row(m.method, money(m.amount))).join('')}</table>` : ''}<hr>
+      ${(s.cash_in || []).length ? `<div class="b">فلوس دخلت الدرج (مش بيع)</div><table>${s.cash_in.map((c) => row(esc(c.time + ' ' + c.label) + (c.notes ? '<br><small>' + esc(c.notes) + '</small>' : ''), money(c.amount))).join('')}${row('<b>الإجمالي</b>', money(s.cash_in_total))}</table><hr>` : ''}
       <div class="b">${T.moves}</div><table>${(s.moves || []).map((m) => row(esc(m.label), money(m.amount))).join('')}</table><hr>
       <table class="b">${row(T.expected, money(sh.expected_cash ?? s.expected))}${sh.actual_cash != null ? row(T.actual, money(sh.actual_cash)) + row(T.diff, money(sh.difference)) : ''}${num(sh.handover_total) ? row(T.handed, money(sh.handover_total)) : ''}${s.remaining_in_drawer != null ? row(T.remain, money(s.remaining_in_drawer)) : ''}</table><hr>
       ${(num(s.online_count) || (s.online_returns_by_method || []).length) ? `<div class="c b" style="font-size:13px">تقفيل الأونلاين (منفصل - مش في الدرج)</div><table>${row('عدد الأوردرات', s.online_count || 0)}${row('إجمالي الأونلاين', money(s.online_total))}</table><div class="b">حسب طريقة الدفع</div><table>${(s.online_by_method || []).map((m) => row(esc(m.method), money(m.amount))).join('')}</table>${(s.online_returns_by_method || []).length ? `<div class="b">مرتجعات أونلاين</div><table>${s.online_returns_by_method.map((m) => row(esc(m.method), money(m.amount))).join('')}</table>` : ''}<table class="b">${row('صافي الأونلاين', money(s.online_net_total ?? s.online_total))}</table><table>${(s.online_orders || []).map((o) => row(esc(o.number) + (o.name || o.courier ? ' - ' + esc([o.name, o.courier].filter(Boolean).join(' / ')) : ''), money(o.total))).join('')}</table><hr>` : ''}
@@ -158,7 +160,7 @@ export default function ShiftsPage() {
               </div>
             )}
             <div className="flex items-center justify-between"><div className="font-bold">{T.handovers}</div><button type="button" onClick={() => setHand([...hand, { key: Date.now(), dest: 'TREASURY', tid: others[0] ? others[0].id : '', amount: '', notes: '' }])} className="h-8 px-2 rounded-lg border border-dashed border-emerald-600 bg-emerald-50 text-emerald-800 font-bold flex items-center gap-1 cursor-pointer"><Plus size={12} /> {T.addH}</button></div>
-            <ShiftReturnsBox sum={sum} /><MidShiftHandover shift={shift} trs={trs} />{hand.map((h) => (
+            <ShiftReturnsBox sum={sum} /><ShiftCashIn shift={shift} trs={trs} sum={sum} onDone={() => loadShift()} /><MidShiftHandover shift={shift} trs={trs} />{hand.map((h) => (
               <div key={h.key} className="grid grid-cols-12 gap-1 items-center">
                 <select value={h.dest} onChange={(e) => setHand(hand.map((x) => (x.key === h.key ? { ...x, dest: e.target.value } : x)))} className={input + ' col-span-3 h-9 text-xs'}><option value="TREASURY">{T.toTreasury}</option><option value="OWNER">{T.toOwner}</option></select>
                 {h.dest === 'TREASURY' ? <select value={h.tid} onChange={(e) => setHand(hand.map((x) => (x.key === h.key ? { ...x, tid: e.target.value } : x)))} className={input + ' col-span-4 h-9 text-xs'}>{others.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>

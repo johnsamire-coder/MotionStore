@@ -54,3 +54,34 @@ class OnlineOrdersHaveTheirOwnClosingTest(StockBandsFollowSalesTest):
         self.assertEqual(c.get('/api/v1/payments/').status_code, 200)
         cod = PaymentMethod.objects.get(tenant=self.tenant, name='عند الاستلام - مندوب')
         self.assertNotEqual(cod.treasury_id, self.drawer.id)
+
+
+class ShiftCashInTest(StockBandsFollowSalesTest):
+    """ Money put in the drawer that is not a sale: counted in the drawer, listed on its own in the closing """
+
+    def test_owner_treasury_and_other_cash_in(self):
+        from rest_framework.test import APIClient
+        from apps.users.models import User
+        from apps.api import reports_v2
+        boss = User.objects.create_user(username="boss3", password="Pass2026Password", role="ADMIN", tenant=self.tenant)
+        safe = Treasury.objects.create(tenant=self.tenant, name="الخزنة الرئيسية", branch=self.branch, treasury_type=TreasuryType.MAIN_SAFE, current_balance=Decimal('1000'))
+        shift = open_shift(self.terminal.id, self.user, Decimal('500.00'))
+        c = APIClient(); c.force_authenticate(user=boss)
+        url = f'/api/v1/shifts/{shift.id}/cash_in/'
+        self.assertEqual(c.post(url, {'source': 'OWNER', 'amount': '2000'}, format='json').status_code, 403)          # no manager password
+        pw = {'manager_password': 'Pass2026Password'}
+        self.assertEqual(c.post(url, {'source': 'OWNER', 'amount': '2000', 'notes': 'المرتبات', **pw}, format='json').status_code, 200)
+        self.assertEqual(c.post(url, {'source': 'TREASURY', 'treasury_id': str(safe.id), 'amount': '300', **pw}, format='json').status_code, 200)
+        self.assertEqual(c.post(url, {'source': 'OTHER', 'amount': '50', **pw}, format='json').status_code, 400)       # reason needed
+        self.assertEqual(c.post(url, {'source': 'OTHER', 'amount': '50', 'notes': 'بيع كراتين', **pw}, format='json').status_code, 200)
+        self.assertEqual(c.post(url, {'source': 'TREASURY', 'treasury_id': str(safe.id), 'amount': '5000', **pw}, format='json').status_code, 400)  # not enough
+
+        s = ShiftViewSet()._summary(shift)
+        self.assertEqual(Decimal(s['expected']), Decimal('2850.00'))
+        self.assertEqual(Decimal(s['sales_total']), Decimal('0'))
+        self.assertEqual([c_['label'] for c_ in s['cash_in']], ['فلوس من صاحب المحل', 'فلوس جاية من خزنة تانية', 'وارد تاني (مش بيع)'])
+        self.assertEqual(Decimal(s['cash_in_total']), Decimal('2350.00'))
+        self.assertIn('المرتبات', s['cash_in'][0]['notes'])
+        safe.refresh_from_db(); self.assertEqual(safe.current_balance, Decimal('700.00'))
+        rep = reports_v2.owner_deposits(self.tenant, {})
+        self.assertEqual(rep['totals']['amount'], 2050.0)

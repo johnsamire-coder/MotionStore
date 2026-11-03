@@ -392,6 +392,13 @@ def owner_drawings(t, p):
             for x in rng(M('treasury', 'TreasuryTransaction').objects.filter(treasury__tenant=t, source_document_type='OwnerDrawing'), 'created_at', p).select_related('treasury')]
     return rep('مسحوبات صاحب المحل', [('date', 'التاريخ'), ('tr', 'من خزنة'), ('ref', 'الوردية'), ('desc', 'البيان'), ('amount', 'المبلغ', 'money')], rows, {'amount': sum(r['amount'] for r in rows)})
 
+def owner_deposits(t, p):
+    """ SHIFT_CASH_IN: money brought in by the owner, or other income that is not a sale """
+    lab = {'OwnerDeposit': 'من صاحب المحل', 'OtherCashIn': 'وارد تاني (مش بيع)'}
+    rows = [{'date': str(timezone.localtime(x.created_at))[:16], 'tr': x.treasury.name, 'kind': lab.get(x.source_document_type, ''), 'ref': x.source_document_id or '', 'desc': x.description or '', 'amount': abs(f(x.amount))}
+            for x in rng(M('treasury', 'TreasuryTransaction').objects.filter(treasury__tenant=t, source_document_type__in=list(lab)), 'created_at', p).select_related('treasury')]
+    return rep('فلوس دخلت من صاحب المحل ووارد مش بيع', [('date', 'التاريخ'), ('tr', 'الخزنة'), ('kind', 'النوع'), ('ref', 'الوردية'), ('desc', 'البيان'), ('amount', 'المبلغ', 'money')], rows, {'amount': sum(r['amount'] for r in rows)})
+
 def manual_moves(t, p):
     rows = [{'date': str(timezone.localtime(x.created_at))[:16], 'tr': x.treasury.name, 'kind': 'إيداع' if _sgn(x) >= 0 else 'سحب', 'desc': x.description or '', 'amount': _sgn(x)}
             for x in rng(M('treasury', 'TreasuryTransaction').objects.filter(treasury__tenant=t, source_document_type__in=['ManualDeposit', 'ManualWithdrawal']), 'created_at', p).select_related('treasury')]
@@ -506,7 +513,7 @@ CATALOG = [
     ('العملاء', [('top_customers', top_customers), ('new_customers', new_customers), ('inactive_customers', inactive_customers), ('customer_debts', customer_debts), ('collections', collections)]),
     ('العروض والكوبونات', [('offers_performance', offers_performance), ('coupons_usage', coupons_usage)]),
     ('المرتجعات', [('returns_list', returns_list), ('returns_by_reason', returns_by_reason), ('returns_by_item', returns_by_item)]),
-    ('الخزينة والفلوس', [('treasury_balances', treasury_balances), ('cash_flow', cash_flow), ('owner_drawings', owner_drawings), ('manual_moves', manual_moves)]),
+    ('الخزينة والفلوس', [('treasury_balances', treasury_balances), ('cash_flow', cash_flow), ('owner_drawings', owner_drawings), ('owner_deposits', owner_deposits), ('manual_moves', manual_moves)]),
     ('الورديات والكاشيرية', [('shifts_list', shifts_list), ('cashier_diffs', cashier_diffs), ('custodies', custodies), ('cashier_performance', cashier_performance)]),
     ('المصروفات', [('expenses_by_category', expenses_by_category), ('expenses_monthly', expenses_monthly), ('expenses_cancelled', expenses_cancelled)]),
     ('الرقابة', [('price_changes', price_changes), ('manager_approvals', manager_approvals)]),
