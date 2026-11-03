@@ -781,6 +781,44 @@ def _line_row(l):
             'paid_treasury': getattr(l.paid_treasury, 'name', '') or ''}
 
 
+def slip_details(run, line):
+    """ PAYSLIP: the items behind a payroll line - each bonus / deduction with its reason, and each advance / goods
+    the payroll took money back from - plus what the employee still owes after it. """
+    emp = line.employee
+    approved = run.status != PayrollStatus.DRAFT
+    rid = str(run.id)
+    qs = EmployeeLedgerEntry.objects.filter(employee=emp, cancelled=False)
+    pend = qs.filter(kind__in=PENDING_KINDS, settled_run=rid) if approved else qs.filter(kind__in=PENDING_KINDS, settled_run='', date__lte=run.period_end)
+    item = lambda e, amt: {'number': e.number, 'date': e.date.isoformat(), 'reason': e.reason, 'kind': e.kind, 'kind_label': e.get_kind_display(), 'amount': str(_r2(amt))}
+    bonuses = [item(e, e.amount) for e in pend.order_by('date', 'created_at') if e.kind == LedgerKind.BONUS]
+    deductions = [item(e, e.amount) for e in pend.order_by('date', 'created_at') if e.kind == LedgerKind.DEDUCTION]
+    # what he owed when this payroll was made (the entries this run itself created are left out)
+    debits, credit = [], Decimal('0')
+    for e in qs.filter(date__lte=run.period_end).exclude(settled_run=rid, kind__in=(LedgerKind.RECOVERY, LedgerKind.CARRY)).order_by('date', 'created_at'):
+        sign = OWED_SIGN.get(e.kind)
+        if sign == 1:
+            debits.append([e, e.amount])
+        elif sign == -1:
+            credit += e.amount
+    for d in debits:
+        take = min(d[1], credit)
+        d[1] -= take
+        credit -= take
+    mode = (run.settings_used or {}).get('advance_mode')
+    left = line.recovered
+    owed, owed_before = [], Decimal('0')
+    for e, remaining in debits:
+        if remaining <= 0:
+            continue
+        owed_before += remaining
+        due = min(remaining, e.installment) if (e.kind == LedgerKind.ADVANCE and mode == 'INSTALLMENT' and e.installment) else remaining
+        took = min(due, left)
+        left -= took
+        owed.append({**item(e, remaining), 'taken': str(_r2(took)), 'left': str(_r2(remaining - took))})
+    return {'bonuses': bonuses, 'deductions': deductions, 'owed': owed,
+            'owed_after': str(_r2(owed_before - line.recovered + line.shortfall))}
+
+
 def payroll_detail(tenant, run_id):
     run = PayrollRun.objects.get(tenant=tenant, pk=run_id)
     lines = list(run.lines.select_related('employee', 'paid_treasury'))
@@ -788,7 +826,7 @@ def payroll_detail(tenant, run_id):
     return {'id': str(run.id), 'number': run.number, 'cycle': run.cycle, 'cycle_label': run.get_cycle_display(), 'status': run.status,
             'status_label': run.get_status_display(), 'period_start': run.period_start.isoformat(), 'period_end': run.period_end.isoformat(),
             'notes': run.notes, 'approved_by': getattr(run.approved_by, 'username', '') or '', 'approved_at': run.approved_at.isoformat() if run.approved_at else '',
-            'lines': [_line_row(l) for l in lines],
+            'lines': [{**_line_row(l), 'slip': slip_details(run, l)} for l in lines],
             'totals': {k: tot(k) for k in ('base', 'bonuses', 'penalties', 'recovered', 'net', 'shortfall', 'paid_amount', 'overtime_amount',
                                            'absence_deduction', 'late_deduction', 'early_deduction')},
             'unpaid': str(_r2(sum((l.net for l in lines if l.paid_at is None), Decimal('0'))))}

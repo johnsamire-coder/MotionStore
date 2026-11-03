@@ -120,6 +120,27 @@ class PayrollTest(StockBandsFollowSalesTest):
         self.assertEqual(self._c(self.boss).post(f'/api/v1/staff-payroll/{run_id}/pay/', {'treasury_id': str(self.safe.id)}, format='json').status_code, 400)
         self._balanced()
 
+    def test_payslip_lists_each_bonus_deduction_and_advance(self):
+        self._fill(self.emp, self.start, self.end)
+        services.add_ledger_entry(self.tenant, self.emp, 'ADVANCE', '600', self._d(5), '', self.safe, '200', self.boss, self.boss)
+        services.add_ledger_entry(self.tenant, self.emp, 'ADVANCE', '100', self._d(6), 'محمود', None, None, self.boss, self.boss, old_advance=True)
+        services.add_ledger_entry(self.tenant, self.emp, 'BONUS', '150', self._d(6), 'تارجت', None, None, self.boss, self.boss)
+        services.add_ledger_entry(self.tenant, self.emp, 'DEDUCTION', '50', self._d(6), 'كسر', None, None, self.boss, self.boss)
+        r = self._c(self.boss).post('/api/v1/staff-payroll/', {'cycle': 'MONTHLY', 'from': self.start.isoformat(), 'to': self.end.isoformat()}, format='json')
+        self.assertEqual(r.status_code, 201, r.data)
+
+        def check(line):
+            sl = line['slip']
+            self.assertEqual([(e['reason'], e['amount']) for e in sl['bonuses']], [('تارجت', '150.00')])
+            self.assertEqual([(e['reason'], e['amount']) for e in sl['deductions']], [('كسر', '50.00')])
+            self.assertEqual([(e['amount'], e['taken'], e['left']) for e in sl['owed']], [('600.00', '200.00', '400.00'), ('100.00', '100.00', '0.00')])
+            self.assertIn('سلفة قديمة', sl['owed'][1]['reason'])
+            self.assertEqual((line['recovered'], sl['owed_after']), ('300.00', '400.00'))
+        check(r.data['lines'][0])
+        r = self._c(self.boss).post(f"/api/v1/staff-payroll/{r.data['id']}/approve/", {}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        check(r.data['lines'][0])
+
     def test_missing_days_and_overlap_block_the_run(self):
         self._fill(self.emp, self.start, self._d(9))       # the rest of the month never entered
         with self.assertRaises(ValidationError) as cm:

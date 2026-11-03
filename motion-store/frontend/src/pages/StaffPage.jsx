@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import axiosClient from '../api/axiosClient';
 import ExportButtons from '../components/ExportButtons';
+import { getCompanyInfo } from '../utils/reportExport';
 import { Clock, CalendarDays, Users, BarChart3, Settings, Save, ChevronRight, ChevronLeft, Plus, Trash2, X, Wallet, Banknote } from 'lucide-react';
 
 const listOf = (d) => (Array.isArray(d) ? d : (d?.results || []));
@@ -432,16 +433,49 @@ function PayrollTab({ settings, salaryOpen, askUnlock, onLocked }) {
     rows: run.lines.map((l) => ({ name: l.name, base: Number(l.base), add: Number(l.overtime_amount) + Number(l.holiday_extra) + Number(l.off_day_extra) + Number(l.bonuses),
       att: Number(l.absence_deduction) + Number(l.unpaid_leave_deduction) + Number(l.unpaid_holiday_deduction) + Number(l.late_deduction) + Number(l.early_deduction),
       pen: Number(l.penalties), rec: Number(l.recovered), net: Number(l.net), paid: l.paid ? 'أيوه' : 'لأ' })), totals: { net: Number(run.totals.net) } });
-  const printSlips = (lines) => {
+  const printSlips = async (lines) => {  // PAYSLIP: a full itemized salary slip that fits the receipt paper
     const w = window.open('', '_blank'); if (!w) return;
-    const row = (k, v, c = '') => `<tr><td>${k}</td><td style="text-align:left;${c}">${money(v)}</td></tr>`;
-    const slips = lines.map((l) => `<div class="slip"><h2>قسيمة مرتب</h2><div class="m"><b>${l.name}</b> · ${l.job_title || ''}<br/>${run.number} · من ${run.period_start} لـ ${run.period_end}</div>
-      <div class="m">${Object.entries(l.days || {}).filter(([k, v]) => DAYS_L[k] && v).map(([k, v]) => `${DAYS_L[k]}: ${v}`).join(' · ')}</div>
-      <table>${row('الأساسي', l.base)}${ADD.filter(([k]) => Number(l[k])).map(([k, n]) => row('+ ' + n, l[k], 'color:#047857')).join('')}${Number(l.manual_adjust) ? row('تسوية: ' + (l.manual_note || ''), l.manual_adjust) : ''}
-      ${DED.filter(([k]) => Number(l[k])).map(([k, n]) => row('− ' + n, l[k], 'color:#b91c1c')).join('')}<tr class="t"><td>الصافي</td><td style="text-align:left">${money(l.net)}</td></tr>
-      ${Number(l.shortfall) ? `<tr><td>عجز مرحّل للمرتب الجاي</td><td style="text-align:left">${money(l.shortfall)}</td></tr>` : ''}</table>
-      <div class="sig">توقيع الموظف: ____________</div></div>`).join('');
-    w.document.write(`<html dir="rtl"><head><meta charset="utf-8"><title>${run.number}</title><style>body{font-family:Tahoma,Arial;margin:0}.slip{width:90mm;padding:6mm;margin:4mm auto;border:1px dashed #999;page-break-inside:avoid;font-size:12px}h2{margin:0 0 4px;font-size:15px;text-align:center}.m{color:#444;margin:4px 0}table{width:100%;border-collapse:collapse}td{padding:3px 0;border-bottom:1px dotted #ccc}.t td{font-weight:bold;font-size:14px;border-top:2px solid #000}.sig{margin-top:14px}</style></head><body>${slips}<script>window.onload=()=>window.print()<\/script></body></html>`);
+    let co = {}; try { co = (await getCompanyInfo()) || {}; } catch (e) { co = {}; }
+    const esc = (x) => String(x ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const N = (v) => Number(v || 0);
+    const row = (k, v, cls = '') => `<tr class="${cls}"><td>${k}</td><td class="a">${money(v)}</td></tr>`;
+    const sub = (t) => `<div class="sub">${t}</div>`;
+    const dd = (iso) => (iso ? iso.split('-').reverse().slice(0, 2).join('/') : '');
+    const slips = lines.map((l) => {
+      const sl = l.slip || { bonuses: [], deductions: [], owed: [], owed_after: '0' };
+      const adj = N(l.manual_adjust);
+      const plus = [['الأساسي', l.base], ['الإضافي', l.overtime_amount], ['الشغل في العطلات', l.holiday_extra], ['الشغل في أيام الإجازة', l.off_day_extra]].filter(([, v], i) => i === 0 || N(v));
+      const bon = sl.bonuses.length ? sl.bonuses.map((e) => row(`مكافأة ${dd(e.date)}${e.reason ? ' - ' + esc(e.reason) : ''}`, e.amount)).join('') : (N(l.bonuses) ? row('المكافآت', l.bonuses) : '');
+      const gross = plus.reduce((a, [, v]) => a + N(v), 0) + N(l.bonuses) + (adj > 0 ? adj : 0);
+      const att = [['الغياب', l.absence_deduction], ['إجازة من غير أجر', l.unpaid_leave_deduction], ['عطلة من غير أجر', l.unpaid_holiday_deduction], ['التأخير', l.late_deduction], ['الخروج بدري', l.early_deduction]].filter(([, v]) => N(v));
+      const pen = sl.deductions.length ? sl.deductions.map((e) => row(`خصم ${dd(e.date)}${e.reason ? ' - ' + esc(e.reason) : ''}`, e.amount)).join('') : (N(l.penalties) ? row('الخصومات والجزاءات', l.penalties) : '');
+      const taken = sl.owed.filter((e) => N(e.taken));
+      const adv = taken.filter((e) => e.kind !== 'GOODS');
+      const goods = taken.filter((e) => e.kind === 'GOODS');
+      const owedRow = (e) => row(`${e.kind === 'ADVANCE' ? 'سلفة' : esc(e.kind_label)} ${dd(e.date)}${e.reason ? ' - ' + esc(e.reason) : ''}${N(e.left) ? ` <small>(باقي ${money(e.left)})</small>` : ''}`, e.taken);
+      const rec = (adv.length || goods.length) ? adv.map(owedRow).join('') + goods.map(owedRow).join('') : (N(l.recovered) ? row('السلف والبضاعة', l.recovered) : '');
+      const totalDed = att.reduce((a, [, v]) => a + N(v), 0) + N(l.penalties) + N(l.recovered) + (adj < 0 ? -adj : 0);
+      const days = Object.entries(l.days || {}).filter(([k, v]) => DAYS_L[k] && v).map(([k, v]) => `${DAYS_L[k]}: ${v}`).join(' · ');
+      return `<div class="slip">
+        <div class="c b big">${esc(co.name || '')}</div><div class="c b">قسيمة مرتب</div><hr>
+        <div><b>${esc(l.name)}</b>${l.job_title ? ' · ' + esc(l.job_title) : ''}</div>
+        <div>${esc(run.number)} · من ${dd(run.period_start)} لـ ${dd(run.period_end)}</div>
+        ${days ? `<div class="m">${days}</div>` : ''}<hr>
+        ${sub('المستحقات')}<table>${plus.map(([k, v]) => row(k, v)).join('')}${bon}${adj > 0 ? row('تسوية' + (l.manual_note ? ' - ' + esc(l.manual_note) : ''), adj) : ''}${row('إجمالي المستحق', gross, 't')}</table>
+        ${totalDed ? `${sub('الخصومات')}<table>${att.map(([k, v]) => row(k, v)).join('')}${pen}${rec}${adj < 0 ? row('تسوية' + (l.manual_note ? ' - ' + esc(l.manual_note) : ''), -adj) : ''}${row('إجمالي الخصومات', totalDed, 't')}</table>` : ''}
+        <table>${row('صافي المرتب', l.net, 'net')}</table>
+        ${N(l.shortfall) ? `<table>${row('عجز مرحّل للمرتب الجاي', l.shortfall)}</table>` : ''}
+        ${N(sl.owed_after) ? `<table>${row('الباقي عليه بعد المرتب', sl.owed_after)}</table>` : ''}
+        <div class="m">${l.paid ? `اتصرف${l.paid_treasury ? ' من ' + esc(l.paid_treasury) : ''}${l.paid_at ? ' يوم ' + dd(l.paid_at.slice(0, 10)) : ''}` : (run.status === 'DRAFT' ? 'مسودة - لسه مش معتمد' : 'لسه ماتصرفش')}</div>
+        <div class="sig">توقيع الموظف: ____________</div></div>`;
+    }).join('');
+    const paper = co.paperMm || 80; const body = Math.min(co.bodyMm || 74, paper - 6);
+    w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(run.number)}</title><style>@page{size:${paper}mm auto;margin:2mm}
+      body{font-family:Tahoma,Arial,sans-serif;margin:0;color:#000}.slip{width:${body}mm;max-width:68mm;margin:0 auto 6mm;padding:0 1mm;box-sizing:border-box;font-size:11.5px;line-height:1.5;page-break-after:always}
+      .c{text-align:center}.b{font-weight:bold}.big{font-size:15px}.m{font-size:10.5px;margin:2px 0}hr{border:0;border-top:1px dashed #000;margin:4px 0}
+      .sub{font-weight:bold;margin-top:6px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;table-layout:fixed}td{padding:2px 0;vertical-align:top;overflow-wrap:anywhere}
+      td.a{width:24mm;text-align:left;white-space:nowrap}tr.t td{font-weight:bold;border-top:1px solid #000}tr.net td{font-weight:bold;font-size:14px;border-top:2px solid #000;border-bottom:2px solid #000;padding:4px 0}
+      small{font-size:9.5px}.sig{margin-top:16px}</style></head><body>${slips}<script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
     w.document.close();
   };
   if (!salaryOpen) return (
