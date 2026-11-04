@@ -181,6 +181,11 @@ function EmployeesTab({ onChange, salaryOpen }) {
     if (!window.confirm(`متأكد إنك عايز تشيل ${e1.name}؟ لو ليه حضور هيتوقف بس.`)) return;
     try { const r = await axiosClient.delete(`/staff/employees/${e1.id}/`); setMsg(r.data?.detail || 'اتشال ✅'); await load(); } catch (e) { setErr(errOf(e)); }
   };
+  const removeForGood = async (e1) => {  // STAFF_DELETE
+    if (!window.confirm(`حذف ${e1.name} نهائي؟\nالحضور بتاعه هيتمسح كمان، ومش هينفع ترجّعه.`)) return;
+    const pw = window.prompt('اكتب باسورد المدير للحذف النهائي:'); if (!pw) return;
+    try { const r = await axiosClient.delete(`/staff/employees/${e1.id}/?permanent=1`, { data: { manager_password: pw } }); setMsg(r.data?.detail || 'اتمسح ✅'); await load(); onChange && onChange(); } catch (e) { setErr(errOf(e)); }
+  };
   const F = (k, label, el) => <label className="text-xs font-bold text-slate-600 space-y-1 block">{label}{el}</label>;
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
   return (
@@ -201,6 +206,7 @@ function EmployeesTab({ onChange, salaryOpen }) {
               <td className="p-2 whitespace-nowrap">
                 <button className="text-xs font-bold text-sky-700 hover:underline mx-1 cursor-pointer" onClick={() => setForm({ ...emptyEmp(), ...e1, start_time: String(e1.start_time).slice(0, 5), end_time: String(e1.end_time).slice(0, 5), hire_date: e1.hire_date || '', user: e1.user || '', salary: e1.salary ?? '', fixed_off_weekday: e1.fixed_off_weekday ?? '' })}>تعديل</button>
                 {e1.is_active && <button className="text-xs font-bold text-rose-700 hover:underline mx-1 cursor-pointer" onClick={() => remove(e1)}><Trash2 size={12} className="inline" /></button>}
+                {!e1.is_active && <button className="text-xs font-bold text-rose-700 hover:underline mx-1 cursor-pointer" onClick={() => removeForGood(e1)}><Trash2 size={12} className="inline" /> حذف نهائي</button>}
               </td>
             </tr>))}
             {!list.length && <tr><td colSpan="9" className="p-6 text-center text-slate-400">لسه مفيش موظفين</td></tr>}

@@ -126,6 +126,20 @@ class EmployeeViewSet(_TenantModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         emp = self.get_object()
+        if str(request.query_params.get('permanent') or request.data.get('permanent') or '').lower() in ('1', 'true'):
+            # STAFF_DELETE: wipe the employee and his attendance for good (manager password); not when money is tied to him
+            from django.db import transaction as _tx
+            from .models import EmployeeLedgerEntry, PayrollLine
+            if _approver(request, _tenant(request)) is None:
+                return Response({'detail': 'الحذف النهائي محتاج باسورد المدير'}, status=403)
+            if PayrollLine.objects.filter(employee=emp).exists():
+                return Response({'detail': f'{emp.name} ليه مرتبات في مسير - مينفعش يتمسح علشان الحسابات، بيفضل موقوف'}, status=400)
+            if EmployeeLedgerEntry.objects.filter(employee=emp).exists():
+                return Response({'detail': f'{emp.name} ليه سلف أو خصومات أو بضاعة متسجلة - مينفعش يتمسح علشان الحسابات، بيفضل موقوف'}, status=400)
+            with _tx.atomic():
+                AttendanceDay.objects.filter(employee=emp).delete()
+                emp.delete()
+            return Response({'ok': True, 'deleted': True, 'detail': 'اتمسح نهائي ✅'})
         if AttendanceDay.objects.filter(employee=emp).exists():
             emp.is_active = False
             emp.save(update_fields=['is_active', 'updated_at'])

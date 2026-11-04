@@ -141,6 +141,22 @@ class PayrollTest(StockBandsFollowSalesTest):
         self.assertEqual(r.status_code, 200, r.data)
         check(r.data['lines'][0])
 
+    def test_delete_employee_for_good(self):
+        other = Employee.objects.create(tenant=self.tenant, name="مؤقت", pay_type='MONTHLY', salary=D('3000'), start_time=datetime.time(10), end_time=datetime.time(22))
+        self._fill(other, self.start, self._d(3))
+        url = f'/api/v1/staff/employees/{other.id}/'
+        r = self._c(self.boss).delete(url)                                         # normal remove: has attendance -> suspended only
+        other.refresh_from_db(); self.assertFalse(other.is_active)
+        self.assertEqual(self._c(self.acc).delete(url + '?permanent=1').status_code, 403)
+        services.add_ledger_entry(self.tenant, self.emp, 'BONUS', '10', self._d(1), 'x', None, None, self.boss, self.boss)
+        r = self._c(self.boss).delete(f'/api/v1/staff/employees/{self.emp.id}/?permanent=1')
+        self.assertEqual(r.status_code, 400)                                       # money tied to him
+        self.assertTrue(Employee.objects.filter(pk=self.emp.id).exists())
+        r = self._c(self.acc).delete(url + '?permanent=1', {'manager_password': PWD}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertFalse(Employee.objects.filter(pk=other.id).exists())
+        self.assertFalse(AttendanceDay.objects.filter(employee_id=other.id).exists())
+
     def test_missing_days_and_overlap_block_the_run(self):
         self._fill(self.emp, self.start, self._d(9))       # the rest of the month never entered
         with self.assertRaises(ValidationError) as cm:
