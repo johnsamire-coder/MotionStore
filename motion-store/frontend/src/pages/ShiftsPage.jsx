@@ -111,9 +111,10 @@ export default function ShiftsPage() {
     const w = window.open('', '_blank', 'width=420,height=700'); if (!w) return;
     const co = (await getCompanyInfo()) || {};
     const parts = build(co).filter(Boolean);
-    const css = `@page{size:${co.paperMm || 80}mm auto;margin:3mm}
-      body{font-family:Tahoma,Arial,sans-serif;margin:0;font-size:11.5px;color:#000}.slip{width:${Math.min(co.bodyMm || 74, 68)}mm;margin:0 auto}
-      table{width:100%;border-collapse:collapse;table-layout:fixed}td{padding:2px 0;overflow-wrap:anywhere;vertical-align:top}td:last-child{text-align:left;white-space:nowrap;width:26mm}
+    // same place on the paper as the sale receipt (right side, max 66mm wide), so nothing falls off the printer's left edge
+    const css = `@page{size:${co.paperMm || 80}mm auto;margin:2mm}
+      body{font-family:Tahoma,Arial,sans-serif;margin:0;font-size:11.5px;color:#000}.slip{width:${Math.min((co.bodyMm || 74) - 8, 66)}mm;margin:0 0 0 auto;padding:0 1mm;box-sizing:border-box}
+      table{width:100%;border-collapse:collapse;table-layout:fixed}td{padding:2px 0;overflow-wrap:anywhere;vertical-align:top}td:last-child{text-align:left;white-space:nowrap;width:24mm;padding-left:1mm}
       .c{text-align:center}.b{font-weight:700}.big{font-size:13px}.m{font-size:10.5px}small{font-size:9.5px}hr{border:0;border-top:1px dashed #000;margin:3px 0}`;
     const doc = (p) => `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>${css}</style></head><body><div class="slip">${p}</div></body></html>`;
     const frames = parts.map((p, i) => `<iframe id="f${i}" srcdoc="${doc(p).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe>`).join('');

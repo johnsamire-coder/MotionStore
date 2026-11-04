@@ -475,9 +475,9 @@ function PayrollTab({ settings, salaryOpen, askUnlock, onLocked }) {
         <div class="m">${l.paid ? `اتصرف${l.paid_treasury ? ' من ' + esc(l.paid_treasury) : ''}${l.paid_at ? ' يوم ' + dd(l.paid_at.slice(0, 10)) : ''}` : (run.status === 'DRAFT' ? 'مسودة - لسه مش معتمد' : 'لسه ماتصرفش')}</div>
         <div class="sig">توقيع الموظف: ____________</div></div>`;
     }).join('');
-    const paper = co.paperMm || 80; const body = Math.min(co.bodyMm || 74, paper - 6);
+    const paper = co.paperMm || 80; const body = Math.min((co.bodyMm || 74) - 8, 66);
     w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(run.number)}</title><style>@page{size:${paper}mm auto;margin:2mm}
-      body{font-family:Tahoma,Arial,sans-serif;margin:0;color:#000}.slip{width:${body}mm;max-width:68mm;margin:0 auto 6mm;padding:0 1mm;box-sizing:border-box;font-size:11.5px;line-height:1.5;page-break-after:always}
+      body{font-family:Tahoma,Arial,sans-serif;margin:0;color:#000}.slip{width:${body}mm;max-width:66mm;margin:0 0 6mm auto;padding:0 1mm;box-sizing:border-box;font-size:11.5px;line-height:1.5;page-break-after:always}
       .c{text-align:center}.b{font-weight:bold}.big{font-size:15px}.m{font-size:10.5px;margin:2px 0}hr{border:0;border-top:1px dashed #000;margin:4px 0}
       .sub{font-weight:bold;margin-top:6px;border-bottom:1px solid #000}table{width:100%;border-collapse:collapse;table-layout:fixed}td{padding:2px 0;vertical-align:top;overflow-wrap:anywhere}
       td.a{width:24mm;text-align:left;white-space:nowrap}tr.t td{font-weight:bold;border-top:1px solid #000}tr.net td{font-weight:bold;font-size:14px;border-top:2px solid #000;border-bottom:2px solid #000;padding:4px 0}
