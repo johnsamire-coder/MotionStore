@@ -113,14 +113,14 @@ export default function ShiftsPage() {
     const parts = build(co).filter(Boolean);
     // same place on the paper as the sale receipt (right side, max 66mm wide), so nothing falls off the printer's left edge
     const css = `@page{size:${co.paperMm || 80}mm auto;margin:2mm}
-      body{font-family:Tahoma,Arial,sans-serif;margin:0;font-size:11.5px;color:#000}.slip{width:${Math.min((co.bodyMm || 74) - 8, 66)}mm;margin:0 0 0 auto;padding:0 1mm;box-sizing:border-box}
+      html,body{width:100%;margin:0;padding:0}body{font-family:Tahoma,Arial,sans-serif;font-size:11.5px;color:#000}.slip{width:100%;max-width:${(co.paperMm || 80) - 4}mm;margin:0;padding:0 1mm 0 8mm;box-sizing:border-box}
       table{width:100%;border-collapse:collapse;table-layout:fixed}td{padding:2px 0;overflow-wrap:anywhere;vertical-align:top}td:last-child{text-align:left;white-space:nowrap;width:24mm;padding-left:1mm}
       .c{text-align:center}.b{font-weight:700}.big{font-size:13px}.m{font-size:10.5px}small{font-size:9.5px}hr{border:0;border-top:1px dashed #000;margin:3px 0}`;
     const doc = (p) => `<!doctype html><html dir="rtl"><head><meta charset="utf-8"><style>${css}</style></head><body><div class="slip">${p}</div></body></html>`;
     const frames = parts.map((p, i) => `<iframe id="f${i}" srcdoc="${doc(p).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"></iframe>`).join('');
     w.document.open();
     w.document.write(`<!doctype html><html dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{margin:0;background:#eee;font-family:Tahoma,Arial}
-      iframe{display:block;width:80mm;height:120mm;border:0;background:#fff;margin:8px auto;box-shadow:0 1px 4px #0003}.bar{text-align:center;padding:8px}button{padding:6px 14px;font-weight:700}</style></head><body>
+      iframe{display:block;width:${(co.paperMm || 80) - 4}mm;height:120mm;border:0;background:#fff;margin:8px auto;box-shadow:0 1px 4px #0003}.bar{text-align:center;padding:8px}button{padding:6px 14px;font-weight:700}</style></head><body>
       <div class="bar"><button onclick="go()">🖨️ اطبع تاني</button></div>${frames}
       <script>
         function fit(){for(var i=0;i<${parts.length};i++){var f=document.getElementById('f'+i);try{f.style.height=(f.contentDocument.body.scrollHeight+20)+'px'}catch(e){}}}
