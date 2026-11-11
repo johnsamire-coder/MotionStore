@@ -195,6 +195,28 @@ def set_off_day(tenant, employee_id, date, off):
         OffDay.objects.filter(tenant=tenant, employee=emp, date=date).delete()
 
 
+def missed_off_days(emp, d_from, d_to, week_start=5):
+    """ OFF_DAY_MISSED: days worked beyond the working days of a week (7 - days off), for every complete week
+    that ends inside the period. Catches a rotating day off that was never set in the roster and was worked;
+    days already known as his day off (roster / fixed weekday) or holidays are counted elsewhere, not here. """
+    allowed = 7 - int(emp.off_days_per_week or 0)
+    if allowed >= 7:
+        return 0
+    today = datetime.date.today()
+    first_end = d_from + datetime.timedelta(days=(week_start - 1 - d_from.weekday()) % 7)   # first week end on/after d_from
+    lo = first_end - datetime.timedelta(days=6)
+    recs = {d.date: d for d in AttendanceDay.objects.filter(employee=emp, date__gte=lo, date__lte=d_to)}
+    total, end = 0, first_end
+    while end <= d_to and end <= today:
+        start = end - datetime.timedelta(days=6)
+        if not emp.hire_date or emp.hire_date <= start:
+            plain = sum(1 for i in range(7) for r in [recs.get(start + datetime.timedelta(days=i))]
+                        if r and r.status == DayStatus.PRESENT and not r.is_off_day and not r.is_holiday)
+            total += max(0, plain - allowed)
+        end += datetime.timedelta(days=7)
+    return total
+
+
 def attendance_report(tenant, date_from, date_to, employee_id=None):
     """ Per employee totals for a period + the days that were never entered (needed before payroll). """
     if date_to < date_from:
@@ -226,7 +248,8 @@ def attendance_report(tenant, date_from, date_to, employee_id=None):
             'present': st[DayStatus.PRESENT], 'absent': st[DayStatus.ABSENT], 'leave_paid': st[DayStatus.LEAVE_PAID],
             'leave_unpaid': st[DayStatus.LEAVE_UNPAID], 'off': st[DayStatus.OFF], 'holiday': st[DayStatus.HOLIDAY],
             'worked_on_holiday': sum(1 for d in ds if d.status == DayStatus.PRESENT and d.is_holiday),
-            'worked_on_off_day': sum(1 for d in ds if d.status == DayStatus.PRESENT and d.is_off_day),
+            'worked_on_off_day': sum(1 for d in ds if d.status == DayStatus.PRESENT and d.is_off_day)
+                                 + missed_off_days(e, date_from, date_to, int(settings.get('week_start', 5))),
             'late_days': len(late_days), 'late_minutes': sum(d.late_minutes for d in ds),
             'late_beyond_grace': sum(max(0, d.late_minutes - grace) for d in ds),
             'early_minutes': sum(d.early_minutes for d in ds), 'overtime_minutes': sum(d.overtime_minutes for d in ds),
@@ -554,6 +577,14 @@ def _calc_line(tenant, emp, run, s):
                     offx += day_rate * o_mult
                 elif omode == 'OVERTIME':
                     offx += Decimal(rec.worked_minutes) * minute_rate * o_mult
+    missed = missed_off_days(emp, run.period_start, run.period_end, int(s.get('week_start', 5)))  # OFF_DAY_MISSED
+    if missed:
+        worked_off += missed
+        omode = s.get('off_day_work_mode')
+        if omode == 'EXTRA_DAY':
+            offx += day_rate * o_mult * missed
+        elif omode == 'OVERTIME':
+            offx += sched * minute_rate * o_mult * missed
     line.late_deduction, line.early_deduction = _r2(late), _r2(early)
     line.overtime_amount, line.holiday_extra, line.off_day_extra = _r2(ot), _r2(hol), _r2(offx)
     pend = EmployeeLedgerEntry.objects.filter(employee=emp, cancelled=False, settled_run='', date__lte=run.period_end)

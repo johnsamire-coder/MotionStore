@@ -1224,7 +1224,7 @@ class ShiftViewSet(BaseTenantViewSet):
             if sh.closed_at:
                 qs = qs.filter(created_at__lte=sh.closed_at)
             names = {'SaleInvoice': 'مبيعات كاش', 'SalesReturn': 'مرتجعات', 'PerfumeShortage': 'عجز البرفانات', 'PerfumeSurplus': 'زيادة البرفانات',
-                     'OwnerDrawing': 'ترحيل لصاحب المحل', 'TreasuryTransfer': 'تحويلات'}
+                     'OwnerDrawing': 'ترحيل لصاحب المحل', 'TreasuryTransfer': 'تحويلات', 'CashHandedOver': 'تسليم (مستلم)'}
             for tx in qs:
                 sign = 1 if tx.transaction_type in ('DEPOSIT', 'TRANSFER_IN') else -1
                 k = names.get(tx.source_document_type or '', tx.source_document_type or 'أخرى')
@@ -1234,14 +1234,13 @@ class ShiftViewSet(BaseTenantViewSet):
                         'perfume_moves': [{'label': k, 'amount': str(v)} for k, v in moves.items()]})
         return out
 
-    @action(detail=True, methods=['post'])
-    def perfume_close(self, request, pk=None):
-        """ PERFUME_SALES: closing of the perfume drawer on its own - count it, book any shortage/surplus, hand cash over """
+    def _perfume_close(self, t, d, ref, sh=None):
+        """ PERFUME_SALES: count the perfume drawer, book any shortage/surplus, then move the cash out:
+        to a treasury, to the owner, or handed to a named person (received) """
         from django.db import transaction as dbt
         from apps.treasury.models import Treasury, TreasuryTransactionType
         from apps.treasury.services import record_treasury_transaction, transfer_between_treasuries
         from apps.sales.services import PERFUME_DRAWER_NAME
-        sh = self.get_object(); t = sh.tenant; d = request.data
         dr = Treasury.objects.filter(tenant=t, name=PERFUME_DRAWER_NAME).first()
         if not dr:
             return Response({'detail': 'لسه مفيش مبيعات برفانات'}, status=400)
@@ -1255,31 +1254,65 @@ class ShiftViewSet(BaseTenantViewSet):
             return Response({'detail': 'اكتب الفلوس اللي اتعدّت في درج البرفانات'}, status=400)
         if actual < 0 or hand < 0 or hand > actual:
             return Response({'detail': 'المبالغ مش مظبوطة: الترحيل لازم يبقى أقل من أو قد اللي اتعدّ'}, status=400)
+        dest = d.get('destination') or 'TREASURY'
+        who = (d.get('receiver') or '').strip()[:100]
+        if hand > 0 and dest == 'PERSON' and not who:
+            return Response({'detail': 'اكتب اسم اللي استلم الفلوس'}, status=400)
         try:
             with dbt.atomic():
                 dr = Treasury.objects.select_for_update().get(pk=dr.pk)
                 expected = dr.current_balance
                 diff = actual - expected
-                ref = sh.shift_code
                 if diff != 0:
                     record_treasury_transaction(treasury_id=dr.id, transaction_type=TreasuryTransactionType.DEPOSIT if diff > 0 else TreasuryTransactionType.WITHDRAWAL, amount=abs(diff),
                                                 source_document_type='PerfumeSurplus' if diff > 0 else 'PerfumeShortage', source_document_id=ref,
-                                                description=f"{'زيادة' if diff > 0 else 'عجز'} درج البرفانات - وردية {ref} (بموافقة {mgr.username})", allow_negative=True)
+                                                description=f"{'زيادة' if diff > 0 else 'عجز'} درج البرفانات - {ref} (بموافقة {mgr.username})", allow_negative=True)
                 if hand > 0:
-                    if d.get('destination') == 'OWNER':
+                    if dest == 'OWNER':
                         record_treasury_transaction(treasury_id=dr.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=hand, source_document_type='OwnerDrawing',
-                                                    source_document_id=ref, description=f"ترحيل البرفانات لصاحب المحل - وردية {ref}")
+                                                    source_document_id=ref, description=f"ترحيل البرفانات لصاحب المحل - {ref}")
+                    elif dest == 'PERSON':
+                        record_treasury_transaction(treasury_id=dr.id, transaction_type=TreasuryTransactionType.WITHDRAWAL, amount=hand, source_document_type='CashHandedOver',
+                                                    source_document_id=ref, description=f"تسليم فلوس البرفانات - استلمها: {who} (بموافقة {mgr.username})")
                     else:
                         to = Treasury.objects.filter(tenant=t, pk=d.get('treasury_id')).first()
                         if not to or to.pk == dr.pk:
                             raise ValueError('اختار الخزنة اللي هيترحّل ليها')
-                        transfer_between_treasuries(dr.id, to.id, hand, f"ترحيل البرفانات - وردية {ref}")
+                        transfer_between_treasuries(dr.id, to.id, hand, f"ترحيل البرفانات - {ref}")
         except Exception as ex:
             msg = '; '.join(getattr(ex, 'messages', []) or [str(ex)])
             return Response({'detail': 'الخزنة مفيهاش فلوس كفاية' if 'Insufficient' in msg else msg}, status=400)
         dr.refresh_from_db()
-        return Response({'ok': True, 'expected': str(expected), 'actual': str(actual), 'difference': str(diff), 'handover': str(hand),
-                         'remaining': str(dr.current_balance), 'by': mgr.username, 'summary': self._summary(sh)})
+        out = {'ok': True, 'ref': ref, 'expected': str(expected), 'actual': str(actual), 'difference': str(diff), 'handover': str(hand),
+               'destination': dest, 'receiver': who, 'remaining': str(dr.current_balance), 'by': mgr.username}
+        if sh is not None:
+            out['summary'] = self._summary(sh)
+        return Response(out)
+
+    @action(detail=True, methods=['post'])
+    def perfume_close(self, request, pk=None):
+        sh = self.get_object()
+        return self._perfume_close(sh.tenant, request.data, sh.shift_code, sh)
+
+    @action(detail=False, methods=['get', 'post'])
+    def perfume_drawer(self, request):
+        """ PERFUME_SALES: the perfume drawer any time (no open shift needed): GET its balance and recent moves, POST to close / hand over """
+        from django.utils import timezone
+        from apps.treasury.models import Treasury, TreasuryTransaction
+        from apps.sales.services import PERFUME_DRAWER_NAME
+        t = self.get_tenant()
+        if request.method == 'POST':
+            return self._perfume_close(t, request.data, 'برفانات ' + timezone.localtime().strftime('%Y-%m-%d %H:%M'))
+        dr = Treasury.objects.filter(tenant=t, name=PERFUME_DRAWER_NAME).first()
+        if not dr:
+            return Response({'exists': False, 'balance': '0'})
+        dr.refresh_from_db()
+        names = {'SaleInvoice': 'مبيعات', 'SalesReturn': 'مرتجع', 'PerfumeShortage': 'عجز', 'PerfumeSurplus': 'زيادة', 'OwnerDrawing': 'ترحيل لصاحب المحل',
+                 'TreasuryTransfer': 'ترحيل لخزنة', 'CashHandedOver': 'تسليم (مستلم)'}
+        moves = [{'time': timezone.localtime(x.created_at).strftime('%Y-%m-%d %H:%M'), 'label': names.get(x.source_document_type or '', x.source_document_type or ''),
+                  'notes': x.description or '', 'amount': str(x.amount if x.transaction_type in ('DEPOSIT', 'TRANSFER_IN') else -x.amount)}
+                 for x in TreasuryTransaction.objects.filter(treasury=dr).order_by('-created_at')[:15]]
+        return Response({'exists': True, 'id': str(dr.id), 'balance': str(dr.current_balance), 'moves': moves})
 
     @action(detail=True, methods=['get'])
     def summary(self, request, pk=None):

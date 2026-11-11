@@ -2,6 +2,7 @@ import ShiftReturnsBox from '../components/ShiftReturnsBox';
 import OnlineShiftBox from '../components/OnlineShiftBox';
 import EmployeeShiftBox from '../components/EmployeeShiftBox';
 import PerfumeShiftBox from '../components/PerfumeShiftBox';
+import PerfumeDrawerCard from '../components/PerfumeDrawerCard';
 import MidShiftHandover from '../components/MidShiftHandover';
 import ShiftCashIn from '../components/ShiftCashIn';
 // RECEIPT_PATCHED
@@ -98,13 +99,17 @@ export default function ShiftsPage() {
       <table class="b">${row('صافي الأونلاين', money(s.online_net_total ?? s.online_total))}</table>
       ${(s.online_orders || []).length ? `<hr><div class="b">الأوردرات</div><table>${s.online_orders.map((o) => row(esc(o.number) + (o.name || o.courier ? '<br><small>' + esc([o.name, o.courier].filter(Boolean).join(' / ')) + ' · ' + esc(o.methods) + '</small>' : ''), money(o.total))).join('')}</table>` : ''}<hr>
       ${slipFoot(co, s)}`;
+  const handLabel = (r) => (r.destination === 'PERSON' ? 'اتسلّم لـ ' + esc(r.receiver) : r.destination === 'OWNER' ? 'اترحّل لصاحب المحل' : 'اترحّل لخزنة');
+  const perfumeDrawerSlip = (co, r) => `<div class="c"><div class="b" style="font-size:14px">${esc(co.name)}</div>${co.headerHtml || ''}<div class="b big">🌸 درج البرفانات</div><div>${esc(r.ref)}</div></div><hr>
+      <table class="b">${row('المفروض في الدرج', money(r.expected))}${row('اتعدّ', money(r.actual))}${row('الفرق', money(r.difference))}${num(r.handover) ? row(handLabel(r), money(r.handover)) : ''}${row('فضل في الدرج', money(r.remaining))}</table><hr>
+      <div>بموافقة: ${esc(r.by)}</div><div style="margin-top:14px">توقيع المستلم: ..............</div>${co.footerHtml || ''}`;
   const perfumeSlip = (co, s, r) => `${slipHead(co, '🌸 تقفيل البرفانات', s)}
       <table>${row('عدد الفواتير', s.perfume_count || 0)}${row('إجمالي البرفانات', money(s.perfume_total))}</table><hr>
       <div class="b">حسب طريقة الدفع</div>${list(s.perfume_by_method)}
       ${(s.perfume_returns_by_method || []).length ? `<hr><div class="b">مرتجعات</div>${list(s.perfume_returns_by_method)}` : ''}<hr>
       <table class="b">${row('صافي البرفانات', money(s.perfume_net_total))}</table><hr>
       ${(s.perfume_moves || []).length ? `<div class="b">حركات درج البرفانات</div><table>${s.perfume_moves.map((m) => row(esc(m.label), money(m.amount))).join('')}</table><hr>` : ''}
-      <table class="b">${r ? row('المتوقع في الدرج', money(r.expected)) + row('اتعدّ', money(r.actual)) + row('الفرق', money(r.difference)) + (num(r.handover) ? row('اترحّل', money(r.handover)) : '') + row('فضل في الدرج', money(r.remaining)) : row('في درج البرفانات', money(s.perfume_drawer_balance))}</table><hr>
+      <table class="b">${r ? row('المتوقع في الدرج', money(r.expected)) + row('اتعدّ', money(r.actual)) + row('الفرق', money(r.difference)) + (num(r.handover) ? row(handLabel(r), money(r.handover)) : '') + row('فضل في الدرج', money(r.remaining)) : row('في درج البرفانات', money(s.perfume_drawer_balance))}</table><hr>
       ${r ? `<div>بموافقة: ${esc(r.by)}</div>` : ''}${slipFoot(co, s)}`;
   const printSlips = async (title, build) => {
     // each receipt is its own print job, so the receipt printer cuts the paper after every one
@@ -132,6 +137,7 @@ export default function ShiftsPage() {
   const printReport = (s) => printSlips(s.shift.shift_code, (co) => [storeSlip(co, s), onlineSlip(co, s), perfumeSlip(co, s, null)]);
   const printOnline = (s) => printSlips('أونلاين ' + s.shift.shift_code, (co) => [onlineSlip(co, s)]);
   const printPerfume = (r) => printSlips('برفانات ' + r.summary.shift.shift_code, (co) => [perfumeSlip(co, r.summary, r)]);
+  const printPerfumeDrawer = (r) => printSlips(r.ref, (co) => [perfumeDrawerSlip(co, r)]);
 
   const doOpen = async () => {
     setBusy(true); setErr('');
@@ -172,6 +178,7 @@ export default function ShiftsPage() {
           <button type="button" disabled={busy || (needMgrOpen && !pwd)} onClick={doOpen} className="w-full h-11 rounded-xl bg-emerald-600 disabled:bg-slate-400 text-white font-bold cursor-pointer">{T.openBtn}</button>
         </div>
       )}
+      {!shift && term && <PerfumeDrawerCard trs={trs} onPrint={printPerfumeDrawer} />}
 
       {shift && sum && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

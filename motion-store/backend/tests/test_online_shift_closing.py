@@ -127,3 +127,27 @@ class PerfumeCounterTest(StockBandsFollowSalesTest):
         self.assertEqual((r.data['difference'], r.data['remaining']), ('-10.00', '0.00'))
         safe.refresh_from_db(); self.assertEqual(safe.current_balance, Decimal('140.00'))
         self.drawer.refresh_from_db(); self.assertEqual(self.drawer.current_balance, Decimal('550.00'))
+
+
+class PerfumeDrawerAnyTimeTest(PerfumeCounterTest):
+    def test_perfume_drawer_without_a_shift_and_handed_to_a_person(self):
+        from rest_framework.test import APIClient
+        from apps.users.models import User
+        from apps.shifts.services import close_shift
+        from apps.sales.services import PERFUME_DRAWER_NAME
+        self._stock(self.shop, 20, 10)
+        code = self._code()
+        boss = User.objects.create_user(username="boss5", password="Pass2026Password", role="ADMIN", tenant=self.tenant)
+        shift = open_shift(self.terminal.id, self.user, Decimal('500.00'))
+        process_pos_sale(shift_id=shift.id, cashier=self.user, items_data=[{'piece_item_id': code.id, 'quantity_pieces': 2, 'weight_kg': '0', 'unit_price': Decimal('50.00'), 'price_mode': 'PIECE'}],
+                         payments_data=[{'payment_method': self.pm_cash, 'amount': Decimal('100.00')}], perfume=True)
+        shift.status = 'CLOSED'; shift.save()
+        c = APIClient(); c.force_authenticate(user=boss)
+        r = c.get('/api/v1/shifts/perfume_drawer/')
+        self.assertEqual((r.status_code, r.data['balance']), (200, '100.00'))
+        pw = {'manager_password': 'Pass2026Password'}
+        self.assertEqual(c.post('/api/v1/shifts/perfume_drawer/', {'actual_cash': '100', 'handover_amount': '100', 'destination': 'PERSON', **pw}, format='json').status_code, 400)  # name needed
+        r = c.post('/api/v1/shifts/perfume_drawer/', {'actual_cash': '100', 'handover_amount': '100', 'destination': 'PERSON', 'receiver': 'أستاذ جون', **pw}, format='json')
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual((r.data['remaining'], r.data['receiver']), ('0.00', 'أستاذ جون'))
+        self.assertEqual(Treasury.objects.get(tenant=self.tenant, name=PERFUME_DRAWER_NAME).current_balance, Decimal('0.00'))

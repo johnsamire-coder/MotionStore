@@ -1,0 +1,60 @@
+import React, { useEffect, useState } from 'react';
+import axiosClient from '../api/axiosClient';
+
+const money = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const N = (v) => Number(v || 0);
+
+// PERFUME_SALES: the perfume drawer any time (no open shift needed) - count it and move the cash out / hand it over
+export default function PerfumeDrawerCard({ trs, onPrint }) {
+  const [info, setInfo] = useState(null);
+  const [actual, setActual] = useState('');
+  const [hand, setHand] = useState('');
+  const [dest, setDest] = useState('TREASURY');
+  const [tr, setTr] = useState('');
+  const [who, setWho] = useState('');
+  const [pwd, setPwd] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = async () => { try { const r = await axiosClient.get('/shifts/perfume_drawer/'); setInfo(r.data); } catch (e) { setInfo(null); } };
+  useEffect(() => { load(); }, []);
+  if (!info || !info.exists) return null;
+  const expected = N(info.balance);
+  const diff = actual === '' ? 0 : Math.round((N(actual) - expected) * 100) / 100;
+  const others = (trs || []).filter((x) => x.treasury_type !== 'POS_DRAWER');
+  const go = async () => {
+    setMsg(''); setBusy(true);
+    try {
+      const r = await axiosClient.post('/shifts/perfume_drawer/', { actual_cash: actual, handover_amount: hand || '0', destination: dest, treasury_id: dest === 'TREASURY' ? tr : null, receiver: who, manager_password: pwd });
+      setActual(''); setHand(''); setPwd(''); setWho(''); setMsg('✅ اتسجل');
+      if (onPrint) onPrint(r.data);
+      load();
+    } catch (e) { setMsg('❌ ' + (e.response?.data?.detail || e.message)); } finally { setBusy(false); }
+  };
+  const input = 'h-9 px-2 border border-slate-300 rounded-lg text-sm bg-white';
+  return (
+    <div className="bg-white p-4 rounded-xl border-2 border-pink-300 space-y-2 text-xs max-w-2xl" dir="rtl">
+      <div className="text-sm font-black text-pink-800">🌸 درج البرفانات (من غير وردية)</div>
+      <div className="flex justify-between text-sm font-black bg-pink-50 rounded-lg p-2"><span>اللي في درج البرفانات</span><span>{money(expected)} ج.م</span></div>
+      <label className="font-bold block space-y-1">اللي اتعدّ في الدرج<input type="number" min="0" step="0.01" value={actual} onChange={(e) => setActual(e.target.value)} className={input + ' w-full font-bold'} /></label>
+      {actual !== '' && <div className={`font-black ${diff < 0 ? 'text-rose-700' : diff > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>الفرق: {money(diff)} {diff < 0 ? '(عجز)' : diff > 0 ? '(زيادة)' : '✅'}</div>}
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="font-bold">الفلوس هتروح</span>
+        <select value={dest} onChange={(e) => setDest(e.target.value)} className={input}><option value="TREASURY">ترحيل لخزنة</option><option value="OWNER">ترحيل لصاحب المحل</option><option value="PERSON">تسليم لشخص (مستلم)</option></select>
+        {dest === 'TREASURY' && <select value={tr} onChange={(e) => setTr(e.target.value)} className={input}><option value="">اختار الخزنة</option>{others.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>}
+        {dest === 'PERSON' && <input value={who} onChange={(e) => setWho(e.target.value)} placeholder="اسم اللي استلم" className={input + ' w-40'} />}
+        <input type="number" min="0" step="0.01" value={hand} onChange={(e) => setHand(e.target.value)} placeholder="المبلغ" className={input + ' w-32'} />
+        {actual !== '' && <button type="button" onClick={() => setHand(actual)} className="h-9 px-2 rounded-lg border border-pink-300 text-pink-800 font-bold cursor-pointer">الكل</button>}
+      </div>
+      {actual !== '' && <div className="font-bold">هيفضل في درج البرفانات: {money(N(actual) - N(hand))} ج.م</div>}
+      <input type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} placeholder="باسورد المدير" className={input + ' w-full'} />
+      <button type="button" disabled={busy || actual === '' || !pwd || N(hand) > N(actual) || (N(hand) > 0 && dest === 'TREASURY' && !tr) || (N(hand) > 0 && dest === 'PERSON' && !who.trim())} onClick={go} className="w-full h-10 rounded-xl bg-pink-600 disabled:bg-slate-400 text-white font-black cursor-pointer">تأكيد وطباعة</button>
+      {msg && <div className={`font-bold ${msg.startsWith('✅') ? 'text-emerald-700' : 'text-rose-700'}`}>{msg}</div>}
+      {(info.moves || []).length > 0 && (
+        <div className="border-t border-pink-100 pt-2 space-y-1">
+          <div className="font-bold text-slate-600">آخر الحركات</div>
+          {info.moves.map((m, i) => <div key={i} className="flex justify-between gap-2 text-slate-600"><span>{m.time} · {m.label}</span><b className={N(m.amount) < 0 ? 'text-rose-700' : 'text-emerald-700'}>{money(m.amount)}</b></div>)}
+        </div>
+      )}
+    </div>
+  );
+}

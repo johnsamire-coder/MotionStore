@@ -157,6 +157,20 @@ class PayrollTest(StockBandsFollowSalesTest):
         self.assertFalse(Employee.objects.filter(pk=other.id).exists())
         self.assertFalse(AttendanceDay.objects.filter(employee_id=other.id).exists())
 
+    def test_rotating_day_off_worked_is_counted(self):
+        """ A rotating day off never set in the roster: a full week worked counts one day worked on his day off """
+        self._settings(off_day_work_mode='EXTRA_DAY')
+        self.emp.off_days_per_week = 1; self.emp.fixed_off_weekday = None; self.emp.save()
+        self._fill(self.emp, self.start, self.end)                                   # every day present, no day off
+        rep = services.attendance_report(self.tenant, self.start, self.end, self.emp.id)
+        weeks = services.missed_off_days(self.emp, self.start, self.end, 5)
+        self.assertGreaterEqual(weeks, 4)
+        self.assertEqual(rep['rows'][0]['worked_on_off_day'], weeks)
+        run = services.create_payroll(self.tenant, 'MONTHLY', self.start, self.end)
+        line = run.lines.get()
+        self.assertEqual(line.days['worked_on_off_day'], weeks)
+        self.assertEqual(line.off_day_extra, (D('100') * weeks).quantize(D('0.01')))   # 3000 / 30 per day
+
     def test_missing_days_and_overlap_block_the_run(self):
         self._fill(self.emp, self.start, self._d(9))       # the rest of the month never entered
         with self.assertRaises(ValidationError) as cm:
@@ -317,6 +331,7 @@ class PayrollTest(StockBandsFollowSalesTest):
 
     def test_work_on_day_off_option(self):
         from apps.staff.models import OffDay
+        self.emp.off_days_per_week = 0; self.emp.save()   # only the rostered day off counts here (weeks worked in full are another test)
         OffDay.objects.create(tenant=self.tenant, employee=self.emp, date=self._d(4))
         self._fill(self.emp, self.start, self.end, {self._d(4): {'status': 'PRESENT', 'check_in': '10:00', 'check_out': '14:00'}})  # 4h on his day off
         line = services.create_payroll(self.tenant, 'MONTHLY', self.start, self.end).lines.get()
