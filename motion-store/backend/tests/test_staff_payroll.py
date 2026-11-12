@@ -171,6 +171,21 @@ class PayrollTest(StockBandsFollowSalesTest):
         self.assertEqual(line.days['worked_on_off_day'], weeks)
         self.assertEqual(line.off_day_extra, (D('100') * weeks).quantize(D('0.01')))   # 3000 / 30 per day
 
+    def test_goods_return_closes_its_own_invoice(self):
+        """ Goods brought back cancel the goods of that invoice, not the oldest advance """
+        from apps.staff.models import EmployeeLedgerEntry as E
+        self._fill(self.emp, self.start, self.end)
+        services.add_ledger_entry(self.tenant, self.emp, 'ADVANCE', '600', self._d(1), '', self.safe, '200', self.boss, self.boss)
+        E.objects.create(tenant=self.tenant, number='SGDS-1', employee=self.emp, kind='GOODS', date=self._d(7), amount=D('450'), reason='بضاعة فاتورة INV-1384')
+        E.objects.create(tenant=self.tenant, number='SGDS-2', employee=self.emp, kind='GOODS', date=self._d(8), amount=D('20'), reason='بضاعة فاتورة INV-1390')
+        E.objects.create(tenant=self.tenant, number='SGRT-1', employee=self.emp, kind='GOODS_RETURN', date=self._d(9), amount=D('450'), reason='مرتجع RET-0051 من فاتورة INV-1384')
+        run = services.create_payroll(self.tenant, 'MONTHLY', self.start, self.end)
+        line = run.lines.get()
+        self.assertEqual(line.recovered, D('220.00'))          # advance installment 200 + goods 20; the returned 450 is not taken
+        sl = services.slip_details(run, line)
+        self.assertEqual([(e['number'], e['taken']) for e in sl['owed']], [(E.objects.filter(kind='ADVANCE').get().number, '200.00'), ('SGDS-2', '20.00')])
+        self.assertEqual(sl['owed_after'], '400.00')
+
     def test_missing_days_and_overlap_block_the_run(self):
         self._fill(self.emp, self.start, self._d(9))       # the rest of the month never entered
         with self.assertRaises(ValidationError) as cm:

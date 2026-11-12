@@ -486,20 +486,38 @@ def _late_amount(minutes, s, day_rate, minute_rate):
     return ZERO2
 
 
+def _open_debits(entries):
+    """ [[entry, still owed]] for advances/goods/carried shortfalls, after what came back. A goods return
+    first closes the goods of the same invoice; repayments, recoveries and the rest go oldest first. """
+    import re
+    inv_of = lambda e: (re.search(r'فاتورة\s+(\S+)', e.reason or '') or [None, None])[1]
+    debits, credit = [], Decimal('0')
+    entries = list(entries)
+    for e in entries:
+        if OWED_SIGN.get(e.kind) == 1:
+            debits.append([e, e.amount])
+    for e in entries:
+        if OWED_SIGN.get(e.kind) != -1:
+            continue
+        left = e.amount
+        if e.kind == LedgerKind.GOODS_RETURN and inv_of(e):  # GOODS_RETURN_MATCH
+            for d in debits:
+                if d[0].kind == LedgerKind.GOODS and inv_of(d[0]) == inv_of(e) and d[1] > 0:
+                    take = min(d[1], left)
+                    d[1] -= take
+                    left -= take
+        credit += left
+    for d in debits:
+        take = min(d[1], credit)
+        d[1] -= take
+        credit -= take
+    return debits
+
+
 def _recovery_plan(emp, up_to, mode):
     """ What the payroll may take back: each advance by its installment (all of it when mode ALL or no
     installment), goods/carried shortfalls in full. Repayments and earlier recoveries are applied oldest first. """
-    debits, credit = [], Decimal('0')
-    for e in EmployeeLedgerEntry.objects.filter(employee=emp, cancelled=False, date__lte=up_to).order_by('date', 'created_at'):
-        sign = OWED_SIGN.get(e.kind)
-        if sign == 1:
-            debits.append([e, e.amount])
-        elif sign == -1:
-            credit += e.amount
-    for item in debits:
-        take = min(item[1], credit)
-        item[1] -= take
-        credit -= take
+    debits = _open_debits(EmployeeLedgerEntry.objects.filter(employee=emp, cancelled=False, date__lte=up_to).order_by('date', 'created_at'))
     due = Decimal('0')
     for e, remaining in debits:
         if remaining <= 0:
@@ -824,17 +842,7 @@ def slip_details(run, line):
     bonuses = [item(e, e.amount) for e in pend.order_by('date', 'created_at') if e.kind == LedgerKind.BONUS]
     deductions = [item(e, e.amount) for e in pend.order_by('date', 'created_at') if e.kind == LedgerKind.DEDUCTION]
     # what he owed when this payroll was made (the entries this run itself created are left out)
-    debits, credit = [], Decimal('0')
-    for e in qs.filter(date__lte=run.period_end).exclude(settled_run=rid, kind__in=(LedgerKind.RECOVERY, LedgerKind.CARRY)).order_by('date', 'created_at'):
-        sign = OWED_SIGN.get(e.kind)
-        if sign == 1:
-            debits.append([e, e.amount])
-        elif sign == -1:
-            credit += e.amount
-    for d in debits:
-        take = min(d[1], credit)
-        d[1] -= take
-        credit -= take
+    debits = _open_debits(qs.filter(date__lte=run.period_end).exclude(settled_run=rid, kind__in=(LedgerKind.RECOVERY, LedgerKind.CARRY)).order_by('date', 'created_at'))
     mode = (run.settings_used or {}).get('advance_mode')
     left = line.recovered
     owed, owed_before = [], Decimal('0')
