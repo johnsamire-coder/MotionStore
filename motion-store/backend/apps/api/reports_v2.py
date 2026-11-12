@@ -116,6 +116,43 @@ def sales_by_method(t, p):
     for r in rows: r['pct'] = round(r['total'] / tot * 100, 1) if tot else 0
     return rep('المبيعات حسب طريقة الدفع', [('k', 'طريقة الدفع'), ('n', 'مرات', 'number'), ('total', 'المبلغ', 'money'), ('pct', 'النسبة %', 'pct')], rows, {'total': round(tot, 2)})
 
+def perfume_sales(t, p):
+    """ PERFUME_SALES: every perfume sold in the period - perfume counter, online, or the normal store - after the
+    invoice discount, minus perfume returns; with a total per channel """
+    from apps.sales.services import is_perfume_text
+    CH = {'PERFUME': '🌸 برفانات محل', 'ONLINE': '🛒 أونلاين'}
+    ratio = lambda inv: (max(Decimal('0'), (inv.subtotal or 0) - (inv.discount_amount or 0)) / inv.subtotal) if inv.subtotal else Decimal('1')
+    is_p = lambda sl: is_perfume_text(sl.display_name, getattr(sl.product, 'name', ''), getattr(sl.piece_item, 'name', ''), gv(linfo(sl), ['item_name']))
+    rows, by_ch, invs = [], defaultdict(float), defaultdict(set)
+    for sl in lines(t, p).select_related('piece_item'):
+        if not is_p(sl):
+            continue
+        inv = sl.sale_invoice
+        ch = CH.get(inv.channel, '🏪 بيع عادي في المحل')
+        amt = round(f(Decimal(sl.total_price or 0) * ratio(inv)), 2)
+        rows.append({'date': str(timezone.localtime(inv.invoice_date_time))[:16], 'no': inv.invoice_number, 'ch': ch, 'item': sl.display_name or sl.product.name,
+                     'pcs': int(sl.quantity_pieces or 0), 'amount': amt})
+        by_ch[ch] += amt
+        invs[ch].add(inv.invoice_number)
+    RL = M('returns', 'SalesReturnLineItem').objects.filter(sales_return__tenant=t, sales_return__status='COMPLETED').select_related(
+        'sales_return', 'original_sale_line__sale_invoice', 'original_sale_line__product', 'original_sale_line__piece_item', 'original_sale_line__stock_item__source_lot__purchase_line_item')
+    for rl in rng(RL, 'sales_return__return_date_time', p):
+        sl = rl.original_sale_line
+        if not is_p(sl):
+            continue
+        ch = CH.get(sl.sale_invoice.channel, '🏪 بيع عادي في المحل')
+        amt = -round(f(rl.refund_total_price), 2)
+        rows.append({'date': str(timezone.localtime(rl.sales_return.return_date_time))[:16], 'no': f"{rl.sales_return.return_number} (مرتجع)", 'ch': ch,
+                     'item': sl.display_name or sl.product.name, 'pcs': -int(rl.quantity_pieces or 0), 'amount': amt})
+        by_ch[ch] += amt
+    rows.sort(key=lambda r: r['date'])
+    cards = [{'label': f"{k} ({len(invs[k])} فاتورة)", 'value': round(v, 2), 'type': 'money'} for k, v in sorted(by_ch.items(), key=lambda x: -x[1])]
+    cards.append({'label': 'إجمالي البرفانات', 'value': round(sum(by_ch.values()), 2), 'type': 'money'})
+    return rep('مبيعات البرفانات (محل وأونلاين)', [('date', 'التاريخ'), ('no', 'الفاتورة'), ('ch', 'اتباعت فين'), ('item', 'الصنف'), ('pcs', 'قطع', 'number'), ('amount', 'المبلغ', 'money')],
+               rows, {'pcs': sum(r['pcs'] for r in rows), 'amount': round(sum(r['amount'] for r in rows), 2)}, cards=cards,
+               note='البرفان بيتعرف من اسمه (برفان / برفيوم / عطر / سبلاش ...). المبلغ بعد خصم الفاتورة، والمرتجعات بالسالب.')
+
+
 def sales_by_item(t, p): return group_lines(t, p, lambda sl: sl.display_name or sl.product.name, 'المبيعات حسب الصنف', 'الصنف')
 def sales_by_grade(t, p): return group_lines(t, p, lambda sl: GR.get(sl.grade, sl.grade), 'المبيعات حسب الدرجة', 'الدرجة')
 def sales_by_kind(t, p): return group_lines(t, p, lambda sl: KIND.get(gv(linfo(sl), ['purchase_kind']), 'بدون تصنيف'), 'المبيعات حسب التصنيف (بالة / استوك / خاص)', 'التصنيف')
@@ -504,7 +541,7 @@ def dashboard(t, p):
 CATALOG = [
     ('لوحة المؤشرات', [('dashboard', dashboard)]),
     ('المبيعات', [('sales_daily', sales_daily), ('sales_by_cashier', sales_by_cashier), ('sales_by_terminal', sales_by_terminal), ('sales_by_method', sales_by_method), ('sales_by_hour', sales_by_hour),
-                  ('sales_by_weekday', sales_by_weekday), ('sales_by_item', sales_by_item), ('sales_by_grade', sales_by_grade), ('sales_by_kind', sales_by_kind), ('sales_by_segment', sales_by_segment),
+                  ('sales_by_weekday', sales_by_weekday), ('sales_by_item', sales_by_item), ('perfume_sales', perfume_sales), ('sales_by_grade', sales_by_grade), ('sales_by_kind', sales_by_kind), ('sales_by_segment', sales_by_segment),
                   ('sales_by_brand', sales_by_brand), ('sales_by_mode', sales_by_mode), ('top_items', top_items), ('discounts_approvals', discounts_approvals), ('deferred_report', deferred_report)]),
     ('الأرباح', [('income_statement', income_statement), ('profit_by_item', profit_by_item), ('profit_by_grade', profit_by_grade), ('profit_by_cashier', profit_by_cashier), ('profit_by_shop', profit_by_shop), ('bale_profit', bale_profit), ('monthly_compare', monthly_compare)]),
     ('الفرز', [('sorting_results', sorting_results), ('supplier_quality', supplier_quality), ('pending_lots', pending_lots)]),

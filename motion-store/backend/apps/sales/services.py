@@ -377,3 +377,13 @@ def perfume_drawer_for(terminal):
         tr = Treasury.objects.create(tenant=terminal.tenant, name=PERFUME_DRAWER_NAME, treasury_type='POS_DRAWER', branch=terminal.branch,
                                      current_balance=Decimal('0.00'), is_active=True)
     return tr
+
+
+# PERFUME_SALES: perfume items are known by their name (same words as the sales screen's perfume button)
+PERFUME_WORDS = ('برفان', 'برفيوم', 'بارفان', 'بيرفيوم', 'برفام', 'برفيم', 'عطر', 'عطور', 'سبلاش', 'بودي مست', 'مسك',
+                 'perfume', 'parfum', 'fragrance', 'splash', 'mist', 'cologne', 'كولونيا')
+
+
+def is_perfume_text(*texts):
+    txt = ' '.join(str(x) for x in texts if x).lower()
+    return any(w in txt for w in PERFUME_WORDS)

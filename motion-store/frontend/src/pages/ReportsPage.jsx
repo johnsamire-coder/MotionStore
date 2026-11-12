@@ -20,7 +20,7 @@ const fmt = (v, type) => {
 };
 const TITLES = {
   dashboard: 'لوحة المؤشرات', sales_daily: 'المبيعات يوم بيوم', sales_by_cashier: 'حسب الكاشير', sales_by_terminal: 'حسب نقطة البيع', sales_by_method: 'حسب طريقة الدفع', sales_by_hour: 'حسب الساعة', sales_by_weekday: 'حسب أيام الأسبوع',
-  sales_by_item: 'حسب الصنف', sales_by_grade: 'حسب الدرجة', sales_by_kind: 'حسب التصنيف', sales_by_segment: 'حسب النوع', sales_by_brand: 'حسب البراند', sales_by_mode: 'بالقطعة مقابل بالكيلو', top_items: 'الأكثر مبيعاً',
+  sales_by_item: 'حسب الصنف', perfume_sales: '🌸 مبيعات البرفانات (محل وأونلاين)', sales_by_grade: 'حسب الدرجة', sales_by_kind: 'حسب التصنيف', sales_by_segment: 'حسب النوع', sales_by_brand: 'حسب البراند', sales_by_mode: 'بالقطعة مقابل بالكيلو', top_items: 'الأكثر مبيعاً',
   discounts_approvals: 'الخصومات والموافقات', deferred_report: 'الفواتير المؤجلة', income_statement: 'قايمة الدخل (صافي الربح)', profit_by_item: 'ربح الصنف', profit_by_grade: 'ربح الدرجة', profit_by_cashier: 'ربح الكاشير',
   profit_by_shop: 'ربح المحل', bale_profit: '⭐ ربح كل بالة', monthly_compare: 'مقارنة شهرية', sorting_results: 'نتيجة الفرز', supplier_quality: 'تقييم الموردين', pending_lots: 'بالات ماتفرزتش',
   purchases_list: 'فواتير الشراء', purchases_by_supplier: 'المشتريات بالمورد', supplier_balances: 'أرصدة الموردين', supplier_aging: 'أعمار ديون الموردين', stock_value: 'المخزون بالقيمة', stock_by_location: 'المخزون بالمكان',

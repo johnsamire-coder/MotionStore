@@ -151,3 +151,25 @@ class PerfumeDrawerAnyTimeTest(PerfumeCounterTest):
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual((r.data['remaining'], r.data['receiver']), ('0.00', 'أستاذ جون'))
         self.assertEqual(Treasury.objects.get(tenant=self.tenant, name=PERFUME_DRAWER_NAME).current_balance, Decimal('0.00'))
+
+
+class PerfumeSalesReportTest(StockBandsFollowSalesTest):
+    def test_perfume_sales_by_channel(self):
+        from apps.api import reports_v2
+        self._stock(self.shop, 20, 10)
+        code = self._code()                                          # named «برفيوم»
+        bank = Treasury.objects.create(tenant=self.tenant, name="InstaPay", branch=self.branch, treasury_type=TreasuryType.BANK)
+        insta = PaymentMethod.objects.create(tenant=self.tenant, name="إنستاباي", method_type=PaymentMethodType.ELECTRONIC, treasury=bank)
+        shift = open_shift(self.terminal.id, self.user, Decimal('500.00'))
+        item = lambda n: [{'piece_item_id': code.id, 'quantity_pieces': n, 'weight_kg': '0', 'unit_price': Decimal('50.00'), 'price_mode': 'PIECE'}]
+        p = process_pos_sale(shift_id=shift.id, cashier=self.user, items_data=item(4), payments_data=[{'payment_method': self.pm_cash, 'amount': Decimal('200.00')}], perfume=True)
+        process_pos_sale(shift_id=shift.id, cashier=self.user, items_data=item(1), payments_data=[{'payment_method': self.pm_cash, 'amount': Decimal('50.00')}])
+        process_pos_sale(shift_id=shift.id, cashier=self.user, items_data=item(2), payments_data=[{'payment_method': insta, 'amount': Decimal('100.00')}], online={'name': 'x'})
+        process_sales_return_v2(p.id, shift.id, self.user, [{'sale_line_id': p.lines.first().id, 'quantity_pieces': 1, 'weight_kg': '0'}], refund_method_id=self.pm_cash.id)
+        r = reports_v2.perfume_sales(self.tenant, {})
+        cards = {c['label'].split(' (')[0]: c['value'] for c in r['cards']}
+        self.assertEqual(cards['🌸 برفانات محل'], 150.0)            # 200 - 50 returned
+        self.assertEqual(cards['🛒 أونلاين'], 100.0)
+        self.assertEqual(cards['🏪 بيع عادي في المحل'], 50.0)
+        self.assertEqual(cards['إجمالي البرفانات'], 300.0)
+        self.assertEqual((r['totals']['amount'], r['totals']['pcs']), (300.0, 6))
