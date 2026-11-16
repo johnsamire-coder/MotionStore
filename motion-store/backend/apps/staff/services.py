@@ -206,13 +206,18 @@ def missed_off_days(emp, d_from, d_to, week_start=5):
     first_end = d_from + datetime.timedelta(days=(week_start - 1 - d_from.weekday()) % 7)   # first week end on/after d_from
     lo = first_end - datetime.timedelta(days=6)
     recs = {d.date: d for d in AttendanceDay.objects.filter(employee=emp, date__gte=lo, date__lte=d_to)}
+    first_rec = AttendanceDay.objects.filter(employee=emp).order_by('date').values_list('date', flat=True).first()
+    begin = max(x for x in (emp.hire_date, first_rec) if x) if (emp.hire_date or first_rec) else None
+    off = 7 - allowed
     total, end = 0, first_end
     while end <= d_to and end <= today:
         start = end - datetime.timedelta(days=6)
-        if not emp.hire_date or emp.hire_date <= start:
+        # a week cut by the start of work / of attendance recording counts from that day, when at most one day is unknown
+        known = 7 if not begin or begin <= start else (end - begin).days + 1
+        if known >= 6 and known > off:
             plain = sum(1 for i in range(7) for r in [recs.get(start + datetime.timedelta(days=i))]
                         if r and r.status == DayStatus.PRESENT and not r.is_off_day and not r.is_holiday)
-            total += max(0, plain - allowed)
+            total += max(0, plain - (known - off))
         end += datetime.timedelta(days=7)
     return total
 

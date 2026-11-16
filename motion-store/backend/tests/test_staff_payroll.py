@@ -186,6 +186,17 @@ class PayrollTest(StockBandsFollowSalesTest):
         self.assertEqual([(e['number'], e['taken']) for e in sl['owed']], [(E.objects.filter(kind='ADVANCE').get().number, '200.00'), ('SGDS-2', '20.00')])
         self.assertEqual(sl['owed_after'], '400.00')
 
+    def test_day_off_missed_in_the_week_recording_started(self):
+        """ Recording starts on the Sunday (week starts Saturday): that week counts from Sunday """
+        self.emp.off_days_per_week = 1; self.emp.fixed_off_weekday = None; self.emp.hire_date = None; self.emp.save()
+        sat = datetime.date.today() - datetime.timedelta(days=60)
+        sat -= datetime.timedelta(days=(sat.weekday() - 5) % 7)          # a Saturday
+        self._fill(self.emp, sat + datetime.timedelta(days=1), sat + datetime.timedelta(days=13))
+        self.assertEqual(services.missed_off_days(self.emp, sat + datetime.timedelta(days=1), sat + datetime.timedelta(days=13), 5), 2)
+        other = Employee.objects.create(tenant=self.tenant, name="تاني", pay_type='MONTHLY', salary=D('3000'), start_time=datetime.time(10), end_time=datetime.time(22))
+        self._fill(other, sat + datetime.timedelta(days=3), sat + datetime.timedelta(days=13))   # 3 unknown days in week 1: not counted
+        self.assertEqual(services.missed_off_days(other, sat + datetime.timedelta(days=3), sat + datetime.timedelta(days=13), 5), 1)
+
     def test_missing_days_and_overlap_block_the_run(self):
         self._fill(self.emp, self.start, self._d(9))       # the rest of the month never entered
         with self.assertRaises(ValidationError) as cm:
